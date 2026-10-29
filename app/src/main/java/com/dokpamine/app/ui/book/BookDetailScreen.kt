@@ -39,6 +39,7 @@ import com.dokpamine.app.ui.components.ProgressBar
 import com.dokpamine.app.ui.components.SecondaryButton
 import com.dokpamine.app.ui.components.SectionTitle
 import com.dokpamine.app.ui.components.StatRow
+import com.dokpamine.app.ui.components.SessionSourceBadge
 import com.dokpamine.app.ui.components.label
 import com.dokpamine.app.ui.theme.Dok
 import com.dokpamine.app.ui.timer.rememberStartReading
@@ -65,7 +66,10 @@ fun SessionEntity.pageLabel(): String = when {
 
 /** B01 책 정보 / B02~B04 상태별 / D01 책 삭제 확인 / FR-04 기록 목록 */
 @Composable
-fun BookDetailScreen(bookId: String, onBack: () -> Unit, onEdit: () -> Unit, onNotes: () -> Unit, onOpenTimer: () -> Unit) {
+fun BookDetailScreen(
+    bookId: String, onBack: () -> Unit, onEdit: () -> Unit, onNotes: () -> Unit, onOpenTimer: () -> Unit,
+    onAddSession: () -> Unit, onEditSession: (String) -> Unit,
+) {
     val vm = appViewModel(key = "book-$bookId") { BookDetailViewModel(it, bookId) }
     val book by vm.book.collectAsStateWithLifecycle(initialValue = null)
     val sessions by vm.sessions.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -144,12 +148,19 @@ fun BookDetailScreen(bookId: String, onBack: () -> Unit, onEdit: () -> Unit, onN
         if (b.status != BookStatus.DONE) OutlineButton("완독으로 표시", { confirmDone = true })
 
         SectionTitle("기록 목록 ${sessions.size}건")
+        OutlineButton("기록 직접 추가", onAddSession)
         if (sessions.isEmpty()) {
-            Text("아직 기록이 없어요. 타이머로 첫 독서를 남겨 보세요.", style = MaterialTheme.typography.bodySmall, color = Dok.Muted)
+            Text("아직 기록이 없어요. 타이머나 직접 입력으로 독서를 남겨 보세요.", style = MaterialTheme.typography.bodySmall, color = Dok.Muted)
         }
         sessions.forEach { s ->
-            DokCard(onClick = { sessionToDelete = s }) {
-                Text(s.whenLabel(), style = MaterialTheme.typography.labelMedium)
+            DokCard(onClick = { onEditSession(s.id) }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(s.whenLabel(), style = MaterialTheme.typography.labelMedium)
+                        SessionSourceBadge(s.source)
+                    }
+                    IconButton(onClick = { sessionToDelete = s }) { Icon(Icons.Outlined.Delete, contentDescription = "${s.whenLabel()} 기록 삭제") }
+                }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     "${formatDuration(s.activeSeconds.toLong())} · ${s.pageLabel()}${if (s.syncPending) " · 동기화 대기" else ""}",

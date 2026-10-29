@@ -23,6 +23,8 @@ object Route {
     @Serializable data class BookDetail(val bookId: String) // B01
     @Serializable data object Timer             // T02~T03
     @Serializable data object RecordPage        // T04~T08
+    // 새 UUID는 진입 시 한 번 만들고 내비게이션 복원·저장 재시도에서도 유지한다.
+    @Serializable data class ManualSession(val bookId: String, val sessionId: String, val editing: Boolean = false) // T09
     @Serializable data class Notes(val bookId: String) // R01~R05
     @Serializable data object Stats             // C04
     @Serializable data class FeedDetail(val reviewId: String) // F02
