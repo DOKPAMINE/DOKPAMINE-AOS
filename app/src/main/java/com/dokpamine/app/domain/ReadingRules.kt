@@ -60,12 +60,15 @@ sealed interface ManualSessionInput {
 
 /** T09: 수동 기록도 개인 통계에는 포함하며, 수정한 TIMER 기록은 랭킹에서 제외한다. */
 object ManualSessionRules {
+    /** 연도 오타(0226년 등)가 기록·동기화되지 않도록 받는 가장 이른 날짜. */
+    val MIN_DATE: LocalDate = LocalDate.of(1900, 1, 1)
+
     fun parseStartedAt(date: String, time: String, zone: ZoneId = ZoneId.systemDefault()): Long? = try {
         val day = LocalDate.parse(date.trim(), DateTimeFormatter.ISO_LOCAL_DATE)
         val clock = LocalTime.parse(time.trim(), DateTimeFormatter.ofPattern("HH:mm").withResolverStyle(ResolverStyle.STRICT))
         val local = day.atTime(clock)
         // 서머타임으로 존재하지 않는 시각을 다른 시각으로 조용히 이동시키지 않는다.
-        if (zone.rules.getValidOffsets(local).isEmpty()) null else local.atZone(zone).toInstant().toEpochMilli()
+        if (day < MIN_DATE || zone.rules.getValidOffsets(local).isEmpty()) null else local.atZone(zone).toInstant().toEpochMilli()
     } catch (_: DateTimeException) {
         null
     } catch (_: ArithmeticException) {
@@ -111,6 +114,22 @@ object ManualSessionRules {
             source = SessionSource.MANUAL, createdAt = existing?.createdAt ?: now,
             syncPending = true, localVersion = maxOf(now, existing?.localVersion?.plus(1) ?: now),
         )
+    }
+
+    /** 시작 시각이 가장 늦은, 종료 페이지가 있는 기록. 같은 시각이면 생성 순서·ID로 고정한다. */
+    fun latestPaged(sessions: List<SessionEntity>): SessionEntity? = sessions
+        .filter { !it.deleted && it.endPage != null }
+        .maxWithOrNull(compareBy<SessionEntity>({ it.startedAt }, { it.createdAt }, { it.id }))
+
+    /**
+     * 기록 추가·수정 후 현재 페이지. 타이머 저장·기록 삭제처럼 가장 최근 쪽수 기록을 따르되,
+     * 그 기록이 그대로면(과거 기록 추가, 다른 기록 수정) 현재 페이지(다시 읽기 0쪽 등)를 건드리지 않는다.
+     */
+    fun currentPageAfterSave(currentPage: Int, totalPages: Int, before: List<SessionEntity>, after: List<SessionEntity>): Int {
+        val previous = latestPaged(before)
+        val latest = latestPaged(after)
+        if (previous == latest) return currentPage
+        return (latest?.endPage ?: 0).coerceIn(0, maxOf(totalPages, 0))
     }
 }
 

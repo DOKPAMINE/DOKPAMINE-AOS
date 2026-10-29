@@ -154,10 +154,12 @@ class RecordRepository(
                 is ManualSessionInput.Invalid -> throw IllegalArgumentException(result.message)
                 is ManualSessionInput.Valid -> result
             }
+            val before = sessions.byBook(bookId)
             sessions.upsert(ManualSessionRules.toSession(input, id, bookId, existing, t))
-            if ((input.endPage ?: 0) > book.currentPage || book.status == BookStatus.WANT) {
+            val currentPage = ManualSessionRules.currentPageAfterSave(book.currentPage, book.totalPages, before, sessions.byBook(bookId))
+            if (currentPage != book.currentPage || book.status == BookStatus.WANT) {
                 books.upsert(book.copy(
-                    currentPage = maxOf(book.currentPage, input.endPage ?: book.currentPage),
+                    currentPage = currentPage,
                     status = if (book.status == BookStatus.WANT) BookStatus.READING else book.status,
                     updatedAt = t, syncPending = true, localVersion = maxOf(t, book.localVersion + 1),
                 ))

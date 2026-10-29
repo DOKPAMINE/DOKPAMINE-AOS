@@ -76,7 +76,7 @@ class ManualSessionViewModel(
         if (book == null || saving || saved) return
         val startedAt = ManualSessionRules.parseStartedAt(date, time)
         if (startedAt == null) {
-            error = "날짜는 YYYY-MM-DD, 시작 시각은 HH:mm 형식으로 입력해 주세요."
+            error = "날짜(1900년 이후, YYYY-MM-DD)와 시작 시각(HH:mm)을 올바르게 입력해 주세요."
             return
         }
         // 재탭을 막고, 재시도도 라우트가 보관한 동일한 클라이언트 UUID를 사용한다.
