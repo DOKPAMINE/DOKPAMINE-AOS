@@ -46,6 +46,8 @@ import com.dokpamine.app.ui.shelf.ShelfScreen
 import com.dokpamine.app.ui.theme.Dok
 import com.dokpamine.app.ui.timer.RecordPageScreen
 import com.dokpamine.app.ui.timer.TimerScreen
+import com.dokpamine.app.ui.timer.ManualSessionScreen
+import java.util.UUID
 import kotlinx.coroutines.flow.StateFlow
 
 private data class Tab(val route: Any, val label: String, val icon: ImageVector)
@@ -165,6 +167,8 @@ private fun MainNav(openTimerRequests: StateFlow<Int>) {
                     onEdit = { nav.navigate(Route.BookForm(editBookId = bookId)) },
                     onNotes = { nav.navigate(Route.Notes(bookId)) },
                     onOpenTimer = { nav.navigate(Route.Timer) },
+                    onAddSession = { nav.navigate(Route.ManualSession(bookId, UUID.randomUUID().toString())) },
+                    onEditSession = { nav.navigate(Route.ManualSession(bookId, it, editing = true)) },
                 )
             }
             composable<Route.Timer> {
@@ -175,6 +179,10 @@ private fun MainNav(openTimerRequests: StateFlow<Int>) {
                 )
             }
             composable<Route.RecordPage> { RecordPageScreen(onBack = back, onSaved = { nav.popBackStack() }) }
+            composable<Route.ManualSession> { entry ->
+                val route = entry.toRoute<Route.ManualSession>()
+                ManualSessionScreen(route.bookId, route.sessionId, route.editing, onBack = back)
+            }
             composable<Route.Notes> { entry -> NotesScreen(bookId = entry.toRoute<Route.Notes>().bookId, onBack = back) }
             composable<Route.Stats> { StatsScreen(onBack = back) }
             composable<Route.FeedDetail> { entry -> FeedDetailScreen(reviewId = entry.toRoute<Route.FeedDetail>().reviewId, onBack = back) }

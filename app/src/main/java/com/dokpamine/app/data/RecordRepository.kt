@@ -10,6 +10,8 @@ import com.dokpamine.app.data.local.SessionEntity
 import com.dokpamine.app.data.local.SessionSource
 import com.dokpamine.app.data.local.Visibility
 import com.dokpamine.app.data.sync.SyncScheduler
+import com.dokpamine.app.domain.ManualSessionInput
+import com.dokpamine.app.domain.ManualSessionRules
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
@@ -45,6 +47,7 @@ class RecordRepository(
     fun observePendingCount(): Flow<Int> = db.syncStatusDao().observePendingCount()
 
     suspend fun getBook(id: String): BookEntity? = books.get(id)?.takeUnless { it.deleted }
+    suspend fun getSession(id: String): SessionEntity? = sessions.get(id)?.takeUnless { it.deleted }
     suspend fun findByIsbn(isbn: String): BookEntity? = books.findByIsbn(isbn)
 
     suspend fun addBook(form: BookForm): BookEntity {
@@ -134,6 +137,32 @@ class RecordRepository(
                     updated = updated.copy(status = BookStatus.DONE, completedCount = book.completedCount + 1, completedAt = t)
                 }
                 books.upsert(updated.copy(updatedAt = t, syncPending = true, localVersion = t))
+            }
+        }
+        sync.request()
+    }
+
+    /** T09: 화면 진입 시 정한 ID로 추가·수정하고 로컬 저장이 끝난 뒤 동기화를 예약한다. */
+    suspend fun saveManualSession(id: String, bookId: String, startedAt: Long, minutes: String, startPage: String, endPage: String) {
+        db.withTransaction {
+            val book = books.get(bookId)?.takeUnless { it.deleted }
+                ?: throw IllegalArgumentException("책을 찾을 수 없어요.")
+            val existing = sessions.get(id)
+            require(existing == null || (existing.bookId == bookId && !existing.deleted)) { "수정할 기록을 찾을 수 없어요." }
+            val t = now()
+            val input = when (val result = ManualSessionRules.validate(startedAt, minutes, startPage, endPage, book.totalPages, t)) {
+                is ManualSessionInput.Invalid -> throw IllegalArgumentException(result.message)
+                is ManualSessionInput.Valid -> result
+            }
+            val before = sessions.byBook(bookId)
+            sessions.upsert(ManualSessionRules.toSession(input, id, bookId, existing, t))
+            val currentPage = ManualSessionRules.currentPageAfterSave(book.currentPage, book.totalPages, before, sessions.byBook(bookId))
+            if (currentPage != book.currentPage || book.status == BookStatus.WANT) {
+                books.upsert(book.copy(
+                    currentPage = currentPage,
+                    status = if (book.status == BookStatus.WANT) BookStatus.READING else book.status,
+                    updatedAt = t, syncPending = true, localVersion = maxOf(t, book.localVersion + 1),
+                ))
             }
         }
         sync.request()

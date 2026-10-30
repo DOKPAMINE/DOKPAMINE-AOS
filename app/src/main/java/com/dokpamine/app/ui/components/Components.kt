@@ -56,10 +56,20 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.dokpamine.app.data.local.BookEntity
 import com.dokpamine.app.data.local.BookStatus
+import com.dokpamine.app.data.local.SessionSource
 import com.dokpamine.app.ui.theme.Dok
 
 val CardShape = RoundedCornerShape(18.dp)
 val ButtonShape = RoundedCornerShape(14.dp)
+
+@Composable
+fun SessionSourceBadge(source: SessionSource) {
+    if (source == SessionSource.MANUAL) {
+        Surface(shape = ButtonShape, color = Dok.Chip, contentColor = Dok.Moss) {
+            Text("직접 입력", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+        }
+    }
+}
 
 /** 상단 제목 + 뒤로가기 + 스크롤되는 본문. Figma 의 하위 화면 공통 레이아웃. */
 @Composable

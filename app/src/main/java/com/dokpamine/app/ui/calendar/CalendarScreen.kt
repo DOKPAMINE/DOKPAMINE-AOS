@@ -47,6 +47,7 @@ import com.dokpamine.app.ui.components.DokCard
 import com.dokpamine.app.ui.components.DokScreen
 import com.dokpamine.app.ui.components.EmptyState
 import com.dokpamine.app.ui.components.OutlineButton
+import com.dokpamine.app.ui.components.SessionSourceBadge
 import com.dokpamine.app.ui.theme.Dok
 import java.time.LocalDate
 import java.time.YearMonth
@@ -150,6 +151,7 @@ fun CalendarScreen(onOpenStats: () -> Unit, onOpenBook: (String) -> Unit) {
                     val book = bookById[s.bookId]
                     DokCard(onClick = book?.let { { onOpenBook(it.id) } }) {
                         Text(book?.title ?: "삭제된 책", style = MaterialTheme.typography.labelLarge)
+                        SessionSourceBadge(s.source)
                         Spacer(Modifier.width(4.dp))
                         Text("${formatDuration(s.activeSeconds.toLong())} · ${s.pageLabel()}", style = MaterialTheme.typography.bodySmall, color = Dok.Muted)
                     }
