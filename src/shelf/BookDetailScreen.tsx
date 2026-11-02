@@ -38,7 +38,7 @@ function BookDetail({ book, repository }: { book: BookRecord; repository: Record
             setNotice('변경하지 못했어요. 기기 저장 공간을 확인하고 다시 시도해 주세요.');
         }
     };
-    const confirmDelete = () => Alert.alert('책을 삭제할까요?', `「${book.title}」과 이 책의 독서 기록·감상·문장이 함께 삭제돼요.`, [
+    const confirmDelete = () => Alert.alert('책을 삭제할까요?', `「${book.title}」 책을 삭제하면 이 책의 독서 기록·감상·문장도 함께 삭제돼요.`, [
         { text: '취소', style: 'cancel' },
         { text: '삭제', style: 'destructive', onPress: () => {
             try {
