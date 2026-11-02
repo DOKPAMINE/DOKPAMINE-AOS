@@ -9,6 +9,8 @@ export interface ApiRequestOptions {
     authenticated?: boolean;
     timeoutMs?: number;
     signal?: AbortSignal;
+    /** 동기화는 엔진 시작 시의 토큰에 고정한다. 계정 전환 후 새 토큰을 빌리지 않는다. */
+    accessToken?: string;
 }
 
 function getBaseUrl(): string {
@@ -50,7 +52,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
         if (options.authenticated !== false) {
             let token: string | null;
             try {
-                token = await tokenStorage.get();
+                token = options.accessToken ?? await tokenStorage.get();
             } catch {
                 throw new ApiError('storage', 'TOKEN_STORAGE_FAILED', '로그인 정보를 불러오지 못했어요. 다시 시도해 주세요.');
             }
@@ -83,7 +85,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
             throw new ApiError(
                 invalidCredentials ? 'credentials' : response.status === 401 ? 'unauthorized' : 'http',
                 isErrorBody(body) ? body.code : `HTTP_${response.status}`,
-                typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string' ? body.message : invalidCredentials ? '이메일 또는 비밀번호를 확인해 주세요.' : response.status === 401 ? '다시 로그인해 주세요.' : '요청을 처리하지 못했어요. 다시 시도해 주세요.',
+                typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string' && /[가-힣]/.test(body.message) ? body.message.trim() : invalidCredentials ? '이메일 또는 비밀번호를 확인해 주세요.' : response.status === 401 ? '다시 로그인해 주세요.' : '요청을 처리하지 못했어요. 다시 시도해 주세요.',
                 response.status,
             );
         }
