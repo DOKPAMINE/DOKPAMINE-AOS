@@ -4,7 +4,7 @@ import { tokenStorage } from './tokenStorage';
 import { notifyUnauthorized } from './authEvents';
 
 export interface ApiRequestOptions {
-    method?: 'GET' | 'POST' | 'PUT';
+    method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
     body?: unknown;
     authenticated?: boolean;
     timeoutMs?: number;

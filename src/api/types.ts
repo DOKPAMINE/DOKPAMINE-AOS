@@ -115,3 +115,6 @@ export interface BookReviewGroup {
 }
 
 export type BookReviewSearchResponse = BookReviewGroup[];
+
+export type FeedListResponse = FeedItem[];
+export type ReviewLikeResponse = Pick<FeedItem, 'likeCount' | 'likedByMe'>;
