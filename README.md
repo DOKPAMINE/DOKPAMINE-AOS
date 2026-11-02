@@ -1,30 +1,41 @@
 # DOKPAMINE-AOS
 
-독파민 Android 앱입니다. 바코드로 책을 등록하고, 타이머로 실제 독서 시간을 재고, 읽은 페이지와 감상을 남깁니다.
+독파민 Android 앱의 React Native + Expo(TypeScript) 뼈대입니다. Expo Router 하단 탭은 **책장 / 캘린더 / 홈 / 라운지 / 마이** 순서이며 처음에는 가운데 홈이 선택됩니다.
+
+현재 v0.2.0에는 Figma v1.0 테마, Noto Sans KR, 공통 컴포넌트, 5개 자리표시 화면과 테스트·CI가 들어 있습니다. 로그인·바코드·타이머·DB·서버 연결은 4단계에서 구현합니다. Android에서 검증하며 iOS 빌드는 하지 않습니다.
 
 ## 실행
-1. 서버를 실행합니다: `DOKPAMINE-BE`에서 `./gradlew bootRun`
-2. 앱을 설치합니다: Android Studio로 열어 실행하거나, 에뮬레이터를 켠 뒤 `./gradlew :app:installDebug`
-3. 앱에서 회원가입하고 시작합니다.
 
-요구 사항은 JDK 17 이상과 Android SDK Platform 37입니다. 에뮬레이터에서는 PC의 `localhost:8080`에 자동으로 연결됩니다.
+Node.js LTS와 npm을 설치한 뒤 실행합니다.
 
-## 프로토타입 v0.1 기능
-| 영역 | 화면 | 요구사항 |
-|---|---|---|
-| 시작·로그인 | O01 | FR-10 |
-| 홈(연속 독서일, 이번 주 시간, 이어 읽기) | H00, H01 | - |
-| 책장(읽는 중·완독·읽고 싶음) | S01~S03 | FR-04 |
-| 책 등록(바코드 스캔, ISBN 번호 조회, 직접 입력, 중복 안내) | A01~A10 | FR-01, NFR-07 |
-| 책 상세(진행률, 누적 시간, 기록 목록, 완독, 다시 읽기, 삭제) | B01~B05, D01 | FR-04 |
-| 독서 타이머(일시정지, 앱 종료 후 복원, 알림) | T01~T03 | FR-02, NFR-04, NFR-08 |
-| 페이지 기록(검증, 되돌아 읽기, 시간만 저장, 완독) | T04~T08 | FR-03 |
-| 감상·문장(한줄평, 독후감, 공개 범위) | R01~R05, V01~V04 | FR-07, FR-08 |
-| 캘린더·월간 통계(장르·작가별) | C01~C04 | FR-05, FR-06 |
-| 라운지(공개 감상 피드, 좋아요, 독서왕 랭킹) | F01~F02, L01~L05 | FR-08, FR-09 |
-| 마이(동기화 상태, 재로그인, 로그아웃) | P01 | FR-10, NFR-05 |
-| 오프라인 기록과 자동 동기화 | - | NFR-04~06 |
+```bash
+npm ci
+npx expo start
+```
+
+Android의 Expo Go로 QR 코드를 스캔합니다. PC와 휴대전화를 같은 네트워크에 연결하고 프로젝트의 Expo SDK 58을 지원하는 Expo Go를 사용해 주세요. SDK가 맞지 않으면 호환 Expo Go 또는 Development Build가 필요합니다. Android 에뮬레이터에서는 개발 서버의 `a` 키 또는 `npm run android`를 사용합니다. 현재 뼈대 실행에는 백엔드와 비밀값이 필요하지 않습니다.
+
+## 검증
+
+```bash
+npm run typecheck
+npm run lint
+npm test -- --ci
+npx expo-doctor
+npx expo export --platform android --output-dir dist
+```
+
+`.github/workflows/ci.yml`의 `CI / app` 잡이 main 대상 PR과 main push마다 `npm ci`, 타입 검사, 린트, 테스트를 실행합니다. `dist/`는 검증용 번들이며 커밋하지 않습니다.
+
+## Kotlin 코드 보존
+
+이전 Kotlin/Jetpack Compose v0.1.0 앱은 **`legacy/kotlin` 브랜치**와 **`v0.1.0` 태그**에 보존되어 있습니다. 기존 화면 흐름·오프라인 동기화·시각 기반 타이머의 참고 구현입니다.
 
 ## 문서
-- [에이전트 작업 규칙](AGENTS.md)
+
+- [에이전트 작업 규칙과 폴더 구조](AGENTS.md)
+- [협업 컨벤션](CONTRIBUTING.md)
+- 제품·화면 ID: `DOKPAMINE-DOCS/PRD.md` v1.0(S-xx)
+- 기술 결정: `DOKPAMINE-DOCS/decisions/0001-app-stack-react-native-expo.md`
+- 오프라인 규칙: `DOKPAMINE-DOCS/decisions/0003-offline-first-sync.md`
 - API 계약: `DOKPAMINE-BE/docs/API.md`
