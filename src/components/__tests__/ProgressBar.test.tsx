@@ -10,6 +10,7 @@ test.each([
 ])('D6 · S-10 %i쪽에서 채운 영역만 밝은 문구를 보여 줘요', async (currentPage, width) => {
     await render(<ProgressBar currentPage={currentPage} totalPages={240} />);
     const progressBar = screen.getByRole('progressbar');
+    expect(screen.getAllByText(`${currentPage} / 240쪽`, { includeHiddenElements: true })).toHaveLength(1);
     await fireEvent(progressBar, 'layout', { nativeEvent: { layout: { width: 300 } } });
 
     const [trackLabel, filledLabel] = screen.getAllByText(`${currentPage} / 240쪽`, { includeHiddenElements: true });
