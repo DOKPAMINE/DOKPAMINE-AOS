@@ -57,7 +57,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     };
     const fields = registering ? ['email', 'password', 'nickname'] as const : ['email', 'password'] as const;
     const labels = { email: '이메일', password: '비밀번호', nickname: '닉네임' };
-    const hints = { email: '가입한 이메일을 입력해 주세요.', password: '8~64자로 입력해 주세요.', nickname: '1~30자로 입력해 주세요.' };
+    const hints = { email: registering ? '가입할 이메일을 입력해 주세요.' : '가입한 이메일을 입력해 주세요.', password: '8~64자로 입력해 주세요.', nickname: '1~30자로 입력해 주세요.' };
 
     return (
         <KeyboardAvoidingView style={styles.container} behavior="height">
