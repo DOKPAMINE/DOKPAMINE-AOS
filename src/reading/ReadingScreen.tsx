@@ -18,7 +18,7 @@ export default function ReadingScreen() {
     const home = () => router.dismissTo('/(tabs)');
     if (reading.loadError) return <Screen title="독서 시작"><StateView kind="error" message="타이머를 불러오지 못했어요. 저장된 기록을 보존하고 있어요." onRetry={reading.retry} /></Screen>;
     if (!reading.ready) return <Screen title="독서 시작"><StateView kind="loading" /></Screen>;
-    if (!book) return <Screen title="독서 시작"><StateView kind="empty" message="책을 찾을 수 없어요. 책장에서 읽을 책을 선택해 주세요." /><SecondaryButton label="홈으로" onPress={home} /></Screen>;
+    if (!book) return <Screen title="독서 시작">{reading.notice && <Text style={styles.secondary}>{reading.notice}</Text>}<StateView kind="empty" message="책을 찾을 수 없어요. 책장에서 읽을 책을 선택해 주세요." /><SecondaryButton label="홈으로" onPress={home} /></Screen>;
 
     const timer = draft?.timer;
     const finished = timer?.finishedAtMs !== null && timer !== undefined;

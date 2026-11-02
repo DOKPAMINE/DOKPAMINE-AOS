@@ -1,5 +1,5 @@
 import { Text } from 'react-native';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import Storage from 'expo-sqlite/kv-store';
 import * as Notifications from 'expo-notifications';
 import { tokenStorage } from '../../api/tokenStorage';
@@ -110,7 +110,7 @@ test('FR-03 S-44 완독 확인 후 끝 쪽·완독 횟수·날짜를 저장해�
     expect(prepared.repository.sessions.list()).toHaveLength(0);
     await fireEvent.press(screen.getByRole('button', { name: '완독으로 저장' }));
     expect(prepared.repository.books.get(id)).toMatchObject({ currentPage: 240, status: 'DONE', completedCount: 1, completedAt: t0 + 60000 });
-    prepared.repository.atomic(() => saveReading(prepared.repository, timer, true, t0 + 70000));
+    await act(() => { prepared.repository.atomic(() => saveReading(prepared.repository, timer, true, t0 + 70000)); });
     expect(prepared.repository.books.get(id)?.completedCount).toBe(1);
     expect(prepared.repository.sessions.list()).toHaveLength(1);
 });
@@ -159,4 +159,84 @@ test('FR-02 S-42 계정이 바뀌어도 다른 계정의 타이머를 복원하�
     readingStorage('reader').save({ timer: pauseTimer(startTimer(sessionId, id, 84, t0), t0 + 60000), confirmedChecks: 0 });
     expect(readingStorage('other').load()).toBeNull();
     expect(readingStorage('reader').load()?.timer.runningSinceMs).toBeNull();
+});
+
+test.each(['없는', '삭제된'])('FR-02 S-40 S-42 복원할 책이 %s 책이면 임시 타이머를 비우고 선택한 책을 시작해요', async kind => {
+    const oldBookId = '00000000-0000-4000-8000-000000000003';
+    if (kind === '삭제된') {
+        prepared.repository.books.save({ ...book, id: oldBookId });
+        prepared.repository.books.softDelete(oldBookId);
+    }
+    readingStorage('reader').save({ timer: startTimer(sessionId, oldBookId, 84, t0), confirmedChecks: 0 });
+    await open();
+    expect(await screen.findByText(/진행 중이던 책을 찾을 수 없어/)).toBeOnTheScreen();
+    expect(readingStorage('reader').load()).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: '독서 시작' }));
+    expect(readingStorage('reader').load()?.timer.bookId).toBe(id);
+});
+
+test('FR-02 S-40 S-42 선택한 책도 삭제되면 초기화 안내와 홈 경로를 보여 줘요', async () => {
+    readingStorage('reader').save({ timer: startTimer(sessionId, id, 84, t0), confirmedChecks: 0 });
+    prepared.repository.books.softDelete(id);
+    await open();
+    expect(await screen.findByText(/진행 중이던 책을 찾을 수 없어/)).toBeOnTheScreen();
+    expect(readingStorage('reader').load()).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: '홈으로' }));
+    expect(await screen.findByText('홈')).toBeOnTheScreen();
+});
+
+test.each([true, false])('FR-03 S-44 저장 전에 이미 완독한 책은 완독 선택=%s여도 횟수·날짜·상태를 유지해요', complete => {
+    prepared.repository.books.save({ ...book, status: 'DONE', currentPage: 240, completedCount: 2, completedAt: t0 + 30000 });
+    const timer = { ...finishTimer(startTimer(sessionId, id, 84, t0), t0 + 60000), endPageDraft: '240' };
+    prepared.repository.atomic(() => saveReading(prepared.repository, timer, complete, t0 + 70000));
+    expect(prepared.repository.books.get(id)).toMatchObject({ status: 'DONE', completedCount: 2, completedAt: t0 + 30000 });
+    expect(prepared.repository.sessions.list()).toHaveLength(1);
+});
+
+test('FR-03 S-45 읽고 싶은 책의 타이머를 저장하면 읽는 중으로 바꿔요', () => {
+    prepared.repository.books.save({ ...book, status: 'WANT' });
+    const timer = finishTimer(startTimer(sessionId, id, 84, t0), t0 + 60000);
+    prepared.repository.atomic(() => saveReading(prepared.repository, timer, false, t0 + 70000));
+    expect(prepared.repository.books.get(id)?.status).toBe('READING');
+});
+
+test.each([true, false])('NFR-04 S-42 S-45 저장 뒤 초기화가 실패한 세션의 삭제=%s를 복원 시 확인해요', async deleted => {
+    readingStorage('reader').save({ timer: finishTimer(startTimer(sessionId, id, 84, t0), t0 + 60000), confirmedChecks: 0 });
+    await open();
+    jest.mocked(Storage.removeItemSync).mockImplementationOnce(() => { throw new Error('SQLITE_FULL'); });
+    await fireEvent.press(await screen.findByRole('button', { name: '저장' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/저장하지 못했어요/);
+    expect(prepared.repository.sessions.get(sessionId)).not.toBeNull();
+    await screen.unmount();
+    if (deleted) prepared.repository.sessions.softDelete(sessionId);
+    await open();
+    if (deleted) {
+        expect(await screen.findByText(/이미 삭제한 독서 기록의 타이머/)).toBeOnTheScreen();
+        expect(screen.getByRole('button', { name: '독서 시작' })).toBeOnTheScreen();
+    } else {
+        expect(await screen.findByRole('header', { name: '저장 완료' })).toBeOnTheScreen();
+    }
+    expect(readingStorage('reader').load()).toBeNull();
+    expect(prepared.repository.sessions.list({ includeDeleted: true })).toHaveLength(1);
+    expect(prepared.repository.sessions.get(sessionId, true)?.deleted).toBe(deleted);
+});
+
+test.each(['{', '{}', JSON.stringify({ timer: '{}', confirmedChecks: 0 })])('FR-02 S-42 손상된 임시 상태 %s는 한 번 비우고 안내해요', async raw => {
+    Storage.setItemSync('reading-timer:reader', raw);
+    await open();
+    expect(await screen.findByText(/저장된 타이머 상태가 손상되어 초기화/)).toBeOnTheScreen();
+    expect(readingStorage('reader').load()).toBeNull();
+    expect(screen.getByRole('button', { name: '독서 시작' })).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: '독서 시작' }));
+    expect(readingStorage('reader').load()?.timer.bookId).toBe(id);
+});
+
+test('NFR-04 S-42 저장소 읽기 오류는 임시 기록을 지우지 않고 재시도해요', async () => {
+    readingStorage('reader').save({ timer: startTimer(sessionId, id, 84, t0), confirmedChecks: 0 });
+    jest.mocked(Storage.getItemSync).mockImplementationOnce(() => { throw new Error('SQLITE_BUSY'); });
+    await open();
+    expect(await screen.findByText(/타이머를 불러오지 못했어요/)).toBeOnTheScreen();
+    expect(readingStorage('reader').load()?.timer.sessionId).toBe(sessionId);
+    await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
+    expect(await screen.findByRole('header', { name: '독서 측정 중' })).toBeOnTheScreen();
 });

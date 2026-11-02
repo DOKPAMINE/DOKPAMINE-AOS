@@ -35,18 +35,32 @@ export function useReadingTimer(bookId: string | undefined) {
             if (!account) throw new Error('로그인이 필요해요.');
             const records = await initializeDatabase(account.userId);
             const store = readingStorage(account.userId);
-            let restored = store.load();
+            let restorationNotice: string | null = null;
+            let restored = store.load(() => { restorationNotice = '저장된 타이머 상태가 손상되어 초기화했어요. 새 독서를 시작해 주세요.'; });
+            let alreadySaved = false;
             if (restored) {
-                restored = { ...restored, timer: stopAtReadingCheck(restored.timer, restored.confirmedChecks, Date.now()) };
-                store.save(restored);
+                const restoredBook = records.repository.books.get(restored.timer.bookId);
+                const session = records.repository.sessions.get(restored.timer.sessionId, true);
+                if (!restoredBook || session?.deleted) {
+                    store.clear();
+                    restored = null;
+                    restorationNotice = !restoredBook
+                        ? '진행 중이던 책을 찾을 수 없어 타이머를 초기화했어요. 읽을 책을 다시 선택해 주세요.'
+                        : '이미 삭제한 독서 기록의 타이머를 초기화했어요. 새 독서를 시작해 주세요.';
+                } else if (session) {
+                    store.clear();
+                    alreadySaved = true;
+                } else {
+                    restored = { ...restored, timer: stopAtReadingCheck(restored.timer, restored.confirmedChecks, Date.now()) };
+                    store.save(restored);
+                }
             }
             const book = records.repository.books.get(restored?.timer.bookId ?? bookId ?? '');
             if (!active) return;
-            const alreadySaved = Boolean(restored && records.repository.sessions.get(restored.timer.sessionId));
-            if (alreadySaved) store.clear();
             storage.current = store;
             setDraft(restored);
             setSaved(alreadySaved);
+            setNotice(restorationNotice);
             setStartPage(book ? String(suggestedStartPage(book.currentPage, book.totalPages)) : '');
             setPrepared(records);
             unsubscribe = records.repository.subscribe(() => setNow(Date.now()));

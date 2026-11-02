@@ -15,7 +15,7 @@ export function saveReading(repository: RecordRepository, timer: TimerState, com
     const page = parseEndPage(timer.endPageDraft, timer.startPage, book.totalPages);
     if (page.kind === 'invalid') throw new Error(page.message);
     const result = toTimerSession(timer, page, book.currentPage, now);
-    const nextBook = { ...book, currentPage: result.currentPage, status: 'READING' as const };
+    const nextBook = { ...book, currentPage: result.currentPage, status: book.status === 'WANT' ? 'READING' as const : book.status };
     repository.books.save(complete ? completeReading(nextBook, timer.finishedAtMs!) : nextBook);
     return repository.sessions.save(result.session);
 }
