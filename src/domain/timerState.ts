@@ -1,4 +1,5 @@
 import type { ReadingSession } from './readingTypes';
+import type { EndPageInput } from './pageRules';
 
 /** FR-02 / S-41·S-42: 시각 기반 상태. ID와 now는 호출자가 제공하며 플랫폼·저장소에 의존하지 않는다. */
 export interface TimerState {
@@ -34,15 +35,23 @@ export function finishTimer(timer: TimerState, now: number): TimerState {
 
 /** FR-02·03 / S-43·S-45: 종료 시각과 클라이언트 ID를 보존한다. 같은 ID로 저장하는 IO는 호출자가 담당한다. */
 export function toTimerSession(
-    timer: TimerState, endPage: number | null, currentPage: number, now: number,
+    timer: TimerState, input: Exclude<EndPageInput, { readonly kind: 'invalid' }>, currentPage: number, now: number,
+    existing: ReadingSession | null = null,
 ): { readonly session: ReadingSession; readonly currentPage: number } {
     if (timer.finishedAtMs === null) throw new Error('타이머를 마친 뒤 저장해 주세요.');
+    if (!['timeOnly', 'valid', 'reread'].includes(input.kind)) throw new Error('종료 페이지를 확인해 주세요.');
+    if (existing && (existing.id !== timer.sessionId || existing.bookId !== timer.bookId || existing.deleted)) {
+        throw new Error('수정할 기록을 찾을 수 없어요.');
+    }
+    const endPage = input.kind === 'timeOnly' ? null : input.endPage;
+    const localVersion = Math.max(now, existing ? existing.localVersion + 1 : now);
+    if (!Number.isSafeInteger(localVersion)) throw new Error('기록 버전을 저장할 수 없어요.');
     return {
         session: {
             id: timer.sessionId, bookId: timer.bookId, startedAt: timer.startedAtMs, endedAt: timer.finishedAtMs,
             activeSeconds: Math.floor(elapsedMs(timer, timer.finishedAtMs) / 1000),
             startPage: timer.startPage, endPage, source: 'TIMER', deleted: false,
-            createdAt: now, syncPending: true, localVersion: now,
+            createdAt: existing?.createdAt ?? now, syncPending: true, localVersion,
         },
         currentPage: endPage ?? currentPage,
     };
