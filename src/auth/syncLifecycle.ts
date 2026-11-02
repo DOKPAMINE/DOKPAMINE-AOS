@@ -3,11 +3,12 @@
  * auth는 동기화 엔진에 직접 의존하지 않으며 동기화 실패가 로그인 성공을 취소하지 않는다.
  */
 export interface AuthSyncLifecycle {
-    syncAfterLogin: () => void | Promise<void>;
+    prepareAccount: (userId: string) => Promise<void>;
+    syncAfterLogin: (userId: string, token: string) => void | Promise<void>;
     stopRecordSync: () => void;
 }
 
-const disconnected: AuthSyncLifecycle = { syncAfterLogin: () => {}, stopRecordSync: () => {} };
+const disconnected: AuthSyncLifecycle = { prepareAccount: async () => {}, syncAfterLogin: () => {}, stopRecordSync: () => {} };
 let lifecycle = disconnected;
 
 export function connectAuthSyncLifecycle(next: AuthSyncLifecycle): () => void {
@@ -16,6 +17,7 @@ export function connectAuthSyncLifecycle(next: AuthSyncLifecycle): () => void {
 }
 
 export const authSyncLifecycle: AuthSyncLifecycle = {
-    syncAfterLogin: () => lifecycle.syncAfterLogin(),
+    prepareAccount: userId => lifecycle.prepareAccount(userId),
+    syncAfterLogin: (userId, token) => lifecycle.syncAfterLogin(userId, token),
     stopRecordSync: () => lifecycle.stopRecordSync(),
 };

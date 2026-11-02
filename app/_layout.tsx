@@ -16,7 +16,7 @@ import { Screen, SecondaryButton, StateView } from '../src/components';
 
 import { navigationTheme } from '../src/theme';
 import { connectQueryManagers, queryClient } from '../src/api/queryClient';
-import { initializeDatabase } from '../src/db/client';
+import { initializeDatabase, prepareRecordAccount } from '../src/db/client';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -36,7 +36,19 @@ export default function RootLayout() {
     const ready = (loaded || error != null) && databaseReady;
 
     useEffect(() => connectQueryManagers(), []);
-    useEffect(() => connectAuthSyncLifecycle({ syncAfterLogin, stopRecordSync }), []);
+    useEffect(() => {
+        let generation = 0;
+        const disconnect = connectAuthSyncLifecycle({
+            prepareAccount: prepareRecordAccount,
+            syncAfterLogin: async (userId, token) => {
+                const started = generation;
+                const { repository } = await initializeDatabase(userId);
+                if (started === generation) await syncAfterLogin(repository, token);
+            },
+            stopRecordSync: () => { generation++; stopRecordSync(); },
+        });
+        return () => { generation++; stopRecordSync(); disconnect(); };
+    }, []);
 
     useEffect(() => {
         if (ready) void SplashScreen.hideAsync();
