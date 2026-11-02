@@ -162,7 +162,9 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
                         if (existing?.syncPending || existing?.deleted) continue;
                         if ('bookId' in row && !books.get(row.bookId)) continue;
                         // 테이블과 해당 행은 위 호출부에서 함께 전달한다.
-                        const restored = { ...row, syncPending: false, localVersion: nextRecordVersion(now(), existing?.localVersion) };
+                        const restored = { ...row, syncPending: false, localVersion: nextRecordVersion(now(), existing?.localVersion),
+                            ...('publishedAt' in row && existing && 'publishedAt' in existing ? { publishedAt: existing.publishedAt } : {}),
+                        };
                         db.insert(table).values(restored).onConflictDoUpdate({ target: table.id, set: restored }).run();
                     }
                 };
@@ -171,6 +173,7 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
                 restore(snapshot.reviews, schema.reviews, reviews);
                 restore(snapshot.quotes, schema.quotes, quotes);
             });
+            notify();
         },
     };
 }

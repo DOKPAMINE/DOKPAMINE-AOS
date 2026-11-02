@@ -1,18 +1,16 @@
 import NetInfo from '@react-native-community/netinfo';
 import { AppState } from 'react-native';
-import { apiRequest } from '../api/client';
 import { isOnline, isOnlineState } from '../api/connectivity';
-import { putBook, putReview, putSession } from '../api/endpoints';
+import { putBook, putQuote, putReview, putSession, syncSnapshot } from '../api/endpoints';
 import { tokenStorage } from '../api/tokenStorage';
 import type { RecordRepository } from '../db/repository';
 import { createSyncEngine, type SyncEngine, type SyncState } from './engine';
-import type { QuoteDto, SyncSnapshot } from './serialization';
 
 let engine: SyncEngine | undefined;
 let repository: RecordRepository | undefined;
 let cleanup: (() => void) | undefined;
 const listeners = new Set<() => void>();
-const idleState: SyncState = { status: 'idle' };
+const idleState: SyncState = { status: 'idle', failedCount: 0 };
 export const getSyncState = (): SyncState => engine?.getState() ?? idleState;
 export function subscribeSyncState(listener: () => void) {
     listeners.add(listener);
@@ -25,9 +23,7 @@ export function startRecordSync(records: RecordRepository): SyncEngine {
     stopRecordSync();
     repository = records;
     const current = createSyncEngine(records, {
-        putBook, putSession, putReview,
-        putQuote: body => apiRequest<QuoteDto>(`/api/quotes/${encodeURIComponent(body.id)}`, { method: 'PUT', body }),
-        snapshot: () => apiRequest<SyncSnapshot>('/api/sync/snapshot'),
+        putBook, putSession, putReview, putQuote, snapshot: syncSnapshot,
     }, isOnline);
     engine = current;
     async function trigger(restore = false) {

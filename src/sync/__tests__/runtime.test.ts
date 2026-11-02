@@ -23,7 +23,7 @@ const tick = async () => { await Promise.resolve(); await Promise.resolve(); awa
 beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(tokenStorage.get).mockResolvedValue('test-token');
-    jest.mocked(createSyncEngine).mockReturnValue({ sync, afterLogin, stop, getState: () => ({ status: 'idle' }), subscribe: () => jest.fn() });
+    jest.mocked(createSyncEngine).mockReturnValue({ sync, afterLogin, stop, getState: () => ({ status: 'idle', failedCount: 0 }), subscribe: () => jest.fn() });
     jest.mocked(NetInfo.addEventListener).mockImplementation(listener => { networkChange = listener as typeof networkChange; return networkRemove; });
     jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => { appChange = listener; return { remove: appRemove }; });
 });

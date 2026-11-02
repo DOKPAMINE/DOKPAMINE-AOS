@@ -1,10 +1,11 @@
 import { ApiError } from '../../api/errors';
+import type { SyncSnapshot } from '../../api/types';
 import { prepareRecordDatabase } from '../../db/client';
 import { createRecordRepository, type RecordRepository, type SaveInput } from '../../db/repository';
 import type { BookRecord, SessionRecord } from '../../db/schema';
 import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
 import { createSyncEngine, type SyncTransport } from '../engine';
-import { bookDto, quoteDto, reviewDto, sessionDto, type SyncSnapshot } from '../serialization';
+import { bookDto, quoteDto, reviewDto, sessionDto } from '../serialization';
 
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
 jest.mock('../runtime', () => ({ startRecordSync: jest.fn() }));
@@ -111,11 +112,14 @@ test('NFR-06 S-80 오프라인이면 요청하지 않고 복구 후 전송해요
 });
 
 test('NFR-06 S-80 전송 도중 연결이 끊기면 후속 요청을 멈춰요', async () => {
-    transport.putBook.mockImplementation(async () => { online.mockResolvedValue(false); });
+    records.reviews.save({ id: id(3), bookId: book.id, oneLine: '감상', body: null, visibility: 'PRIVATE', publishedAt: null });
+    transport.putSession.mockRejectedValue(new ApiError('network', 'NETWORK_ERROR', '연결 끊김'));
     const engine = createSyncEngine(records, transport, online);
     await engine.sync();
-    expect(transport.putSession).not.toHaveBeenCalled();
-    expect(engine.getState().status).toBe('offline');
+    expect(transport.putReview).not.toHaveBeenCalled();
+    expect(records.sessions.get(session.id)?.syncPending).toBe(true);
+    expect(engine.getState().status).toBe('error');
+    expect(online).toHaveBeenCalledTimes(1);
 });
 
 test('NFR-04·05 S-02 로그인 snapshot을 책·세션·감상·문장 모두 복원해요', async () => {
@@ -149,15 +153,118 @@ test('NFR-04·05 S-02 snapshot은 로컬 수정·삭제 대기와 서버에 없�
     expect(transport.putSession).toHaveBeenCalledWith(expect.objectContaining({ deleted: true }));
 });
 
-test('NFR-04 S-02 snapshot 중간 DB 제약 실패는 앞서 복원한 책도 원자적으로 되돌려요', async () => {
+test('NFR-04 S-02 잘못된 snapshot 행만 건너뛰고 정상 행 복원과 업로드를 진행해요', async () => {
     const dto = bookDto(records.books.get(book.id)!);
     transport.snapshot.mockResolvedValue({ ...empty(), books: [{ ...dto, id: id(5) }],
         reviews: [{ id: id(6), bookId: id(5), oneLine: null, body: null, visibility: 'PRIVATE', deleted: false, createdAt: dto.createdAt, updatedAt: dto.updatedAt }] });
     const engine = createSyncEngine(records, transport, online);
     await engine.afterLogin();
-    expect(engine.getState().status).toBe('error');
-    expect(records.books.get(id(5))).toBeNull();
+    expect(engine.getState()).toMatchObject({ status: 'error', failedCount: 1 });
+    expect(records.books.get(id(5))?.title).toBe('데미안');
+    expect(records.reviews.get(id(6))).toBeNull();
+    expect(records.books.get(book.id)?.syncPending).toBe(false);
+});
+
+test.each([400, 403])('NFR-05 S-80 %s 행 뒤의 행과 다음 기록 종류는 전송된다', async status => {
+    records.books.save({ ...book, id: id(5), title: '다음 책' });
+    records.sessions.save({ ...session, id: id(6), bookId: id(5) });
+    transport.putBook.mockRejectedValueOnce(new ApiError('http', 'REJECTED', '거부됨', status));
+    transport.putSession.mockRejectedValueOnce(new ApiError('http', 'REJECTED', '거부됨', status));
+    const engine = createSyncEngine(records, transport, online);
+    await engine.sync();
     expect(records.books.get(book.id)?.syncPending).toBe(true);
+    expect(records.books.get(id(5))?.syncPending).toBe(false);
+    expect(records.sessions.get(session.id)?.syncPending).toBe(true);
+    expect(records.sessions.get(id(6))?.syncPending).toBe(false);
+    expect(engine.getState()).toMatchObject({ status: 'error', failedCount: 2 });
+    await engine.sync();
+    expect(engine.getState()).toMatchObject({ status: 'idle', failedCount: 0 });
+});
+
+test.each([
+    new ApiError('http', 'SERVER_ERROR', '서버 오류', 503),
+    new ApiError('timeout', 'TIMEOUT', '시간 초과'),
+    new ApiError('offline', 'OFFLINE', '오프라인'),
+])('NFR-05·06 S-80 일시 장애 $code는 전체 전송을 중단하고 대기를 보존해요', async error => {
+    records.books.save({ ...book, id: id(5) });
+    transport.putBook.mockRejectedValueOnce(error);
+    await createSyncEngine(records, transport, online).sync();
+    expect(transport.putBook).toHaveBeenCalledTimes(1);
+    expect(transport.putSession).not.toHaveBeenCalled();
+    expect(records.books.list({ syncPending: true })).toHaveLength(2);
+});
+
+test('NFR-05 S-02 snapshot 5xx 실패도 기기 기록 업로드를 막지 않아요', async () => {
+    transport.snapshot.mockRejectedValueOnce(new ApiError('http', 'SERVER_ERROR', '복원 실패', 503));
+    const engine = createSyncEngine(records, transport, online);
+    await engine.afterLogin();
+    expect(records.sessions.get(session.id)?.syncPending).toBe(false);
+    expect(engine.getState().status).toBe('error');
+    await engine.sync();
+    expect(transport.snapshot).toHaveBeenCalledTimes(2);
+    expect(engine.getState().status).toBe('idle');
+});
+
+test('NFR-05 S-45 실행 종료 직전 마이크로태스크의 새 요청도 완료 전에 전송해요', async () => {
+    const engine = createSyncEngine(records, transport, online);
+    let requested = false;
+    engine.subscribe(() => {
+        if (engine.getState().status !== 'idle' || requested) return;
+        requested = true;
+        records.sessions.save({ ...session, endPage: 90 });
+        void Promise.resolve().then(() => engine.sync());
+    });
+    await engine.sync();
+    expect(transport.putSession).toHaveBeenCalledTimes(2);
+    expect(records.sessions.get(session.id)).toMatchObject({ endPage: 90, syncPending: false });
+});
+
+test('NFR-04 S-02 snapshot 복원은 구독자에게 알리고 기존 공개 시각을 유지해요', async () => {
+    const review = records.reviews.save({ id: id(3), bookId: book.id, oneLine: '기존 감상', body: null, visibility: 'PUBLIC', publishedAt: 12345 });
+    records.reviews.markSynced(review.id, review.localVersion);
+    const listener = jest.fn();
+    records.subscribe(listener);
+    transport.snapshot.mockResolvedValue({ ...empty(), reviews: [{ ...reviewDto(review), oneLine: '복원 감상' }] });
+    await createSyncEngine(records, transport, online).afterLogin();
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(records.reviews.get(review.id)).toMatchObject({ oneLine: '복원 감상', publishedAt: 12345 });
+});
+
+test('NFR-04 S-02 잘못된 책·시각·세션·문장은 건너뛰고 정상 snapshot 행은 복원해요', async () => {
+    const dto = bookDto(records.books.get(book.id)!);
+    const sessionRecord = sessionDto(records.sessions.get(session.id)!);
+    transport.snapshot.mockResolvedValue({
+        books: [{ ...dto, id: id(5), title: '' }, { ...dto, id: id(6), updatedAt: 'invalid' }, { ...dto, id: id(7) }],
+        sessions: [{ ...sessionRecord, id: id(8), bookId: id(7), endPage: 241 }],
+        reviews: [],
+        quotes: [{ id: id(9), bookId: id(7), text: '', deleted: false, createdAt: dto.createdAt, updatedAt: dto.updatedAt }],
+    });
+    const engine = createSyncEngine(records, transport, online);
+    await engine.afterLogin();
+    expect(records.books.get(id(5))).toBeNull();
+    expect(records.books.get(id(6))).toBeNull();
+    expect(records.books.get(id(7))?.syncPending).toBe(false);
+    expect(records.sessions.get(id(8))).toBeNull();
+    expect(records.quotes.get(id(9))).toBeNull();
+    expect(engine.getState().failedCount).toBe(4);
+    expect(records.sessions.get(session.id)?.syncPending).toBe(false);
+});
+
+test('NFR-05 S-02 snapshot 401은 업로드도 멈추고 재로그인 상태를 알려요', async () => {
+    transport.snapshot.mockRejectedValue(new ApiError('unauthorized', 'TOKEN_EXPIRED', '로그인 필요', 401));
+    const engine = createSyncEngine(records, transport, online);
+    await engine.afterLogin();
+    expect(transport.putBook).not.toHaveBeenCalled();
+    expect(engine.getState().status).toBe('reauthentication-required');
+    expect(records.books.get(book.id)?.syncPending).toBe(true);
+});
+
+test('NFR-06 S-80 여러 대기 행이 있어도 엔진의 연결 조회는 실행 시작 한 번만 해요', async () => {
+    records.books.save({ ...book, id: id(5) });
+    await createSyncEngine(records, transport, online).sync();
+    expect(online).toHaveBeenCalledTimes(1);
+    expect(transport.putBook).toHaveBeenCalledTimes(2);
+    expect(transport.putSession).toHaveBeenCalledTimes(1);
 });
 
 test('NFR-05 S-80 동시에 전송을 요청해도 HTTP 전송을 중복 실행하지 않아요', async () => {
