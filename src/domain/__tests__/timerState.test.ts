@@ -1,4 +1,4 @@
-import { deserializeTimer, elapsedMs, finishTimer, pauseTimer, resumeTimer, serializeTimer, startTimer } from '../timerState';
+import { deserializeTimer, elapsedMs, finishTimer, pauseTimer, resumeTimer, serializeTimer, startTimer, toTimerSession } from '../timerState';
 
 const t0 = 1000000;
 const start = () => startTimer('client-session-uuid', 'book', 30, t0);
@@ -46,6 +46,46 @@ test('FR-02 S-41 시계가 시작 시각보다 뒤로 이동해도 음수 측정
     expect(elapsedMs(start(), t0 - 1)).toBe(0);
     const resumed = resumeTimer(pauseTimer(start(), t0 + 60000), t0 + 90000);
     expect(elapsedMs(resumed, t0 + 80000)).toBe(60000);
+});
+
+test('FR-02 S-43 종료 타이머를 세션으로 바꾸면 정지 시간을 빼고 초를 내림해요', () => {
+    const paused = pauseTimer(start(), t0 + 60999);
+    const finished = finishTimer(resumeTimer(paused, t0 + 90000), t0 + 150999);
+    const now = t0 + 500000;
+    expect(toTimerSession(finished, 84, 30, now)).toEqual({
+        session: {
+            id: 'client-session-uuid', bookId: 'book', startedAt: t0, endedAt: t0 + 150999,
+            activeSeconds: 121, startPage: 30, endPage: 84, source: 'TIMER', deleted: false,
+            createdAt: now, syncPending: true, localVersion: now,
+        },
+        currentPage: 84,
+    });
+    expect(finished.startPage).toBe(30);
+});
+
+test.each([
+    [84, 84], [0, 0], [null, 112],
+])('FR-03 S-43 끝 쪽 %s을 저장하면 현재 쪽은 %s쪽이에요', (endPage, currentPage) => {
+    const finished = finishTimer(start(), t0 + 999);
+    const result = toTimerSession(finished, endPage, 112, t0 + 1000);
+    expect(result.currentPage).toBe(currentPage);
+    expect(result.session.endPage).toBe(endPage);
+    expect(result.session.activeSeconds).toBe(0);
+});
+
+test('FR-02 NFR-05 S-45 같은 타이머를 다시 저장해도 한 건의 세션 ID를 유지해요', () => {
+    const finished = finishTimer(start(), t0 + 60000);
+    const first = toTimerSession(finished, 84, 30, t0 + 61000).session;
+    const second = toTimerSession(finished, 84, 84, t0 + 120000).session;
+    expect(first.id).toBe(finished.sessionId);
+    expect(second.id).toBe(finished.sessionId);
+    expect(new Set([first.id, second.id]).size).toBe(1);
+    expect(second.endedAt).toBe(first.endedAt);
+    expect(second.activeSeconds).toBe(first.activeSeconds);
+});
+
+test.each([start(), pauseTimer(start(), t0 + 1000)])('FR-02 S-43 종료하지 않은 타이머 %j는 세션으로 저장하지 않아요', timer => {
+    expect(() => toTimerSession(timer, null, 30, t0 + 2000)).toThrow('타이머를 마친 뒤 저장해 주세요.');
 });
 test.each(['bad', 'null', '[]', '{}', '1', '"timer"'])('FR-02 UC-02 3a 손상된 JSON %s을 타이머로 복원하지 않아요', json => {
     expect(deserializeTimer(json)).toBeNull();
