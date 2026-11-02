@@ -73,6 +73,20 @@ test('NFR-04 S-45 원자적 작업을 중첩해도 마지막 커밋 뒤 한 번�
     expect(listener).toHaveBeenCalledTimes(1);
 });
 
+test.each(['Promise', 'thenable'])('NFR-04 S-45 원자적 작업이 %s를 반환하면 커밋하지 않고 롤백해요', kind => {
+    const before = repository.books.get(bookId);
+    const listener = jest.fn();
+    repository.subscribe(listener);
+    const work = kind === 'Promise'
+        ? async () => { repository.books.save({ ...book, currentPage: 84 }); }
+        : () => { repository.books.save({ ...book, currentPage: 84 }); return { then: () => {} }; };
+    expect(() => repository.atomic(work)).toThrow('동기 함수');
+    expect(repository.books.get(bookId)).toEqual(before);
+    expect(listener).not.toHaveBeenCalled();
+    repository.atomic(() => repository.sessions.save(session));
+    expect(listener).toHaveBeenCalledTimes(1);
+});
+
 test('NFR-04~06 S-45 같은 ms에 세션을 두 번 저장해도 한 행이고 생성 시각과 UUID는 같아요', () => {
     const first = repository.sessions.save(session);
     const second = repository.sessions.save({ ...session, endPage: 90 });
