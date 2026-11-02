@@ -8,7 +8,9 @@
     "android": "expo start --android",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
-    "test": "jest"
+    "test": "jest",
+    "db:generate": "drizzle-kit generate",
+    "db:check": "drizzle-kit check"
   },
   "dependencies": {
     "@expo-google-fonts/noto-sans-kr": "^0.4.4",
