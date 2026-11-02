@@ -22,7 +22,7 @@ export function LoungeScreen() {
                     value={query} onChangeText={setQuery} onSubmitEditing={search} returnKeyType="search" style={styles.input} />
                 <PrimaryButton label="책 감상 검색" disabled={!query.trim()} onPress={search} />
             </View>
-            <SecondaryButton label="독서왕 · 곧 열려요" disabled onPress={() => {}} />
+            <SecondaryButton label="독서왕 랭킹" onPress={() => router.push('/ranking')} />
             <Text accessibilityRole="header" style={styles.heading}>최근 공개 감상</Text>
             {feed.isError ? <QueryError error={feed.error} retry={() => { void feed.refetch(); }} />
                 : feed.isPending ? <StateView kind="loading" />

@@ -47,7 +47,7 @@ afterEach(() => { client.clear(); onlineManager.setOnline(true); });
 test('FR-16 FR-08 FR-09 S-70~72 검색→책 묶음→상세→좋아요·취소가 이어져요', async () => {
     await renderRouter(routes, { initialUrl: '/lounge' });
     expect(await screen.findByText('최근 공개 감상')).toBeOnTheScreen();
-    expect(screen.getByRole('button', { name: '독서왕 · 곧 열려요' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '독서왕 랭킹' })).not.toBeDisabled();
     expect(screen.getByRole('button', { name: '책 감상 검색' })).toBeDisabled();
     await fireEvent.changeText(screen.getByLabelText('책 이름'), ' 데미안 ');
     await fireEvent.press(screen.getByRole('button', { name: '책 감상 검색' }));
