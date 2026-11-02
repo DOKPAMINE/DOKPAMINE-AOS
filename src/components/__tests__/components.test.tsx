@@ -4,7 +4,7 @@ import { PrimaryButton, SecondaryButton } from '../Button';
 import { ProgressBar } from '../ProgressBar';
 import { StateView } from '../StateView';
 
-test('D6 · S-10 진행 막대는 문구를 접근성에 한 번만 전달하고 퍼센트를 표시하지 않아요', async () => {
+test('FR-03 · S-31 진행 막대는 문구를 접근성에 한 번만 전달하고 퍼센트를 표시하지 않아요', async () => {
     await render(<ProgressBar currentPage={84} totalPages={240} />);
     await fireEvent(screen.getByRole('progressbar'), 'layout', { nativeEvent: { layout: { width: 300 } } });
 

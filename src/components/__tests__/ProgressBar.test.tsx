@@ -7,7 +7,7 @@ test.each([
     [0, '0%'],
     [84, '35%'],
     [240, '100%'],
-])('D6 · S-10 %i쪽에서 채운 영역만 밝은 문구를 보여 줘요', async (currentPage, width) => {
+])('FR-03 · S-31 %i쪽에서 채운 영역만 밝은 문구를 보여 줘요', async (currentPage, width) => {
     await render(<ProgressBar currentPage={currentPage} totalPages={240} />);
     const progressBar = screen.getByRole('progressbar');
     expect(screen.getAllByText(`${currentPage} / 240쪽`, { includeHiddenElements: true })).toHaveLength(1);
