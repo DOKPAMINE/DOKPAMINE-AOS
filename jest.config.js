@@ -1,5 +1,5 @@
 module.exports = {
     preset: 'jest-expo',
     testMatch: ['**/__tests__/**/*.test.[jt]s?(x)'],
-    testPathIgnorePatterns: ['/node_modules/', '/.expo-bootstrap'],
+    testPathIgnorePatterns: ['/node_modules/'],
 };

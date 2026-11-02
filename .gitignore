@@ -2,7 +2,6 @@ node_modules/
 .expo/
 dist/
 coverage/
-.expo-bootstrap*/
 expo-env.d.ts
 *.tsbuildinfo
 *.log

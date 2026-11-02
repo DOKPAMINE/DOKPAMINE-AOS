@@ -5,5 +5,5 @@
     "types": ["react-native", "jest"]
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
-  "exclude": ["node_modules", ".expo-bootstrap", ".expo-bootstrap58"]
+  "exclude": ["node_modules"]
 }
