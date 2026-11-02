@@ -44,7 +44,7 @@ src/theme/                    Figma v1.0 색상·글꼴·간격·반경·터치 
 src/components/               Screen, PrimaryButton, SecondaryButton, Card, ProgressBar, StateView
 src/domain/                   플랫폼·IO에 의존하지 않는 순수 규칙과 __tests__
 __tests__/                    라우트 통합 테스트
-babel.config.js / metro.config.js: Drizzle .sql 인라인
+babel.config.js, metro.config.js  Drizzle .sql 인라인
 .github/workflows/ci.yml       PR(main 대상)·main push 시 타입 검사·린트·테스트
 ```
 `src/api/`·`src/db/`·`src/sync/`는 이후 Issue에서 구현한다. 라우트마다 PRD 화면 ID를 주석으로 남긴다.
