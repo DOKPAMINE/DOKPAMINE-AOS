@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, PrimaryButton, ProgressBar, Screen, SecondaryButton, StateView } from '../components';
 import { colors, radii, sizes, spacing, typography } from '../theme';
+import { formatWeekTime } from '../domain/homeTime';
 import { useHomeRecords } from './useHomeRecords';
 
 export function HomeView() {
@@ -27,7 +28,7 @@ export function HomeView() {
                         <View style={styles.stat}>
                             <Text style={styles.label}>이번 주 읽은 시간</Text>
                             <Text style={styles.value}>
-                                {weekSeconds < 60 ? `${weekSeconds}초` : `${Math.floor(weekSeconds / 3600)}시간 ${Math.floor(weekSeconds % 3600 / 60)}분`}
+                                {formatWeekTime(weekSeconds)}
                             </Text>
                         </View>
                     </View>
@@ -69,7 +70,7 @@ export function HomeView() {
                     )
                 )}
                 <SecondaryButton label="책 등록하기" onPress={() => router.push('/book-add')} />
-                <SecondaryButton label="읽고 싶은 책 등록하기" onPress={() => router.push('/book-add?want=1')} />
+                <SecondaryButton label="읽고 싶은 책 등록하기" onPress={() => router.push('/book-add')} />
             </View>
 
             <Card>

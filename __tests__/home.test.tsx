@@ -1,5 +1,5 @@
 import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
-import { useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { AppState, Text, type AppStateStatus } from 'react-native';
 
 import HomeScreen from '../app/(tabs)/index';
@@ -64,7 +64,7 @@ test('FR-04 S-10 로딩 후 책이 없으면 빈 안내와 두 등록 진입을 
     expect(screen.getByRole('header', { name: '오늘의 명언' })).toBeOnTheScreen();
 }, 30_000);
 
-test.each([['책 등록하기', '/book-add', {}], ['읽고 싶은 책 등록하기', '/book-add', { want: '1' }]])(
+test.each([['책 등록하기', '/book-add', {}], ['읽고 싶은 책 등록하기', '/book-add', {}]])(
     'FR-04 S-10 %s에서 등록 경로와 상태를 전달해요', async (label, pathname, params) => {
         await renderRouter(routes, { initialUrl: '/' });
         await fireEvent.press(screen.getByRole('button', { name: label }));
@@ -72,6 +72,20 @@ test.each([['책 등록하기', '/book-add', {}], ['읽고 싶은 책 등록하�
         expect(screen.getByRole('header')).toHaveTextContent(JSON.stringify(params));
     },
 );
+
+test('FR-04 S-10 포커스로 복귀해도 초기화 대기 중 기존 기록을 유지해요', async () => {
+    repository.books.list.mockReturnValue([first]);
+    await renderRouter({ ...routes, _layout: () => <Stack screenOptions={{ headerShown: false }} /> }, { initialUrl: '/' });
+    await screen.findByRole('radio', { name: '첫 번째 책, 지은이' });
+    await fireEvent.press(screen.getByRole('button', { name: '책 등록하기' }));
+    let finish!: (value: Awaited<ReturnType<typeof initializeDatabase>>) => void;
+    jest.mocked(initializeDatabase).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    await act(async () => router.back());
+    expect(screen.getByRole('radio', { name: '첫 번째 책, 지은이' })).toBeOnTheScreen();
+    expect(screen.queryByText('독서 기록을 불러오고 있어요.')).toBeNull();
+    await act(async () => finish(prepared()));
+    expect(screen.getByRole('radio', { name: '첫 번째 책, 지은이' })).toBeOnTheScreen();
+});
 
 test('FR-02 FR-04 S-10 읽는 중 책만 선택하고 같은 UUID로 독서 시작에 진입해요', async () => {
     repository.books.list.mockReturnValue([first, second, book('want', '읽고 싶은 책', 'WANT'), book('done', '완독한 책', 'DONE')]);
