@@ -1,7 +1,7 @@
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
 
-import { catalogGenres, catalogIsbn, login, me, putBook, putQuote, putReview, putSession, searchBookReviews, signup, syncSnapshot } from '../endpoints';
+import { catalogGenres, catalogIsbn, feedItem, feedList, likeReview, login, me, putBook, putQuote, putReview, putSession, searchBookReviews, signup, syncSnapshot, unlikeReview } from '../endpoints';
 import type { BookDto, BookReviewSearchResponse, CatalogBook, MeResponse, QuoteDto, ReviewDto, SessionDto, TokenResponse } from '../types';
 
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn() } }));
@@ -66,6 +66,10 @@ test.each([
     { name: 'NFR-05 · S-02 로그인 복원', call: syncSnapshot, path: '/api/sync/snapshot', method: 'GET', body: undefined,
         response: { books: [book], sessions: [session], reviews: [review], quotes: [quote] }, auth: true },
     { name: 'FR-16 · S-71 책별 감상 검색', call: () => searchBookReviews(query), path: `/api/feed/books?query=${encodeURIComponent(query)}`, method: 'GET', body: undefined, response: groups, auth: true },
+    { name: 'FR-08 · S-70 최근 공개 감상', call: () => feedList(), path: '/api/feed', method: 'GET', body: undefined, response: groups[0].reviews, auth: true },
+    { name: 'FR-08 · S-72 감상 상세', call: () => feedItem(review.id), path: `/api/feed/${review.id}`, method: 'GET', body: undefined, response: groups[0].reviews[0], auth: true },
+    { name: 'FR-09 · S-72 좋아요', call: () => likeReview(review.id), path: `/api/feed/${review.id}/like`, method: 'POST', body: undefined, response: { likeCount: 1, likedByMe: true }, auth: true },
+    { name: 'FR-09 · S-72 좋아요 취소', call: () => unlikeReview(review.id), path: `/api/feed/${review.id}/like`, method: 'DELETE', body: undefined, response: { likeCount: 0, likedByMe: false }, auth: true },
 ])('$name 계약의 경로·본문·인증 헤더와 응답을 그대로 사용해요', async row => {
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => row.response } as Response);
     expect(await row.call()).toEqual(row.response);
@@ -91,4 +95,23 @@ test('FR-01 · S-22 ISBN의 경로 구분 문자도 인코딩해요', async () =
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => catalog } as Response);
     await catalogIsbn('isbn/with?reserved');
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.test/api/catalog/isbn/isbn%2Fwith%3Freserved');
+});
+
+test.each([feedItem, likeReview, unlikeReview])('FR-09 S-72 감상 ID의 경로 구분 문자도 인코딩해요', async endpoint => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({}) } as Response);
+    await endpoint('review/with?reserved');
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/feed/review%2Fwith%3Freserved');
+});
+
+test.each([() => feedList(), () => feedItem(review.id), () => searchBookReviews(query), () => likeReview(review.id), () => unlikeReview(review.id)])(
+    'NFR-06 S-70~72 오프라인이면 공개 감상 HTTP 요청을 보내지 않아요', async endpoint => {
+        jest.mocked(NetInfo.fetch).mockResolvedValue({ isConnected: false, isInternetReachable: false } as NetInfoState);
+        await expect(endpoint()).rejects.toMatchObject({ kind: 'offline' });
+        expect(fetchMock).not.toHaveBeenCalled();
+    },
+);
+
+test('FR-08 S-72 비공개·삭제 감상의 404를 보존해요', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 404, json: async () => ({ code: 'NOT_FOUND', message: 'Not found' }) } as Response);
+    await expect(feedItem(review.id)).rejects.toMatchObject({ status: 404 });
 });
