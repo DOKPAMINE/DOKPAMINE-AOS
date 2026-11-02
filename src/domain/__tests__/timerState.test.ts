@@ -1,4 +1,11 @@
 import { deserializeTimer, elapsedMs, finishTimer, pauseTimer, resumeTimer, serializeTimer, startTimer, toTimerSession } from '../timerState';
+import { parseEndPage } from '../pageRules';
+
+const page = (value: number | null) => {
+    const result = parseEndPage(value === null ? '' : String(value), 30, 240);
+    if (result.kind === 'invalid') throw new Error(result.message);
+    return result;
+};
 
 const t0 = 1000000;
 const start = () => startTimer('client-session-uuid', 'book', 30, t0);
@@ -52,7 +59,7 @@ test('FR-02 S-43 종료 타이머를 세션으로 바꾸면 정지 시간을 빼
     const paused = pauseTimer(start(), t0 + 60999);
     const finished = finishTimer(resumeTimer(paused, t0 + 90000), t0 + 150999);
     const now = t0 + 500000;
-    expect(toTimerSession(finished, 84, 30, now)).toEqual({
+    expect(toTimerSession(finished, page(84), 30, now)).toEqual({
         session: {
             id: 'client-session-uuid', bookId: 'book', startedAt: t0, endedAt: t0 + 150999,
             activeSeconds: 121, startPage: 30, endPage: 84, source: 'TIMER', deleted: false,
@@ -67,7 +74,7 @@ test.each([
     [84, 84], [0, 0], [null, 112],
 ])('FR-03 S-43 끝 쪽 %s을 저장하면 현재 쪽은 %s쪽이에요', (endPage, currentPage) => {
     const finished = finishTimer(start(), t0 + 999);
-    const result = toTimerSession(finished, endPage, 112, t0 + 1000);
+    const result = toTimerSession(finished, page(endPage), 112, t0 + 1000);
     expect(result.currentPage).toBe(currentPage);
     expect(result.session.endPage).toBe(endPage);
     expect(result.session.activeSeconds).toBe(0);
@@ -75,8 +82,8 @@ test.each([
 
 test('FR-02 NFR-05 S-45 같은 타이머를 다시 저장해도 한 건의 세션 ID를 유지해요', () => {
     const finished = finishTimer(start(), t0 + 60000);
-    const first = toTimerSession(finished, 84, 30, t0 + 61000).session;
-    const second = toTimerSession(finished, 84, 84, t0 + 120000).session;
+    const first = toTimerSession(finished, page(84), 30, t0 + 61000).session;
+    const second = toTimerSession(finished, page(84), 84, t0 + 120000, first).session;
     expect(first.id).toBe(finished.sessionId);
     expect(second.id).toBe(finished.sessionId);
     expect(new Set([first.id, second.id]).size).toBe(1);
@@ -85,7 +92,26 @@ test('FR-02 NFR-05 S-45 같은 타이머를 다시 저장해도 한 건의 세�
 });
 
 test.each([start(), pauseTimer(start(), t0 + 1000)])('FR-02 S-43 종료하지 않은 타이머 %j는 세션으로 저장하지 않아요', timer => {
-    expect(() => toTimerSession(timer, null, 30, t0 + 2000)).toThrow('타이머를 마친 뒤 저장해 주세요.');
+    expect(() => toTimerSession(timer, page(null), 30, t0 + 2000)).toThrow('타이머를 마친 뒤 저장해 주세요.');
+});
+
+test('NFR-05 S-45 같은 밀리초에 다시 저장하면 버전이 증가하고 생성 시각은 유지돼요', () => {
+    const finished = finishTimer(start(), t0 + 60000);
+    const first = toTimerSession(finished, page(84), 30, t0 + 61000).session;
+    const second = toTimerSession(finished, page(84), 84, t0 + 61000, first).session;
+    expect(second.localVersion).toBe(first.localVersion + 1);
+    expect(second.createdAt).toBe(first.createdAt);
+    expect(toTimerSession(finished, page(84), 84, t0, second).session.localVersion).toBe(second.localVersion + 1);
+});
+
+test('FR-03 S-43 전체 쪽수를 넘는 입력은 타이머 세션으로 변환할 수 없어요', () => {
+    const invalid = parseEndPage('241', 30, 240);
+    expect(invalid.kind).toBe('invalid');
+    // @ts-expect-error 실패 결과는 저장 함수가 받지 않는다.
+    const rejectedByType = () => toTimerSession(finishTimer(start(), t0 + 1000), invalid, 30, t0);
+    expect(rejectedByType).toThrow('종료 페이지를 확인해 주세요.');
+    expect(page(0)).toEqual({ kind: 'reread', endPage: 0 });
+    expect(page(240)).toEqual({ kind: 'valid', endPage: 240 });
 });
 test.each(['bad', 'null', '[]', '{}', '1', '"timer"'])('FR-02 UC-02 3a 손상된 JSON %s을 타이머로 복원하지 않아요', json => {
     expect(deserializeTimer(json)).toBeNull();
