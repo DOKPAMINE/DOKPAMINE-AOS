@@ -42,7 +42,7 @@ test('PRD 4장 · S-30·S-60·S-10·S-70·S-80 탭이 순서대로 보이고 홈
     }
 });
 
-test('FR-04 · S-30 책장 탭을 누르면 책장 자리표시 화면을 보여 줘요', async () => {
+test('FR-04 · S-30 책장 탭을 누르면 책장을 보여 줘요', async () => {
     await renderRouter(routes, { initialUrl: '/' });
     await fireEvent.press(screen.getByRole('button', { name: '책장' }));
 
