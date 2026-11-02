@@ -8,12 +8,12 @@ export const navigationTheme: Theme = {
     ...DefaultTheme,
     colors: {
         ...DefaultTheme.colors,
-        primary: colors.ink,
-        background: colors.paper,
-        card: colors.surface,
-        text: colors.ink,
-        border: colors.stone,
-        notification: colors.error,
+        primary: colors.brand.espresso,
+        background: colors.surface.paper,
+        card: colors.surface.card,
+        text: colors.brand.espresso,
+        border: colors.line.border,
+        notification: colors.state.error,
     },
     fonts: {
         regular: { fontFamily: fontFamilies.regular, fontWeight: '400' },

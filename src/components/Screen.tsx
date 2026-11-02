@@ -18,7 +18,7 @@ export function Screen({ title, children }: PropsWithChildren<{ title: string }>
 }
 
 const styles = StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: colors.paper },
+    safeArea: { flex: 1, backgroundColor: colors.surface.paper },
     content: { flexGrow: 1, padding: spacing.xl, gap: spacing.lg },
-    title: { ...typography.heading, color: colors.ink, marginBottom: spacing.sm },
+    title: { ...typography.heading, color: colors.brand.espresso, marginBottom: spacing.sm },
 });

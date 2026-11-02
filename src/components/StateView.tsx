@@ -17,7 +17,7 @@ export function StateView({ kind, message, onRetry }: { kind: StateKind; message
 
     return (
         <View style={styles.container}>
-            {kind === 'loading' && <ActivityIndicator accessible={false} color={colors.moss} />}
+            {kind === 'loading' && <ActivityIndicator accessible={false} color={colors.text.muted} />}
             <Text
                 accessibilityRole={kind === 'error' ? 'alert' : 'text'}
                 accessibilityLabel={description}
@@ -33,6 +33,6 @@ export function StateView({ kind, message, onRetry }: { kind: StateKind; message
 
 const styles = StyleSheet.create({
     container: { gap: spacing.lg, paddingVertical: spacing.xl },
-    message: { ...typography.bodySmall, color: colors.muted, textAlign: 'center' },
-    error: { color: colors.error },
+    message: { ...typography.bodySmall, color: colors.text.muted, textAlign: 'center' },
+    error: { color: colors.state.error },
 });

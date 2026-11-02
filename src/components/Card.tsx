@@ -17,7 +17,7 @@ const styles = StyleSheet.create({
         gap: spacing.md,
         borderRadius: radii.card,
         borderWidth: 1,
-        borderColor: colors.stone,
-        backgroundColor: colors.surface,
+        borderColor: colors.line.border,
+        backgroundColor: colors.surface.card,
     },
 });
