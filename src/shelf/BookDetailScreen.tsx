@@ -72,6 +72,8 @@ function BookDetail({ book, repository }: { book: BookRecord; repository: Record
             <SecondaryButton label="완독 표시" onPress={() => changeStatus(true)} />
         </>}
         <View style={styles.section}>
+            <SecondaryButton label="기록 보기" onPress={() => router.push({ pathname: '/book/[id]/records', params: { id: book.id } })} />
+            <SecondaryButton label="감상과 문장" onPress={() => router.push({ pathname: '/book/[id]/review', params: { id: book.id } } as Href)} />
             <SecondaryButton label="정보 편집" onPress={() => router.push({ pathname: '/book/[id]/edit', params: { id: book.id } })} />
             <SecondaryButton label="책 삭제" accessibilityLabel={`${book.title} 책 삭제`} onPress={confirmDelete} />
         </View>
