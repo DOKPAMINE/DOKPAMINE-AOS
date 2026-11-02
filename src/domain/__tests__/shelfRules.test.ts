@@ -1,4 +1,4 @@
-import { beginReading, completeReading, groupShelfBooks, parseBookEdit, readingTimeLabel, type BookEditFields } from '../shelfRules';
+import { beginReading, BookEditError, completeReading, groupShelfBooks, parseBookEdit, readingTimeLabel, type BookEditFields } from '../shelfRules';
 import { monthlyStats } from '../calendarRules';
 
 const book = { id: 'book', title: '데미안', genre: '소설' as const, deleted: false, status: 'DONE' as const, currentPage: 84, totalPages: 240, completedCount: 1, completedAt: 100 };
@@ -66,4 +66,13 @@ test('FR-01 S-34 현재 쪽 미만과 공백 제목·저자는 거부해요', ()
 test('FR-04 S-31 누적 시간은 삭제 기록을 제외하고 초까지 표시해요', () => {
     expect(readingTimeLabel([{ activeSeconds: 3661, deleted: false }, { activeSeconds: 100, deleted: true }])).toBe('1시간 1분 1초');
     expect(readingTimeLabel([])).toBe('0시간 0분 0초');
+});
+
+test('FR-01 S-34 출판사는 BE 검증과 같은 100자까지 저장하고 초과 오류의 필드를 전달해요', () => {
+    expect(parseBookEdit({ ...fields, publisher: '가'.repeat(100) }, editingBook).publisher).toHaveLength(100);
+    expect(() => parseBookEdit({ ...fields, publisher: '가'.repeat(101) }, editingBook)).toThrow('출판사는 100자 이내로 입력해 주세요.');
+    expect(() => parseBookEdit({ ...fields, title: '' }, editingBook)).toThrow(BookEditError);
+    try { parseBookEdit({ ...fields, title: '' }, editingBook); } catch (error) {
+        expect((error as BookEditError).field).toBe('title');
+    }
 });
