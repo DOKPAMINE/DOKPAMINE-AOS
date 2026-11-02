@@ -201,8 +201,11 @@ test('FR-03 S-44 이미 완독한 책은 읽는 중 저장 선택을 숨기고 �
     await open();
     await fireEvent.press(await screen.findByRole('button', { name: '저장' }));
     expect(screen.getByText('이미 완독한 책이에요. 완독 상태를 유지하고 기록을 저장해요.')).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: '오늘 읽은 만큼' })).toBeOnTheScreen();
+    expect(screen.queryByRole('header', { name: '완독하셨나요?' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '완독으로 저장' })).toBeNull();
     expect(screen.queryByRole('button', { name: '아직 읽는 중으로 저장' })).toBeNull();
-    await fireEvent.press(screen.getByRole('button', { name: '완독으로 저장' }));
+    await fireEvent.press(screen.getByRole('button', { name: '기록 저장' }));
     expect(await screen.findByRole('header', { name: '저장 완료' })).toBeOnTheScreen();
     expect(prepared.repository.books.get(id)).toMatchObject({ status: 'DONE', currentPage: 240, completedCount: 2, completedAt: t0 + 30000 });
 });

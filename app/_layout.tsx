@@ -89,6 +89,7 @@ function AuthNavigator() {
                 <Stack.Screen name="book" />
                 <Stack.Screen name="reading-start" />
                 <Stack.Screen name="lounge" />
+                <Stack.Screen name="ranking" />
             </Stack.Protected>
         </Stack>
     );

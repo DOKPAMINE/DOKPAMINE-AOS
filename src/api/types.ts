@@ -6,6 +6,23 @@ export interface MeResponse {
     rankingOptIn: boolean;
 }
 
+export type PatchMeRequest = Partial<Pick<MeResponse, 'nickname' | 'rankingOptIn'>>;
+
+export interface RankingEntry {
+    rank: number;
+    userId: string;
+    nickname: string;
+    seconds: number;
+    me: boolean;
+}
+
+export interface WeeklyRankingResponse {
+    weekStart: string;
+    participating: boolean;
+    top: RankingEntry[];
+    around: RankingEntry[];
+}
+
 export interface TokenResponse {
     accessToken: string;
     expiresAt: string;

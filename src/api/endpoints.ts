@@ -1,9 +1,13 @@
 import { apiRequest, type ApiRequestOptions } from './client';
-import type { BookDto, BookReviewSearchResponse, CatalogBook, FeedItem, FeedListResponse, LoginRequest, MeResponse, QuoteDto, ReviewDto, ReviewLikeResponse, SessionDto, SignupRequest, SyncSnapshot, TokenResponse } from './types';
+import type { BookDto, BookReviewSearchResponse, CatalogBook, FeedItem, FeedListResponse, LoginRequest, MeResponse, PatchMeRequest, QuoteDto, ReviewDto, ReviewLikeResponse, SessionDto, SignupRequest, SyncSnapshot, TokenResponse, WeeklyRankingResponse } from './types';
 
 export const signup = (body: SignupRequest, signal?: AbortSignal) => apiRequest<TokenResponse>('/api/auth/signup', { method: 'POST', body, signal, authenticated: false });
 export const login = (body: LoginRequest, signal?: AbortSignal) => apiRequest<TokenResponse>('/api/auth/login', { method: 'POST', body, signal, authenticated: false });
 export const me = () => apiRequest<MeResponse>('/api/me');
+export const patchMe = (body: PatchMeRequest) => apiRequest<MeResponse>('/api/me', { method: 'PATCH', body });
+export const weeklyRanking = (weekStart?: string, signal?: AbortSignal) => apiRequest<WeeklyRankingResponse>(
+    `/api/ranking/weekly${weekStart === undefined ? '' : `?weekStart=${encodeURIComponent(weekStart)}`}`, { signal },
+);
 export const catalogIsbn = (isbn: string) => apiRequest<CatalogBook>(`/api/catalog/isbn/${encodeURIComponent(isbn)}`);
 export const catalogGenres = () => apiRequest<string[]>('/api/catalog/genres');
 type SyncRequestOptions = Pick<ApiRequestOptions, 'accessToken' | 'signal'>;
