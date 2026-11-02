@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 const ACCESS_TOKEN_KEY = 'dokpamine.accessToken';
 const SESSION_KEY = 'dokpamine.authSession';
 
-export interface StoredSession { accessToken: string; expiresAt: string }
+export interface StoredSession { accessToken: string; expiresAt: string; userId: string }
 
 /** 401에서는 삭제하지 않는다. 삭제는 명시적 로그아웃에서만 호출한다(ADR-0003). */
 export const tokenStorage = {
@@ -22,8 +22,9 @@ export const tokenStorage = {
         try {
             const value: unknown = JSON.parse(raw);
             if (typeof value === 'object' && value !== null && 'accessToken' in value && value.accessToken === token &&
-                'expiresAt' in value && typeof value.expiresAt === 'string' && Number.isFinite(Date.parse(value.expiresAt))) {
-                return { accessToken: token, expiresAt: value.expiresAt };
+                'expiresAt' in value && typeof value.expiresAt === 'string' && Number.isFinite(Date.parse(value.expiresAt)) &&
+                'userId' in value && typeof value.userId === 'string' && value.userId.trim().length > 0 && value.userId.length <= 128) {
+                return { accessToken: token, expiresAt: value.expiresAt, userId: value.userId };
             }
         } catch { /* 파손된 메타데이터는 로그인 필요 상태로 처리한다. */ }
         return null;

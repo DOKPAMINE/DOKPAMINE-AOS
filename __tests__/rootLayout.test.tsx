@@ -12,7 +12,7 @@ import { initializeDatabase } from '../src/db/client';
 
 jest.mock('../src/sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn() }));
 
-jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn(() => Promise.resolve({})) }));
+jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn(() => Promise.resolve({})), prepareRecordAccount: jest.fn(async () => {}) }));
 
 jest.mock('@react-native-community/netinfo', () => ({
     __esModule: true,
@@ -20,7 +20,7 @@ jest.mock('@react-native-community/netinfo', () => ({
 }));
 
 jest.mock('expo-secure-store', () => ({
-    getItemAsync: jest.fn(async (key: string) => key === 'dokpamine.accessToken' ? 'test-token' : key === 'dokpamine.authSession' ? JSON.stringify({ accessToken: 'test-token', expiresAt: '2099-01-01T00:00:00Z' }) : 'true'),
+    getItemAsync: jest.fn(async (key: string) => key === 'dokpamine.accessToken' ? 'test-token' : key === 'dokpamine.authSession' ? JSON.stringify({ accessToken: 'test-token', expiresAt: '2099-01-01T00:00:00Z', userId: 'reader-id' }) : 'true'),
 }));
 
 afterEach(() => queryClient.clear());
