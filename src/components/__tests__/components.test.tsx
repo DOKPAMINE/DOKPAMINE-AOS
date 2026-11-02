@@ -4,12 +4,15 @@ import { PrimaryButton, SecondaryButton } from '../Button';
 import { ProgressBar } from '../ProgressBar';
 import { StateView } from '../StateView';
 
-test('FR-03 · S-31 진행 막대는 84 / 240쪽을 표시하고 퍼센트를 표시하지 않아요', async () => {
+test('D6 · S-10 진행 막대는 문구를 접근성에 한 번만 전달하고 퍼센트를 표시하지 않아요', async () => {
     await render(<ProgressBar currentPage={84} totalPages={240} />);
 
-    expect(screen.getByText('84 / 240쪽')).toBeOnTheScreen();
-    expect(screen.queryByText(/%/)).toBeNull();
-    expect(screen.getByRole('progressbar')).toHaveAccessibilityValue({ text: '84 / 240쪽' });
+    const progressBars = screen.getAllByRole('progressbar');
+    expect(progressBars).toHaveLength(1);
+    expect(progressBars[0]).toHaveAccessibilityValue({ text: '84 / 240쪽' });
+    expect(screen.queryByText('84 / 240쪽')).toBeNull();
+    expect(screen.getAllByText('84 / 240쪽', { includeHiddenElements: true })).toHaveLength(2);
+    expect(screen.queryByText(/%/, { includeHiddenElements: true })).toBeNull();
 });
 
 test.each([
