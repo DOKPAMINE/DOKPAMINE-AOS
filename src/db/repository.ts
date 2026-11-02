@@ -151,7 +151,7 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
     return {
         books, sessions, reviews, quotes,
         /** NFR-04 / S-45: 동기 작업 전체를 커밋한 뒤 한 번만 구독자에게 알린다. 실패는 롤백한다. */
-        atomic<T>(work: () => T): T {
+        atomic<T>(work: () => T extends PromiseLike<unknown> ? never : T): T {
             const result = transaction(() => {
                 const value = work();
                 if (value !== null && (typeof value === 'object' || typeof value === 'function') &&

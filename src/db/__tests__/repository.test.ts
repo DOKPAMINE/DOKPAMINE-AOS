@@ -80,11 +80,23 @@ test.each(['Promise', 'thenable'])('NFR-04 S-45 원자적 작업이 %s를 반환
     const work = kind === 'Promise'
         ? async () => { repository.books.save({ ...book, currentPage: 84 }); }
         : () => { repository.books.save({ ...book, currentPage: 84 }); return { then: () => {} }; };
-    expect(() => repository.atomic(work)).toThrow('동기 함수');
+    // 런타임 경계에서는 타입 검사를 우회한 thenable도 거부해야 한다.
+    expect(() => repository.atomic(work as () => never)).toThrow('동기 함수');
     expect(repository.books.get(bookId)).toEqual(before);
     expect(listener).not.toHaveBeenCalled();
     repository.atomic(() => repository.sessions.save(session));
     expect(listener).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+    ['async 함수', async (): Promise<number> => 42],
+    ['Promise', (): Promise<number> => Promise.resolve(42)],
+    ['PromiseLike', (): PromiseLike<number> => Promise.resolve(42)],
+] as const)('NFR-04 S-45 원자적 작업의 %s 반환을 타입에서도 금지해요', (_kind, work) => {
+    expect(() => {
+        // @ts-expect-error 원자적 작업은 PromiseLike를 반환할 수 없다.
+        repository.atomic(work);
+    }).toThrow('동기 함수');
 });
 
 test('NFR-04~06 S-45 같은 ms에 세션을 두 번 저장해도 한 행이고 생성 시각과 UUID는 같아요', () => {
