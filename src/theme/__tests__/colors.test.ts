@@ -14,6 +14,13 @@ function contrast(foreground: string, background: string): number {
     return (Math.max(...values) + 0.05) / (Math.min(...values) + 0.05);
 }
 
+test('WCAG 2.x · 대비 계산은 알려진 기준값과 같아요', () => {
+    expect(contrast('#000000', '#FFFFFF')).toBeCloseTo(21, 5);
+    expect(contrast('#FFFFFF', '#FFFFFF')).toBeCloseTo(1, 5);
+    expect(contrast('#767676', '#FFFFFF')).toBeGreaterThanOrEqual(4.5);
+    expect(contrast('#777777', '#FFFFFF')).toBeLessThan(4.5);
+});
+
 test('Figma v1.0 · 색상 토큰은 브라운 밝은안의 11개 역할과 값만 포함해요', () => {
     expect(colors).toEqual({
         brand: { espresso: '#3B2A28', camel: '#C8A86B', sand: '#E6D8BF' },
