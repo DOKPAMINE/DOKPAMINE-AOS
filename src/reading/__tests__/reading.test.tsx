@@ -108,6 +108,7 @@ test('FR-03 S-44 완독 확인 후 끝 쪽·완독 횟수·날짜를 저장해�
     await open();
     await fireEvent.press(await screen.findByRole('button', { name: '저장' }));
     expect(prepared.repository.sessions.list()).toHaveLength(0);
+    expect(screen.getByRole('button', { name: '아직 읽는 중으로 저장' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '완독으로 저장' }));
     expect(prepared.repository.books.get(id)).toMatchObject({ currentPage: 240, status: 'DONE', completedCount: 1, completedAt: t0 + 60000 });
     await act(() => { prepared.repository.atomic(() => saveReading(prepared.repository, timer, true, t0 + 70000)); });
@@ -185,12 +186,25 @@ test('FR-02 S-40 S-42 선택한 책도 삭제되면 초기화 안내와 홈 경�
     expect(await screen.findByText('홈')).toBeOnTheScreen();
 });
 
-test.each([true, false])('FR-03 S-44 저장 전에 이미 완독한 책은 완독 선택=%s여도 횟수·날짜·상태를 유지해요', complete => {
+test.each([true, false].flatMap(complete => ['120', '60', '240', ''].map(endPageDraft => ({ complete, endPageDraft }))))('FR-03 S-44 S-45 이미 완독한 책은 $endPageDraft 쪽·완독 선택=$complete 저장에도 진행·완독 정보를 유지해요', ({ complete, endPageDraft }) => {
+    prepared.repository.books.save({ ...book, status: 'DONE', currentPage: 240, completedCount: 2, completedAt: t0 + 30000 });
+    const timer = { ...finishTimer(startTimer(sessionId, id, 84, t0), t0 + 60000), endPageDraft };
+    prepared.repository.atomic(() => saveReading(prepared.repository, timer, complete, t0 + 70000));
+    expect(prepared.repository.books.get(id)).toMatchObject({ status: 'DONE', currentPage: 240, completedCount: 2, completedAt: t0 + 30000 });
+    expect(prepared.repository.sessions.list()).toEqual([expect.objectContaining({ id: sessionId, endPage: endPageDraft === '' ? null : Number(endPageDraft) })]);
+});
+
+test('FR-03 S-44 이미 완독한 책은 읽는 중 저장 선택을 숨기고 완독 정보를 유지해요', async () => {
     prepared.repository.books.save({ ...book, status: 'DONE', currentPage: 240, completedCount: 2, completedAt: t0 + 30000 });
     const timer = { ...finishTimer(startTimer(sessionId, id, 84, t0), t0 + 60000), endPageDraft: '240' };
-    prepared.repository.atomic(() => saveReading(prepared.repository, timer, complete, t0 + 70000));
-    expect(prepared.repository.books.get(id)).toMatchObject({ status: 'DONE', completedCount: 2, completedAt: t0 + 30000 });
-    expect(prepared.repository.sessions.list()).toHaveLength(1);
+    readingStorage('reader').save({ timer, confirmedChecks: 0 });
+    await open();
+    await fireEvent.press(await screen.findByRole('button', { name: '저장' }));
+    expect(screen.getByText('이미 완독한 책이에요. 완독 상태를 유지하고 기록을 저장해요.')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: '아직 읽는 중으로 저장' })).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: '완독으로 저장' }));
+    expect(await screen.findByRole('header', { name: '저장 완료' })).toBeOnTheScreen();
+    expect(prepared.repository.books.get(id)).toMatchObject({ status: 'DONE', currentPage: 240, completedCount: 2, completedAt: t0 + 30000 });
 });
 
 test('FR-03 S-45 읽고 싶은 책의 타이머를 저장하면 읽는 중으로 바꿔요', () => {
