@@ -1,6 +1,4 @@
-import { Card, Screen, StateView } from '../../src/components';
+import { CalendarScreen } from '../../src/calendar/CalendarScreen';
 
-// S-60 독서 캘린더 · FR-05
-export default function CalendarScreen() {
-    return <Screen title="캘린더"><Card><StateView kind="empty" message="독서한 날을 돌아볼 캘린더를 준비하고 있어요." /></Card></Screen>;
-}
+// S-60 독서 캘린더 · S-61 날짜별 기록 · S-62 월간 통계 / FR-05·FR-06
+export default CalendarScreen;
