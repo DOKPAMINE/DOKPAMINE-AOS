@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 import { ThemeProvider } from '@react-navigation/native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NotoSansKR_400Regular } from '@expo-google-fonts/noto-sans-kr/400Regular';
 import { NotoSansKR_500Medium } from '@expo-google-fonts/noto-sans-kr/500Medium';
 import { NotoSansKR_700Bold } from '@expo-google-fonts/noto-sans-kr/700Bold';
@@ -11,6 +12,8 @@ import { useEffect } from 'react';
 import { navigationTheme } from '../src/theme';
 
 void SplashScreen.preventAutoHideAsync();
+
+const queryClient = new QueryClient();
 
 export default function RootLayout() {
     const [loaded, error] = useFonts({ NotoSansKR_400Regular, NotoSansKR_500Medium, NotoSansKR_700Bold });
@@ -25,9 +28,11 @@ export default function RootLayout() {
     if (!ready) return null;
 
     return (
-        <ThemeProvider value={navigationTheme}>
-            <StatusBar style="dark" />
-            <Stack screenOptions={{ headerShown: false }} />
-        </ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+            <ThemeProvider value={navigationTheme}>
+                <StatusBar style="dark" />
+                <Stack screenOptions={{ headerShown: false }} />
+            </ThemeProvider>
+        </QueryClientProvider>
     );
 }
