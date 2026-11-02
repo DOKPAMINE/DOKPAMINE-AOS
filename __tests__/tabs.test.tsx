@@ -7,6 +7,10 @@ import LoungeScreen from '../app/(tabs)/lounge';
 import MyScreen from '../app/(tabs)/my';
 import ShelfScreen from '../app/(tabs)/shelf';
 
+jest.mock('../src/shelf/useShelfRepository', () => ({
+    useShelfRepository: () => ({ repository: { books: { list: () => [] } }, error: false, retry: jest.fn() }),
+}));
+
 // Jest에는 네이티브 폰트 자산 레지스트리가 없으므로 폰트 로더만 대체합니다.
 jest.mock('expo-font', () => ({
     ...jest.requireActual('expo-font'),
@@ -36,7 +40,7 @@ test('PRD 4장 · S-30·S-60·S-10·S-70·S-80 탭이 순서대로 보이고 홈
     }
 });
 
-test('FR-04 · S-30 책장 탭을 누르면 책장 자리표시 화면을 보여 줘요', async () => {
+test('FR-04 · S-30 책장 탭을 누르면 책장을 보여 줘요', async () => {
     await renderRouter(routes, { initialUrl: '/' });
     await fireEvent.press(screen.getByRole('button', { name: '책장' }));
 
