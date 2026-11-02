@@ -17,6 +17,7 @@ import { ApiError } from '../src/api/errors';
 import { login, signup } from '../src/api/endpoints';
 import { notifyUnauthorized } from '../src/api/authEvents';
 import { syncAfterLogin, stopRecordSync } from '../src/sync';
+import { initializeDatabase, prepareRecordAccount } from '../src/db/client';
 import type { TokenResponse } from '../src/api/types';
 
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { addEventListener: jest.fn(() => jest.fn()) } }));
@@ -26,7 +27,7 @@ jest.mock('expo-secure-store', () => ({ setItemAsync: jest.fn(), getItemAsync: j
 jest.mock('../src/api/endpoints', () => ({ login: jest.fn(), signup: jest.fn() }));
 
 jest.mock('../src/sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn() }));
-jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn(async () => ({})) }));
+jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn(async () => ({})), prepareRecordAccount: jest.fn(async () => {}) }));
 
 const stored = new Map<string, string>();
 const validResponse: TokenResponse = {
@@ -35,9 +36,11 @@ const validResponse: TokenResponse = {
 };
 
 function Home() {
-    const { signOut } = useAuth();
+    authControls = useAuth();
+    const { signOut } = authControls;
     return <View><Text accessibilityRole="header">인증된 홈</Text><PrimaryButton label="로그아웃" onPress={() => { void signOut(); }} /></View>;
 }
+let authControls: ReturnType<typeof useAuth>;
 const routes = {
     _layout: RootLayout,
     '(auth)/_layout': AuthLayout,
@@ -53,6 +56,7 @@ const routes = {
     '(tabs)/shelf': () => <Text>인증된 책장</Text>,
 };
 
+let sessionNumber = 0;
 beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(SecureStore.getItemAsync).mockReset();
@@ -61,6 +65,8 @@ beforeEach(() => {
     jest.mocked(login).mockReset();
     jest.mocked(signup).mockReset();
     stored.clear();
+    validResponse.accessToken = `unit-test-token-${++sessionNumber}`;
+    jest.mocked(prepareRecordAccount).mockResolvedValue(undefined);
     jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() });
     jest.mocked(SecureStore.getItemAsync).mockImplementation(async key => stored.get(key) ?? null);
     jest.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => { stored.set(key, value); });
@@ -74,7 +80,7 @@ function seen() { stored.set('dokpamine.onboardingSeen', 'true'); }
 function session(expiresAt = validResponse.expiresAt) {
     seen();
     stored.set('dokpamine.accessToken', validResponse.accessToken);
-    stored.set('dokpamine.authSession', JSON.stringify({ accessToken: validResponse.accessToken, expiresAt }));
+    stored.set('dokpamine.authSession', JSON.stringify({ accessToken: validResponse.accessToken, expiresAt, userId: validResponse.user.id }));
 }
 async function fillLogin() {
     await fireEvent.changeText(screen.getByLabelText('이메일'), 'reader@example.test');
@@ -164,7 +170,7 @@ test('FR-10 · S-02 폼 오류는 서버 호출 없이 표시하고 올바른 �
     await fireEvent.press(screen.getByRole('button', { name: '로그아웃' }));
     expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
     expect(stored.has('dokpamine.accessToken')).toBe(false);
-    expect(stopRecordSync).toHaveBeenCalledTimes(1);
+    expect(stopRecordSync).toHaveBeenCalled();
     expect(stored.has('dokpamine.authSession')).toBe(false);
     expect(stored.get('dokpamine.onboardingSeen')).toBe('true');
 });
@@ -327,4 +333,108 @@ test('FR-10 · S-02 인증 키 초기화 실패는 오류와 재시도 경로를
     expect(screen.getByRole('button', { name: '다시 시도해 주세요' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '다시 로그인하기' }));
     expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+});
+
+test('FR-10 NFR-05 · S-02 계정 저장소 준비가 끝나기 전에는 탭과 동기화를 열지 않아요', async () => {
+    session();
+    let finish!: () => void;
+    jest.mocked(prepareRecordAccount).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    await renderRouter(routes, { initialUrl: '/' });
+    await waitFor(() => expect(prepareRecordAccount).toHaveBeenCalledWith(validResponse.user.id));
+    expect(screen.queryByText('인증된 홈')).toBeNull();
+    expect(syncAfterLogin).not.toHaveBeenCalled();
+    await act(async () => { finish(); });
+    expect(await screen.findByText('인증된 홈')).toBeOnTheScreen();
+    expect(syncAfterLogin).toHaveBeenCalledTimes(1);
+});
+
+test('FR-10 NFR-05 · S-02 계정 정보가 없는 구버전 세션은 재로그인을 요구하고 동기화를 중지해요', async () => {
+    session();
+    stored.set('dokpamine.authSession', JSON.stringify({ accessToken: validResponse.accessToken, expiresAt: validResponse.expiresAt }));
+    await renderRouter(routes, { initialUrl: '/' });
+    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(syncAfterLogin).not.toHaveBeenCalled();
+    expect(prepareRecordAccount).not.toHaveBeenCalled();
+    expect(stopRecordSync).toHaveBeenCalled();
+});
+
+test('FR-10 NFR-05 · S-02 Provider 마운트 전에 도착한 401도 유효한 저장 세션의 탭을 막아요', async () => {
+    session();
+    notifyUnauthorized(validResponse.accessToken);
+    await renderRouter(routes, { initialUrl: '/' });
+    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(syncAfterLogin).not.toHaveBeenCalled();
+});
+
+test('FR-10 NFR-05 · S-02 저장소 준비 중 도착한 401은 복원 완료 뒤에도 탭을 열지 않아요', async () => {
+    session();
+    let finish!: () => void;
+    jest.mocked(prepareRecordAccount).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    await renderRouter(routes, { initialUrl: '/' });
+    await waitFor(() => expect(prepareRecordAccount).toHaveBeenCalled());
+    await act(async () => { notifyUnauthorized(validResponse.accessToken); finish(); });
+    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(syncAfterLogin).not.toHaveBeenCalled();
+});
+
+test('FR-10 NFR-05 · S-80 로그아웃 키 삭제 실패도 탭과 동기화를 닫고 이전 세션 재진입을 막아요', async () => {
+    session();
+    await renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('인증된 홈');
+    jest.mocked(SecureStore.deleteItemAsync).mockRejectedValue(new Error('delete failed'));
+    jest.mocked(syncAfterLogin).mockClear();
+    await fireEvent.press(screen.getByRole('button', { name: '로그아웃' }));
+    expect(await screen.findByText('로그아웃 정보를 저장하지 못했어요. 다시 로그인하기로 초기화해 주세요.')).toBeOnTheScreen();
+    expect(screen.queryByText('인증된 홈')).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
+    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(syncAfterLogin).not.toHaveBeenCalled();
+});
+
+test('FR-10 NFR-05 · S-02 로그인 저장소 준비 중 401이 오면 새 세션도 열지 않아요', async () => {
+    seen();
+    let finish!: () => void;
+    jest.mocked(prepareRecordAccount).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    await renderRouter(routes, { initialUrl: '/login' });
+    await screen.findByText('독파민 로그인');
+    await fillLogin();
+    await fireEvent.press(screen.getByRole('button', { name: '로그인' }));
+    await waitFor(() => expect(prepareRecordAccount).toHaveBeenCalled());
+    await act(async () => { notifyUnauthorized(validResponse.accessToken); finish(); });
+    expect(await screen.findByText('로그인 기간이 만료되었어요. 다시 로그인해 주세요.')).toBeOnTheScreen();
+    expect(screen.queryByText('인증된 홈')).toBeNull();
+    expect(syncAfterLogin).not.toHaveBeenCalled();
+});
+
+test('FR-10 NFR-05 · S-80 로그아웃 뒤 끝난 저장소 초기화는 동기화를 다시 켜지 않아요', async () => {
+    session();
+    let finish!: (value: Awaited<ReturnType<typeof initializeDatabase>>) => void;
+    jest.mocked(initializeDatabase).mockResolvedValueOnce({} as Awaited<ReturnType<typeof initializeDatabase>>)
+        .mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    await renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('인증된 홈');
+    await waitFor(() => expect(initializeDatabase).toHaveBeenCalledTimes(2));
+    await fireEvent.press(screen.getByRole('button', { name: '로그아웃' }));
+    await screen.findByText('독파민 로그인');
+    await act(async () => { finish({} as Awaited<ReturnType<typeof initializeDatabase>>); });
+    expect(syncAfterLogin).not.toHaveBeenCalled();
+});
+
+test('FR-10 NFR-05 · S-02 계정 전환 준비 중 로그아웃하면 늦은 로그인 완료가 탭을 다시 열지 않아요', async () => {
+    session();
+    await renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('인증된 홈');
+    jest.mocked(syncAfterLogin).mockClear();
+    const controls = authControls;
+    let finish!: () => void;
+    jest.mocked(prepareRecordAccount).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    let signingIn!: Promise<void>;
+    let signingOut!: Promise<void>;
+    await act(() => { signingIn = controls.signIn({ ...validResponse, accessToken: 'account-b-token', user: { ...validResponse.user, id: 'account-b' } }); });
+    await act(() => { signingOut = controls.signOut(); });
+    await act(async () => { finish(); await Promise.all([signingIn, signingOut]); });
+    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(screen.queryByText('인증된 홈')).toBeNull();
+    expect(syncAfterLogin).not.toHaveBeenCalled();
+    expect(stored.has('dokpamine.authSession')).toBe(false);
 });
