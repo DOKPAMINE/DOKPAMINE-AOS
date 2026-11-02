@@ -150,6 +150,12 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
     };
     return {
         books, sessions, reviews, quotes,
+        /** NFR-04 / S-45: 동기 작업 전체를 커밋한 뒤 한 번만 구독자에게 알린다. 실패는 롤백한다. */
+        atomic<T>(work: () => T): T {
+            const result = transaction(work);
+            notify();
+            return result;
+        },
         subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
         restoreSnapshot(snapshot: { books: BookRecord[]; sessions: SessionRecord[]; reviews: ReviewRecord[]; quotes: QuoteRecord[] }) {
             transaction(() => {
