@@ -8,21 +8,24 @@ import type { RecordRepository } from '../db/repository';
 import { useReviewRecords } from './useReviewRecords';
 import { EditorField, useEditorExit } from './Editor';
 import { reviewStyles as styles } from './styles';
+import { useReviewVisibility, type ReviewVisibility } from '../my/preferences';
 
 export function ReviewWriteScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const { records, retry } = useReviewRecords(id);
+    const defaultVisibility = useReviewVisibility();
+    if (defaultVisibility === undefined) return <Screen title="감상 쓰기"><StateView kind="loading" /></Screen>;
     if (records.kind !== 'ready') return <Screen title="감상 쓰기"><StateView kind={records.kind} onRetry={records.kind === 'error' ? retry : undefined} /></Screen>;
     if (!records.book) return <Screen title="감상 쓰기"><StateView kind="empty" message="책을 찾을 수 없어요. 삭제된 책에는 감상을 남길 수 없어요." /></Screen>;
-    return <ReviewForm key={id} bookId={id} title={records.book.title} repository={records.repository} />;
+    return <ReviewForm key={id} bookId={id} title={records.book.title} repository={records.repository} defaultVisibility={defaultVisibility} />;
 }
 
-function ReviewForm({ bookId, title, repository }: { bookId: string; title: string; repository: RecordRepository }) {
-    const [fields, setFields] = useState<ReviewFields>(emptyReviewFields);
+function ReviewForm({ bookId, title, repository, defaultVisibility }: { bookId: string; title: string; repository: RecordRepository; defaultVisibility: ReviewVisibility }) {
+    const [fields, setFields] = useState<ReviewFields>(() => ({ ...emptyReviewFields, visibility: defaultVisibility }));
     const [id] = useState(() => uuid.v4());
     const [error, setError] = useState<string>();
     const [saved, setSaved] = useState(false);
-    const close = useEditorExit(bookId, Boolean(fields.oneLine || fields.body || fields.visibility !== 'PRIVATE'), saved);
+    const close = useEditorExit(bookId, Boolean(fields.oneLine || fields.body || fields.visibility !== defaultVisibility), saved);
     const save = () => {
         const result = reviewSchema.safeParse(fields);
         if (!result.success) { setError(result.error.issues[0].message); return; }
