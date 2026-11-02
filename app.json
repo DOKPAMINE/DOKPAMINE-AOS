@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "독파민",
+    "slug": "dokpamine",
+    "scheme": "dokpamine",
+    "version": "0.2.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "platforms": [
+      "android"
+    ],
+    "android": {
+      "package": "com.dokpamine.app",
+      "versionCode": 2
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-splash-screen",
+      "expo-asset"
+    ]
+  }
+}
