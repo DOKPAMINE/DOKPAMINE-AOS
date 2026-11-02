@@ -25,8 +25,8 @@ export default function TabLayout() {
         <Tabs
             screenOptions={{
                 headerShown: false,
-                tabBarActiveTintColor: colors.lime,
-                tabBarInactiveTintColor: colors.paper,
+                tabBarActiveTintColor: colors.brand.camel,
+                tabBarInactiveTintColor: colors.surface.paper,
                 tabBarStyle: [styles.bar, { height: sizes.tabBar + insets.bottom, paddingBottom: insets.bottom }],
                 tabBarItemStyle: styles.item,
             }}
@@ -39,7 +39,7 @@ export default function TabLayout() {
                         title,
                         tabBarAccessibilityLabel: title,
                         tabBarIcon: ({ focused }) => (
-                            <Ionicons accessible={false} name={focused ? selectedIcon : icon} size={sizes.icon} color={focused ? colors.lime : colors.paper} />
+                            <Ionicons accessible={false} name={focused ? selectedIcon : icon} size={sizes.icon} color={focused ? colors.brand.camel : colors.surface.paper} />
                         ),
                         tabBarLabel: ({ focused }) => (
                             <Text style={[styles.label, focused && styles.selectedLabel]}>{title}</Text>
@@ -52,8 +52,8 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-    bar: { backgroundColor: colors.ink, borderTopColor: colors.stone, paddingTop: spacing.xs },
+    bar: { backgroundColor: colors.brand.espresso, borderTopColor: colors.line.border, paddingTop: spacing.xs },
     item: { minHeight: sizes.minTouch, minWidth: sizes.minTouch },
-    label: { ...typography.footnote, color: colors.paper },
-    selectedLabel: { fontFamily: fontFamilies.bold, color: colors.lime },
+    label: { ...typography.footnote, color: colors.surface.paper },
+    selectedLabel: { fontFamily: fontFamilies.bold, color: colors.brand.camel },
 });

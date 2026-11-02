@@ -21,7 +21,7 @@ export function ProgressBar({ currentPage, totalPages }: { currentPage: number; 
 }
 
 const styles = StyleSheet.create({
-    track: { minHeight: sizes.progress, borderRadius: radii.small, overflow: 'hidden', backgroundColor: colors.leaf, justifyContent: 'center' },
-    fill: { position: 'absolute', top: 0, bottom: 0, left: 0, backgroundColor: colors.lime },
-    label: { ...typography.caption, color: colors.ink, textAlign: 'center', padding: spacing.sm },
+    track: { minHeight: sizes.progress, borderRadius: radii.small, overflow: 'hidden', backgroundColor: colors.brand.sand, justifyContent: 'center' },
+    fill: { position: 'absolute', top: 0, bottom: 0, left: 0, backgroundColor: colors.text.muted },
+    label: { ...typography.caption, color: colors.brand.espresso, textAlign: 'center', padding: spacing.sm },
 });
