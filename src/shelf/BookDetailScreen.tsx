@@ -15,7 +15,7 @@ export function BookDetailScreen() {
     const { repository, error, retry } = useShelfRepository();
     if (error || !repository) return <Screen title="책 상세"><StateView kind={error ? 'error' : 'loading'} onRetry={error ? retry : undefined} /></Screen>;
     const book = repository.books.get(id);
-    if (!book) return <Screen title="책 상세"><StateView kind="empty" message="책을 찾을 수 없어요. 삭제된 책인지 확인해 주세요." /><SecondaryButton label="책장으로" onPress={() => router.replace('/shelf')} /></Screen>;
+    if (!book) return <Screen title="책 상세"><StateView kind="empty" message="책을 찾을 수 없어요. 삭제된 책인지 확인해 주세요." /><SecondaryButton label="책장으로" onPress={() => router.dismissTo('/shelf')} /></Screen>;
     return <BookDetail book={book} repository={repository} />;
 }
 
@@ -43,12 +43,12 @@ function BookDetail({ book, repository }: { book: BookRecord; repository: Record
         { text: '삭제', style: 'destructive', onPress: () => {
             try {
                 repository.books.softDelete(book.id);
-                router.replace('/shelf');
+                router.dismissTo('/shelf');
             } catch { setNotice('삭제하지 못했어요. 기기 저장 공간을 확인하고 다시 시도해 주세요.'); }
         } },
     ]);
     return <Screen title={book.title}>
-        <SecondaryButton label="책장으로" onPress={() => router.replace('/shelf')} />
+        <SecondaryButton label="책장으로" onPress={() => router.dismissTo('/shelf')} />
         <Card>
             <BookStatus status={book.status} />
             {book.coverUrl && !coverFailed ? <Image source={{ uri: book.coverUrl }} accessibilityLabel={`${book.title} 표지`} accessible

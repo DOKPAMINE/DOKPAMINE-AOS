@@ -1,4 +1,5 @@
 import { beginReading, completeReading, groupShelfBooks, parseBookEdit, readingTimeLabel, type BookEditFields } from '../shelfRules';
+import { monthlyStats } from '../calendarRules';
 
 const book = { id: 'book', title: '데미안', genre: '소설' as const, deleted: false, status: 'DONE' as const, currentPage: 84, totalPages: 240, completedCount: 1, completedAt: 100 };
 const fields: BookEditFields = { title: ' 데미안 ', author: ' 헤르만 헤세 ', publisher: '', totalPages: '240', genre: '소설' };
@@ -13,8 +14,25 @@ test('FR-04 S-30 장르를 고정 순서로 묶고 빈 장르와 삭제된 책�
 
 test.each(['WANT', 'DONE'] as const)('FR-17 D7 S-32 S-33 %s에서 읽기를 시작해도 지난 쪽과 완독 이력은 보존해요', status => {
     const input = { ...book, status };
-    expect(beginReading(input)).toEqual({ ...input, status: 'READING', completedAt: null });
+    expect(beginReading(input)).toEqual({ ...input, status: 'READING' });
     expect(input.status).toBe(status);
+});
+
+test('FR-06 S-33 S-62 월 경계에서 다시 읽기를 시작해도 지난달 완독 권수를 유지해요', () => {
+    const completed = { ...book, author: '헤르만 헤세', completedAt: Date.parse('2026-10-31T14:59:59.999Z'), currentPage: 240 };
+    const nextMonthCompleted = { ...completed, id: 'next-month', completedAt: Date.parse('2026-10-31T15:00:00.000Z') };
+    const before = monthlyStats([], [completed, nextMonthCompleted], '2026-10');
+    const rereading = beginReading(completed);
+    expect(monthlyStats([], [rereading, nextMonthCompleted], '2026-10').completedBooks).toBe(before.completedBooks);
+    expect(before.completedBooks).toBe(1);
+    expect(monthlyStats([], [rereading, nextMonthCompleted], '2026-11').completedBooks).toBe(1);
+    expect(rereading).toMatchObject({ completedAt: completed.completedAt, completedCount: 1, currentPage: 240 });
+});
+
+test('FR-01 D7 S-34 완독 책은 읽은 쪽을 늘리지 않고 다시 읽기 전 전체 쪽수 증가를 안내해요', () => {
+    expect(() => parseBookEdit({ ...fields, totalPages: '300' }, 240, 'DONE')).toThrow('다시 읽기를 시작한 뒤 편집');
+    expect(parseBookEdit(fields, 240, 'DONE').totalPages).toBe(240);
+    expect(parseBookEdit({ ...fields, totalPages: '300' }, 240, 'READING').totalPages).toBe(300);
 });
 
 test('FR-04 S-31 완독은 전체 쪽수와 완료 시각을 저장하고 중복 표시해도 누적하지 않아요', () => {

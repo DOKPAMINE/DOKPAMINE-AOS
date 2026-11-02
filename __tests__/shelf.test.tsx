@@ -1,10 +1,11 @@
 import { Alert, Text } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { act } from '@testing-library/react-native';
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import ShelfScreen from '../app/(tabs)/shelf';
 import BookDetailScreen from '../app/book/[id]/index';
 import BookEditScreen from '../app/book/[id]/edit';
+import BookLayout from '../app/book/_layout';
 import { initializeDatabase, prepareRecordDatabase } from '../src/db/client';
 import { createRecordRepository, type RecordRepository, type SaveInput } from '../src/db/repository';
 import type { BookRecord } from '../src/db/schema';
@@ -23,7 +24,22 @@ function ReadingStartTarget() {
     const { bookId } = useLocalSearchParams<{ bookId: string }>();
     return <Text>독서 시작 연결: {bookId}</Text>;
 }
-const routes = { shelf: ShelfScreen, 'book/[id]/index': BookDetailScreen, 'book/[id]/edit': BookEditScreen, 'reading-start': ReadingStartTarget };
+const routes = { shelf: ShelfScreen, 'book/_layout': BookLayout, 'book/[id]/index': BookDetailScreen, 'book/[id]/edit': BookEditScreen, 'reading-start': ReadingStartTarget };
+// main의 루트와 같은 book Protected 등록을 실제 book layout에 적용한다.
+// 이 브랜치에서는 다른 Issue 소유의 app/_layout.tsx를 변경하지 않는다.
+function protectedRoutes(signedIn: boolean) {
+    function GuardedRoot() {
+        return <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Protected guard={!signedIn}><Stack.Screen name="login" /></Stack.Protected>
+            <Stack.Protected guard={signedIn}>
+                <Stack.Screen name="shelf" />
+                <Stack.Screen name="book" />
+            </Stack.Protected>
+        </Stack>;
+    }
+    return { _layout: GuardedRoot, login: () => <Text>로그인이 필요해요.</Text>, shelf: ShelfScreen,
+        'book/_layout': BookLayout, 'book/[id]/index': BookDetailScreen, 'book/[id]/edit': BookEditScreen };
+}
 let memory: ReturnType<typeof memorySQLite>;
 let repository: RecordRepository;
 
@@ -35,9 +51,42 @@ beforeEach(async () => {
 });
 afterEach(() => { memory.connection.close(); jest.restoreAllMocks(); });
 
+test.each(['', '/edit'])('FR-10 S-31 S-34 로그아웃 상태의 책 딥링크 %s는 Protected 가드가 차단해요', async suffix => {
+    repository.books.save(book);
+    const get = jest.spyOn(repository.books, 'get');
+    await renderRouter(protectedRoutes(false), { initialUrl: `/book/${id}${suffix}` });
+    expect(await screen.findByText('로그인이 필요해요.')).toBeOnTheScreen();
+    expect(screen).toHavePathname('/login');
+    expect(screen.queryByRole('button', { name: '정보 편집' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '저장' })).toBeNull();
+    expect(get).not.toHaveBeenCalled();
+});
+
+test('FR-10 S-31 로그인 상태는 같은 Protected 가드 안에서 책 상세를 열 수 있어요', async () => {
+    repository.books.save(book);
+    await renderRouter(protectedRoutes(true), { initialUrl: `/book/${id}` });
+    expect(await screen.findByRole('header', { name: '데미안' })).toBeOnTheScreen();
+    expect(screen).toHavePathname(`/book/${id}`);
+});
+
 test('FR-04 S-30 빈 책장은 홈 등록 안내를 보여 줘요', async () => {
     await renderRouter(routes, { initialUrl: '/shelf' });
     expect(await screen.findByText('아직 책장에 책이 없어요. 홈에서 읽는 책이나 읽고 싶은 책을 등록해 주세요.')).toBeOnTheScreen();
+});
+
+test('FR-04 S-30 여러 장르의 책등은 고정 장르 순서와 세 종류 상태 라벨을 보여 줘요', async () => {
+    repository.books.save({ ...book, genre: '과학', status: 'DONE' });
+    repository.books.save({ ...book, id: sessionId, title: '읽고 싶은 소설', status: 'WANT' });
+    repository.books.save({ ...book, id: reviewId, title: '읽는 소설' });
+    await renderRouter(routes, { initialUrl: '/shelf' });
+    await screen.findByRole('header', { name: '소설 · 2권' });
+    const headings = screen.getAllByRole('header');
+    expect(headings).toHaveLength(3);
+    expect(headings[1]).toHaveTextContent('소설 · 2권');
+    expect(headings[2]).toHaveTextContent('과학 · 1권');
+    expect(screen.getByText('읽고 싶은 책')).toBeOnTheScreen();
+    expect(screen.getByText('읽는 중')).toBeOnTheScreen();
+    expect(screen.getByText('완독')).toBeOnTheScreen();
 });
 
 test('FR-04 S-30 장르별 책등에서 상세로 이동하고 쪽수·누적 시간·한줄평을 보여 줘요', async () => {
@@ -56,7 +105,7 @@ test.each(['WANT', 'DONE'] as const)('FR-17 S-32 S-33 %s 책을 읽기 시작하
     const first = repository.books.save({ ...book, status, completedCount: 1, completedAt: 100 });
     await renderRouter(routes, { initialUrl: `/book/${id}` });
     await fireEvent.press(await screen.findByRole('button', { name: status === 'WANT' ? '읽기 시작' : '다시 읽기' }));
-    await waitFor(() => expect(repository.books.get(id)).toMatchObject({ status: 'READING', currentPage: 84, completedCount: 1, completedAt: null, syncPending: true, localVersion: first.localVersion + 1 }));
+    await waitFor(() => expect(repository.books.get(id)).toMatchObject({ status: 'READING', currentPage: 84, completedCount: 1, completedAt: 100, syncPending: true, localVersion: first.localVersion + 1 }));
     expect(await screen.findByText(`독서 시작 연결: ${id}`)).toBeOnTheScreen();
     expect(screen.queryByText(/회차/)).toBeNull();
 });
@@ -92,6 +141,43 @@ test('FR-01 S-34 편집 검증 오류 후 제목·전체 쪽수·선택 장르�
     await fireEvent.press(screen.getByRole('button', { name: '저장' }));
     expect(repository.books.get(id)).toMatchObject({ id, title: '새 제목', totalPages: 300, genre: '인문', currentPage: 84, syncPending: true });
     expect(await screen.findByRole('header', { name: '새 제목' })).toBeOnTheScreen();
+});
+
+test.each(['저장', '취소'])('FR-04 S-34 편집 %s 뒤 Android 뒤로 이동은 중복 상세 없이 책장으로 돌아가요', async action => {
+    repository.books.save(book);
+    await renderRouter(routes, { initialUrl: '/shelf' });
+    await fireEvent.press(await screen.findByRole('button', { name: '데미안, 헤르만 헤세, 읽는 중, 책 상세 보기' }));
+    await fireEvent.press(await screen.findByRole('button', { name: '정보 편집' }));
+    await fireEvent.press(await screen.findByRole('button', { name: action }));
+    expect(await screen.findByRole('header', { name: '데미안' })).toBeOnTheScreen();
+    await act(async () => router.back());
+    expect(screen).toHavePathname('/shelf');
+    expect(await screen.findByRole('header', { name: '책장' })).toBeOnTheScreen();
+});
+
+test.each(['책장으로', '삭제'])('FR-04 D-01 S-31 %s 이동은 기존 책장으로 돌아가고 중복 탭을 남기지 않아요', async action => {
+    repository.books.save(book);
+    const alert = jest.spyOn(Alert, 'alert');
+    await renderRouter(routes, { initialUrl: '/shelf' });
+    await fireEvent.press(await screen.findByRole('button', { name: '데미안, 헤르만 헤세, 읽는 중, 책 상세 보기' }));
+    if (action === '삭제') {
+        await fireEvent.press(await screen.findByRole('button', { name: '데미안 책 삭제' }));
+        await act(async () => { alert.mock.calls[0][2]?.find(button => button.text === '삭제')?.onPress?.(); });
+    } else {
+        await fireEvent.press(await screen.findByRole('button', { name: '책장으로' }));
+    }
+    expect(screen).toHavePathname('/shelf');
+    expect(await screen.findByRole('header', { name: '책장' })).toBeOnTheScreen();
+    expect(router.canGoBack()).toBe(false);
+});
+
+test('FR-01 D7 S-34 완독 책 전체 쪽수 증가는 안내하고 지난 쪽과 완독 날짜를 보존해요', async () => {
+    repository.books.save({ ...book, status: 'DONE', currentPage: 240, completedAt: 100, completedCount: 1 });
+    await renderRouter(routes, { initialUrl: `/book/${id}/edit` });
+    await fireEvent.changeText(await screen.findByLabelText('전체 쪽수'), '300');
+    await fireEvent.press(screen.getByRole('button', { name: '저장' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/다시 읽기를 시작한 뒤 편집/);
+    expect(repository.books.get(id)).toMatchObject({ totalPages: 240, currentPage: 240, status: 'DONE', completedAt: 100, completedCount: 1 });
 });
 
 test('FR-04 D-01 S-30 삭제 취소는 유지하고 확인하면 책장에서 사라져도 tombstone은 남아요', async () => {

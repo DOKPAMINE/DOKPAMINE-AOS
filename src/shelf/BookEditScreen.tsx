@@ -15,7 +15,7 @@ export function BookEditScreen() {
     const { repository, error, retry } = useShelfRepository();
     if (error || !repository) return <Screen title="책 정보 편집"><StateView kind={error ? 'error' : 'loading'} onRetry={error ? retry : undefined} /></Screen>;
     const book = repository.books.get(id);
-    if (!book) return <Screen title="책 정보 편집"><StateView kind="empty" message="책을 찾을 수 없어요. 삭제된 책은 편집할 수 없어요." /><SecondaryButton label="책장으로" onPress={() => router.replace('/shelf')} /></Screen>;
+    if (!book) return <Screen title="책 정보 편집"><StateView kind="empty" message="책을 찾을 수 없어요. 삭제된 책은 편집할 수 없어요." /><SecondaryButton label="책장으로" onPress={() => router.dismissTo('/shelf')} /></Screen>;
     return <BookEditForm key={book.id} book={book} repository={repository} />;
 }
 
@@ -23,13 +23,13 @@ function BookEditForm({ book, repository }: { book: BookRecord; repository: Reco
     const [fields, setFields] = useState<BookEditFields>({ title: book.title, author: book.author, publisher: book.publisher ?? '', totalPages: String(book.totalPages), genre: book.genre });
     const [error, setError] = useState<string | null>(null);
     const update = (key: keyof BookEditFields, value: string) => setFields(current => ({ ...current, [key]: value }));
-    const detail = () => router.replace({ pathname: '/book/[id]', params: { id: book.id } });
+    const detail = () => router.dismissTo({ pathname: '/book/[id]', params: { id: book.id } });
     const save = () => {
         const latest = repository.books.get(book.id);
         if (!latest) { setError('삭제된 책은 편집할 수 없어요.'); return; }
         let changes: ReturnType<typeof parseBookEdit>;
         try {
-            changes = parseBookEdit(fields, latest.currentPage);
+            changes = parseBookEdit(fields, latest.currentPage, latest.status);
         } catch (cause) { setError(cause instanceof Error ? cause.message : '입력 내용을 확인해 주세요.'); return; }
         try {
             repository.books.save({ ...latest, ...changes });
@@ -41,7 +41,7 @@ function BookEditForm({ book, repository }: { book: BookRecord; repository: Reco
             const label = { title: '제목', author: '저자', publisher: '출판사 (선택)', totalPages: '전체 쪽수' }[key];
             return <View key={key} style={styles.section}>
                 <Text style={styles.label}>{label}</Text>
-                <TextInput accessibilityLabel={label} accessibilityRole="text" value={fields[key]} onChangeText={value => update(key, value)}
+                <TextInput accessibilityLabel={label} accessibilityHint={error ?? undefined} value={fields[key]} onChangeText={value => update(key, value)}
                     style={styles.field} keyboardType={key === 'totalPages' ? 'number-pad' : 'default'}
                     maxLength={key === 'title' ? 200 : key === 'author' ? 100 : undefined} selectionColor={colors.brand.camel} />
             </View>;
