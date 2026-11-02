@@ -9,6 +9,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { AuthProvider, useAuth } from '../src/auth/AuthProvider';
+import { Screen, StateView } from '../src/components';
+
 import { navigationTheme } from '../src/theme';
 import { connectQueryManagers, queryClient } from '../src/api/queryClient';
 
@@ -32,8 +35,26 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
             <ThemeProvider value={navigationTheme}>
                 <StatusBar style="dark" />
-                <Stack screenOptions={{ headerShown: false }} />
+                <AuthProvider><AuthNavigator /></AuthProvider>
             </ThemeProvider>
         </QueryClientProvider>
+    );
+}
+
+// S-01~03 · FR-10: 세션 확인이 끝나기 전과 미인증 상태에는 탭을 마운트하지 않는다.
+function AuthNavigator() {
+    const { status, notice, retry } = useAuth();
+    if (status === 'loading' || status === 'error') {
+        return <Screen title="독파민"><StateView kind={status === 'loading' ? 'loading' : 'error'} message={notice} onRetry={status === 'error' ? retry : undefined} /></Screen>;
+    }
+    return (
+        <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Protected guard={status !== 'signedIn'}>
+                <Stack.Screen name="(auth)" />
+            </Stack.Protected>
+            <Stack.Protected guard={status === 'signedIn'}>
+                <Stack.Screen name="(tabs)" />
+            </Stack.Protected>
+        </Stack>
     );
 }
