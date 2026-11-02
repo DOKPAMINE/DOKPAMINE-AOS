@@ -15,12 +15,14 @@ void SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
     const [loaded, error] = useFonts({ NotoSansKR_400Regular, NotoSansKR_500Medium, NotoSansKR_700Bold });
 
-    useEffect(() => {
-        if (error) throw error;
-        if (loaded) void SplashScreen.hideAsync();
-    }, [loaded, error]);
+    // 폰트를 불러오지 못해도 시스템 글꼴로 앱을 열어 스플래시에 갇히지 않게 합니다.
+    const ready = loaded || error != null;
 
-    if (!loaded) return null;
+    useEffect(() => {
+        if (ready) void SplashScreen.hideAsync();
+    }, [ready]);
+
+    if (!ready) return null;
 
     return (
         <ThemeProvider value={navigationTheme}>
