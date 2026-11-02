@@ -7,6 +7,12 @@ import LoungeScreen from '../app/(tabs)/lounge';
 import MyScreen from '../app/(tabs)/my';
 import ShelfScreen from '../app/(tabs)/shelf';
 
+jest.mock('../src/db/client', () => ({
+    initializeDatabase: jest.fn(async () => ({ repository: {
+        books: { list: () => [] }, sessions: { list: () => [] }, subscribe: () => () => {},
+    } })),
+}));
+
 // Jest에는 네이티브 폰트 자산 레지스트리가 없으므로 폰트 로더만 대체합니다.
 jest.mock('expo-font', () => ({
     ...jest.requireActual('expo-font'),
@@ -27,7 +33,7 @@ test('PRD 4장 · S-30·S-60·S-10·S-70·S-80 탭이 순서대로 보이고 홈
     await renderRouter(routes, { initialUrl: '/' });
 
     // Android의 React Navigation 탭은 선택 상태가 있는 button 역할입니다.
-    const tabs = screen.getAllByRole('button');
+    const tabs = screen.getAllByRole('button').filter(button => button.props.accessibilityState?.selected !== undefined);
     expect(tabs.map(tab => tab.props.accessibilityLabel)).toEqual(['책장', '캘린더', '홈', '라운지', '마이']);
     expect(screen.getByRole('button', { name: '홈' })).toBeSelected();
     expect(screen.getByRole('header', { name: '홈' })).toBeOnTheScreen();
