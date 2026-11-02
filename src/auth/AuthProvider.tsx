@@ -13,6 +13,7 @@ type AuthStatus = 'loading' | 'error' | 'onboarding' | 'signedOut' | 'signedIn';
 interface AuthState { status: AuthStatus; notice?: string }
 interface AuthContextValue extends AuthState {
     retry: () => void;
+    recoverSession: () => Promise<void>;
     completeOnboarding: () => Promise<void>;
     signIn: (response: TokenResponse) => Promise<void>;
     signOut: () => Promise<void>;
@@ -76,6 +77,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return () => { clearTimeout(timer); subscription.remove(); };
     }, [state, expire]);
 
+    const recoverSession = async () => {
+        // 인증 키만 정리한다. DB의 개인 기록과 안내 완료 상태는 보존한다.
+        authSyncLifecycle.stopRecordSync();
+        session.current = null;
+        setState({ status: 'loading' });
+        try {
+            await persist(() => tokenStorage.remove());
+            queryClient.clear();
+            setState({ status: 'signedOut', notice: '로그인 정보를 새로 저장할 수 있도록 다시 로그인해 주세요.' });
+        } catch {
+            setState({ status: 'error', notice: '로그인 정보를 초기화하지 못했어요. 다시 시도해 주세요.' });
+        }
+    };
+
     const completeOnboarding = async () => {
         await persist(() => onboardingStorage.complete());
         setState({ status: 'signedOut' });
@@ -110,7 +125,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setState({ status: 'signedOut' });
     };
 
-    return <AuthContext.Provider value={{ ...state, retry: () => { setState({ status: 'loading' }); setAttempt(value => value + 1); }, completeOnboarding, signIn, signOut }}>{children}</AuthContext.Provider>;
+    return <AuthContext.Provider value={{ ...state, retry: () => { setState({ status: 'loading' }); setAttempt(value => value + 1); }, recoverSession, completeOnboarding, signIn, signOut }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {

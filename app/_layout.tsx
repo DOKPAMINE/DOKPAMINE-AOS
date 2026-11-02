@@ -10,7 +10,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 
 import { AuthProvider, useAuth } from '../src/auth/AuthProvider';
-import { Screen, StateView } from '../src/components';
+import { connectAuthSyncLifecycle } from '../src/auth/syncLifecycle';
+import { syncAfterLogin, stopRecordSync } from '../src/sync';
+import { Screen, SecondaryButton, StateView } from '../src/components';
 
 import { navigationTheme } from '../src/theme';
 import { connectQueryManagers, queryClient } from '../src/api/queryClient';
@@ -34,6 +36,7 @@ export default function RootLayout() {
     const ready = (loaded || error != null) && databaseReady;
 
     useEffect(() => connectQueryManagers(), []);
+    useEffect(() => connectAuthSyncLifecycle({ syncAfterLogin, stopRecordSync }), []);
 
     useEffect(() => {
         if (ready) void SplashScreen.hideAsync();
@@ -54,9 +57,14 @@ export default function RootLayout() {
 
 // S-01~03 · FR-10: 세션 확인이 끝나기 전과 미인증 상태에는 탭을 마운트하지 않는다.
 function AuthNavigator() {
-    const { status, notice, retry } = useAuth();
+    const { status, notice, retry, recoverSession } = useAuth();
     if (status === 'loading' || status === 'error') {
-        return <Screen title="독파민"><StateView kind={status === 'loading' ? 'loading' : 'error'} message={notice} onRetry={status === 'error' ? retry : undefined} /></Screen>;
+        return (
+            <Screen title="독파민">
+                <StateView kind={status === 'loading' ? 'loading' : 'error'} message={notice} onRetry={status === 'error' ? retry : undefined} />
+                {status === 'error' && <SecondaryButton label="다시 로그인하기" onPress={() => { void recoverSession(); }} />}
+            </Screen>
+        );
     }
     return (
         <Stack screenOptions={{ headerShown: false }}>

@@ -92,7 +92,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                 {error && <StateView kind={error.kind === 'offline' ? 'offline' : 'error'} message={error.message} />}
                 {isSubmitting && <Text accessibilityLiveRegion="polite" style={styles.description}>{registering ? '가입 정보를 확인하고 있어요.' : '로그인하고 있어요.'}</Text>}
                 <PrimaryButton label={registering ? '가입하고 시작하기' : '로그인'} onPress={() => { void submit(); }} disabled={isSubmitting} />
-                <SecondaryButton label={registering ? '로그인으로 돌아가기' : '회원가입'} disabled={isSubmitting} onPress={() => router.replace(registering ? '/(auth)/login' : '/(auth)/signup')} />
+                <SecondaryButton label={registering ? '로그인으로 돌아가기' : '회원가입'} disabled={isSubmitting} onPress={() => { if (!registering) router.push('/(auth)/signup'); else if (router.canGoBack()) router.back(); else router.replace('/(auth)/login'); }} />
             </Screen>
         </KeyboardAvoidingView>
     );

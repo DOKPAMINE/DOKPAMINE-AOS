@@ -78,13 +78,12 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
         }
         if (controller.signal.aborted) throw new ApiError('cancelled', 'CANCELLED', '요청을 취소했어요.');
         if (!response.ok) {
-            const invalidCredentials = options.authenticated === false && response.status === 401 &&
-                isErrorBody(body) && body.code === 'INVALID_CREDENTIALS';
+            const invalidCredentials = options.authenticated === false && response.status === 401;
             if (response.status === 401 && requestToken) notifyUnauthorized(requestToken);
             throw new ApiError(
                 invalidCredentials ? 'credentials' : response.status === 401 ? 'unauthorized' : 'http',
                 isErrorBody(body) ? body.code : `HTTP_${response.status}`,
-                isErrorBody(body) ? body.message : response.status === 401 ? '다시 로그인해 주세요.' : '요청을 처리하지 못했어요. 다시 시도해 주세요.',
+                typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string' ? body.message : invalidCredentials ? '이메일 또는 비밀번호를 확인해 주세요.' : response.status === 401 ? '다시 로그인해 주세요.' : '요청을 처리하지 못했어요. 다시 시도해 주세요.',
                 response.status,
             );
         }

@@ -1,5 +1,5 @@
 /**
- * AOS #19 머지 후 앱 조립 지점에서 실제 src/sync 함수를 등록한다.
+ * 앱 루트에서 AOS #19의 실제 src/sync 함수를 등록한다.
  * auth는 동기화 엔진에 직접 의존하지 않으며 동기화 실패가 로그인 성공을 취소하지 않는다.
  */
 export interface AuthSyncLifecycle {

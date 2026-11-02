@@ -10,6 +10,8 @@ import HomeScreen from '../app/(tabs)/index';
 import { queryClient } from '../src/api/queryClient';
 import { initializeDatabase } from '../src/db/client';
 
+jest.mock('../src/sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn() }));
+
 jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn(() => Promise.resolve({})) }));
 
 jest.mock('@react-native-community/netinfo', () => ({

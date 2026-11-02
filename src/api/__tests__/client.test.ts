@@ -195,3 +195,12 @@ test.each(['fetch', 'storage', 'connectivity'])('FR-10 · S-02 %s 대기 중 취
     else expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
     expect(jest.getTimerCount()).toBe(0);
 });
+
+test.each(['empty', 'html', 'message-only'])('FR-10 · S-02 code 없는 로그인 401 %s는 만료가 아닌 로그인 정보를 안내해요', async format => {
+    const serverResponse = format === 'html'
+        ? { ok: false, status: 401, json: async () => { throw new SyntaxError(); } } as unknown as Response
+        : response(401, format === 'message-only' ? { message: '로그인 정보를 확인해 주세요.' } : undefined);
+    fetchMock.mockResolvedValue(serverResponse);
+    await expect(apiRequest('/api/auth/login', { method: 'POST', authenticated: false })).rejects.toMatchObject({ kind: 'credentials', status: 401, message: format === 'message-only' ? '로그인 정보를 확인해 주세요.' : '이메일 또는 비밀번호를 확인해 주세요.' });
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+});
