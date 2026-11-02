@@ -1,4 +1,4 @@
-import { DAY_MS, kstDate, parseDate } from './kstDate';
+import { DAY_MS, KST_OFFSET_MS, kstDate, parseDate } from './kstDate';
 import { pagesRead, type ReadingSession, type StatisticsBook } from './readingTypes';
 
 export interface GroupStat {
@@ -27,6 +27,51 @@ function requireMonth(month: string): void {
     if (!/^\d{4}-\d{2}$/.test(month) || parseDate(`${month}-01`) === null) {
         throw new RangeError('월은 YYYY-MM 형식의 유효한 월이어야 해요.');
     }
+}
+
+/** S-60: 중복 파라미터와 잘못된 날짜는 무시하고 KST 오늘을 연다. */
+export function calendarDate(date: string | string[] | undefined, now: number): string {
+    return typeof date === 'string' && parseDate(date) !== null ? date : kstDate(now);
+}
+
+/** S-60: 월을 이동해도 선택한 일자를 유지하며 짧은 달에서는 말일을 선택한다. */
+export function moveCalendarMonth(date: string, direction: -1 | 1): string {
+    const ms = requireDate(date);
+    const first = new Date(ms);
+    first.setUTCDate(1);
+    first.setUTCMonth(first.getUTCMonth() + direction);
+    // 라우트가 받는 네 자리 연도의 경계를 넘어가지 않는다.
+    if (first.getUTCFullYear() < 0 || first.getUTCFullYear() > 9999) return date;
+    const last = new Date(first);
+    last.setUTCMonth(last.getUTCMonth() + 1);
+    last.setUTCDate(0);
+    first.setUTCDate(Math.min(Number(date.slice(8)), last.getUTCDate()));
+    return first.toISOString().slice(0, 10);
+}
+
+/** S-60: 일요일 시작의 주 행. 인접 월은 선택할 수 없는 빈 칸으로 둔다. */
+export function calendarWeeks(month: string): (number | null)[][] {
+    requireMonth(month);
+    const first = new Date(requireDate(`${month}-01`));
+    const last = new Date(first);
+    last.setUTCMonth(last.getUTCMonth() + 1);
+    last.setUTCDate(0);
+    const offset = first.getUTCDay();
+    return Array.from({ length: Math.ceil((offset + last.getUTCDate()) / 7) }, (_, week) =>
+        Array.from({ length: 7 }, (_, weekday) => {
+            const day = week * 7 + weekday - offset + 1;
+            return day >= 1 && day <= last.getUTCDate() ? day : null;
+        }));
+}
+
+export function calendarDuration(seconds: number): string {
+    if (seconds < 60) return `${seconds}초`;
+    const minutes = Math.floor(seconds / 60);
+    return minutes < 60 ? `${minutes}분` : `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`;
+}
+
+export function calendarClock(timestampMs: number): string {
+    return new Date(timestampMs + KST_OFFSET_MS).toISOString().slice(11, 16);
 }
 
 /** FR-05 / S-61: 시작한 날(KST)에 기록 전체를 귀속한다. 삭제 tombstone은 집계하지 않는다. */

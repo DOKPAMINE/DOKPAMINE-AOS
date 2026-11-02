@@ -1,4 +1,7 @@
-import { monthlyStats, readingDays, sessionsOn, streakDays, thisWeekSeconds } from '../calendarRules';
+import {
+    calendarClock, calendarDate, calendarDuration, calendarWeeks, monthlyStats,
+    moveCalendarMonth, readingDays, sessionsOn, streakDays, thisWeekSeconds,
+} from '../calendarRules';
 import { parseStartedAt } from '../kstDate';
 import { toManualSession, validateManualSession } from '../manualSessionRules';
 import type { ReadingSession, StatisticsBook } from '../readingTypes';
@@ -98,4 +101,35 @@ test('FR-05 FR-06 잘못된 날짜와 월은 조용히 다른 날짜로 집계�
     expect(() => thisWeekSeconds([], 'bad')).toThrow(RangeError);
     expect(() => readingDays([], '2026-13')).toThrow(RangeError);
     expect(() => monthlyStats([], [], '2026-1')).toThrow(RangeError);
+});
+
+test('FR-05 S-60 날짜 파라미터는 엄격한 단일 날짜만 허용하고 나머지는 KST 오늘로 열어요', () => {
+    const now = Date.parse('2026-10-31T15:00:00Z');
+    expect(calendarDate('2024-02-29', now)).toBe('2024-02-29');
+    for (const date of [undefined, '', '2026-02-29', '2026-11-31', '2026-1-01', 'bad', ['2026-10-01', '2026-11-01']]) {
+        expect(calendarDate(date, now)).toBe('2026-11-01');
+    }
+});
+
+test('FR-05 S-60 월 이동은 윤년과 연도 경계를 지나고 말일에 맞춰 선택해요', () => {
+    expect(moveCalendarMonth('2024-01-31', 1)).toBe('2024-02-29');
+    expect(moveCalendarMonth('2026-03-31', -1)).toBe('2026-02-28');
+    expect(moveCalendarMonth('2026-12-15', 1)).toBe('2027-01-15');
+    expect(moveCalendarMonth('2026-01-15', -1)).toBe('2025-12-15');
+    expect(moveCalendarMonth('0000-01-01', -1)).toBe('0000-01-01');
+    expect(moveCalendarMonth('9999-12-31', 1)).toBe('9999-12-31');
+});
+
+test('FR-05 S-60 달력은 일요일부터 시작하고 윤년과 여섯 주인 달의 모든 날짜를 한 번씩 보여 줘요', () => {
+    expect(calendarWeeks('2026-02')).toHaveLength(4);
+    expect(calendarWeeks('2024-02')[0]).toEqual([null, null, null, null, 1, 2, 3]);
+    expect(calendarWeeks('2024-02').flat().filter(day => day !== null)).toHaveLength(29);
+    const august = calendarWeeks('2026-08');
+    expect(august).toHaveLength(6);
+    expect(august.flat().filter(day => day !== null)).toEqual(Array.from({ length: 31 }, (_, i) => i + 1));
+});
+
+test('FR-05 FR-06 S-61 S-62 시각은 KST로, 시간은 누적 시간과 분으로 표시해요', () => {
+    expect(calendarClock(Date.parse('2026-10-31T15:00:00Z'))).toBe('00:00');
+    expect([0, 59, 60, 1800, 3600, 90000].map(calendarDuration)).toEqual(['0초', '59초', '1분', '30분', '1시간 0분', '25시간 0분']);
 });
