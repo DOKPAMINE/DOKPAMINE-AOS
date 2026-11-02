@@ -1,5 +1,6 @@
 import type { ReadingSession } from './readingTypes';
 import type { EndPageInput } from './pageRules';
+import { nextRecordVersion } from './recordVersion';
 
 /** FR-02 / S-41·S-42: 시각 기반 상태. ID와 now는 호출자가 제공하며 플랫폼·저장소에 의존하지 않는다. */
 export interface TimerState {
@@ -44,8 +45,7 @@ export function toTimerSession(
         throw new Error('수정할 기록을 찾을 수 없어요.');
     }
     const endPage = input.kind === 'timeOnly' ? null : input.endPage;
-    const localVersion = Math.max(now, existing ? existing.localVersion + 1 : now);
-    if (!Number.isSafeInteger(localVersion)) throw new Error('기록 버전을 저장할 수 없어요.');
+    const localVersion = nextRecordVersion(now, existing?.localVersion);
     return {
         session: {
             id: timer.sessionId, bookId: timer.bookId, startedAt: timer.startedAtMs, endedAt: timer.finishedAtMs,

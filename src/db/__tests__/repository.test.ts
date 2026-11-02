@@ -5,6 +5,7 @@ import { books, sessions, type BookRecord, type QuoteRecord, type ReviewRecord, 
 import { memorySQLite } from './sqliteAdapter';
 
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
+jest.mock('../../sync/runtime', () => ({ startRecordSync: jest.fn() }));
 
 const bookId = '00000000-0000-4000-8000-000000000001';
 const sessionId = '00000000-0000-4000-8000-000000000002';
@@ -95,8 +96,8 @@ test('NFR-04 S-35 없는 책·삭제된 책·다른 책으로 바꾼 기록·잘
     repository.books.save({ ...book, id: reviewId });
     expect(() => repository.sessions.save({ ...session, bookId: reviewId })).toThrow('기록의 책');
     repository.books.softDelete(bookId);
-    expect(() => repository.sessions.save(session)).toThrow('책을 찾을 수 없어요.');
-    expect(repository.sessions.get(sessionId)).not.toBeNull();
+    expect(() => repository.sessions.save(session)).toThrow('삭제한 기록');
+    expect(repository.sessions.get(sessionId)).toBeNull();
     expect(repository.sessions.softDelete(sessionId)?.deleted).toBe(true);
     expect(repository.sessions.softDelete(quoteId)).toBeNull();
 });
@@ -118,4 +119,50 @@ test('FR-07 S-51 감상 길이와 공개 범위의 DB 제약조건을 지켜요'
     expect(() => repository.reviews.save({ ...review, oneLine: null })).toThrow();
     expect(repository.reviews.list()).toEqual([]);
     expect(repository.reviews.save(review).visibility).toBe('PRIVATE');
+});
+
+test('NFR-05 S-45 완료 응답은 전송 버전과 일치할 때만 대기를 해제해요', () => {
+    const sent = repository.sessions.save(session);
+    const changed = repository.sessions.save({ ...session, endPage: 100 });
+    repository.sessions.markSynced(sessionId, sent.localVersion);
+    expect(repository.sessions.get(sessionId)?.syncPending).toBe(true);
+    repository.sessions.markSynced(sessionId, changed.localVersion);
+    expect(repository.sessions.get(sessionId)?.syncPending).toBe(false);
+});
+
+test('NFR-04·05 S-30 책 삭제는 자식도 tombstone으로 만들고 재삭제는 버전을 유지해요', () => {
+    repository.sessions.save(session);
+    repository.reviews.save({ id: reviewId, bookId, oneLine: '감상', body: null, visibility: 'PRIVATE', publishedAt: null });
+    repository.quotes.save({ id: quoteId, bookId, text: '문장', page: null, memo: null });
+    repository.books.softDelete(bookId);
+    const entities = [repository.books, repository.sessions, repository.reviews, repository.quotes];
+    const before = entities.map(entity => entity.list({ includeDeleted: true }));
+    now += 1000;
+    repository.books.softDelete(bookId);
+    expect(entities.map(entity => entity.list({ includeDeleted: true }))).toEqual(before);
+    expect(before.every(rows => rows[0].deleted && rows[0].syncPending)).toBe(true);
+});
+
+test.each([
+    { title: '' }, { title: ' ' }, { title: '가'.repeat(201) }, { author: '' }, { author: '가'.repeat(101) },
+    { totalPages: 0 }, { totalPages: 1.5 }, { totalPages: NaN }, { currentPage: -1 }, { currentPage: 241 }, { currentPage: 0.5 },
+])('FR-01·03 S-23 책 저장 계약 경계 %j는 거부해요', input => {
+    const previous = repository.books.get(bookId);
+    expect(() => repository.books.save({ ...book, ...input })).toThrow();
+    expect(repository.books.get(bookId)).toEqual(previous);
+});
+
+test('FR-01·03 S-23 제목·저자와 쪽수 최댓값 경계는 저장해요', () => {
+    expect(repository.books.save({ ...book, title: '가'.repeat(200), author: '가'.repeat(100), currentPage: 240 }).currentPage).toBe(240);
+});
+
+test('NFR-05 S-80 SQL 필터는 책과 삭제·대기 상태를 함께 제한해요', () => {
+    const saved = repository.sessions.save(session);
+    repository.sessions.markSynced(saved.id, saved.localVersion);
+    expect(repository.sessions.list({ bookId, syncPending: true })).toEqual([]);
+    expect(repository.sessions.list({ bookId, syncPending: false })).toEqual([expect.objectContaining({ id: sessionId })]);
+    repository.sessions.softDelete(sessionId);
+    expect(repository.sessions.list({ syncPending: true })).toEqual([]);
+    expect(repository.sessions.list({ includeDeleted: true, syncPending: true, bookId })).toHaveLength(1);
+    expect(repository.sessions.list({ includeDeleted: true, bookId: quoteId })).toEqual([]);
 });
