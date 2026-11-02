@@ -29,7 +29,7 @@ function BookEditForm({ book, repository }: { book: BookRecord; repository: Reco
         if (!latest) { setError('삭제된 책은 편집할 수 없어요.'); return; }
         let changes: ReturnType<typeof parseBookEdit>;
         try {
-            changes = parseBookEdit(fields, latest.currentPage, latest.status);
+            changes = parseBookEdit(fields, latest);
         } catch (cause) { setError(cause instanceof Error ? cause.message : '입력 내용을 확인해 주세요.'); return; }
         try {
             repository.books.save({ ...latest, ...changes });

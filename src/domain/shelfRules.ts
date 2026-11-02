@@ -26,12 +26,13 @@ export function completeReading<T extends ReadingBook>(book: T, now: number): Om
 export interface BookEditFields { title: string; author: string; publisher: string; totalPages: string; genre: Genre }
 
 /** FR-01 / S-34: 현재 쪽보다 작은 전체 쪽수는 조용히 보정하지 않고 거부한다. */
-export function parseBookEdit(fields: BookEditFields, currentPage: number, status: ReadingBook['status'] = 'READING') {
+export function parseBookEdit(fields: BookEditFields, previous: Pick<ReadingBook, 'currentPage' | 'totalPages' | 'status'>) {
+    const { currentPage, status } = previous;
     const totalPages = parseInteger(fields.totalPages);
     if (totalPages === null || totalPages < 1) throw new Error('전체 쪽수는 1 이상의 정수로 입력해 주세요.');
     if (totalPages < currentPage) throw new Error(`전체 쪽수는 현재 읽은 ${currentPage}쪽 이상으로 입력해 주세요.`);
     // PRD D7: 읽은 쪽을 새 전체 쪽수로 임의 증가시키지 않는다. 상태 전환을 먼저 명시적으로 선택한다.
-    if (status === 'DONE' && totalPages > currentPage) throw new Error('완독한 책의 전체 쪽수를 늘리려면 다시 읽기를 시작한 뒤 편집해 주세요.');
+    if (status === 'DONE' && totalPages > previous.totalPages) throw new Error('완독한 책의 전체 쪽수를 늘리려면 다시 읽기를 시작한 뒤 편집해 주세요.');
     const title = fields.title.trim();
     const author = fields.author.trim();
     validateBook({ title, author, totalPages, currentPage });

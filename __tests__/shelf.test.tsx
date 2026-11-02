@@ -1,11 +1,17 @@
 import { Alert, Text } from 'react-native';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import type { PropsWithChildren } from 'react';
 import { act } from '@testing-library/react-native';
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import ShelfScreen from '../app/(tabs)/shelf';
 import BookDetailScreen from '../app/book/[id]/index';
 import BookEditScreen from '../app/book/[id]/edit';
 import BookLayout from '../app/book/_layout';
+import RootLayout from '../app/_layout';
+import AuthLayout from '../app/(auth)/_layout';
+import TabLayout from '../app/(tabs)/_layout';
+import { useAuth } from '../src/auth/AuthProvider';
+import { queryClient } from '../src/api/queryClient';
 import { initializeDatabase, prepareRecordDatabase } from '../src/db/client';
 import { createRecordRepository, type RecordRepository, type SaveInput } from '../src/db/repository';
 import type { BookRecord } from '../src/db/schema';
@@ -14,7 +20,11 @@ import { memorySQLite } from '../src/db/__tests__/sqliteAdapter';
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
 jest.mock('../src/db/client', () => ({ ...jest.requireActual('../src/db/client'), initializeDatabase: jest.fn() }));
 jest.mock('../src/sync/runtime', () => ({ startRecordSync: jest.fn() }));
-jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), isLoaded: () => true, loadAsync: jest.fn() }));
+jest.mock('../src/sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn() }));
+jest.mock('../src/auth/AuthProvider', () => ({ AuthProvider: ({ children }: PropsWithChildren) => children, useAuth: jest.fn() }));
+jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { addEventListener: jest.fn(() => jest.fn()) } }));
+jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), isLoaded: () => true, loadAsync: jest.fn(), useFonts: () => [true, null] }));
+jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(), hideAsync: jest.fn() }));
 
 const id = '00000000-0000-4000-8000-000000000001';
 const sessionId = '00000000-0000-4000-8000-000000000002';
@@ -25,19 +35,14 @@ function ReadingStartTarget() {
     return <Text>독서 시작 연결: {bookId}</Text>;
 }
 const routes = { shelf: ShelfScreen, 'book/_layout': BookLayout, 'book/[id]/index': BookDetailScreen, 'book/[id]/edit': BookEditScreen, 'reading-start': ReadingStartTarget };
-// main의 루트와 같은 book Protected 등록을 실제 book layout에 적용한다.
-// 이 브랜치에서는 다른 Issue 소유의 app/_layout.tsx를 변경하지 않는다.
-function protectedRoutes(signedIn: boolean) {
-    function GuardedRoot() {
-        return <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Protected guard={!signedIn}><Stack.Screen name="login" /></Stack.Protected>
-            <Stack.Protected guard={signedIn}>
-                <Stack.Screen name="shelf" />
-                <Stack.Screen name="book" />
-            </Stack.Protected>
-        </Stack>;
-    }
-    return { _layout: GuardedRoot, login: () => <Text>로그인이 필요해요.</Text>, shelf: ShelfScreen,
+// 인증 상태만 대체하고 루트의 실제 Protected 등록과 book 중첩 스택을 함께 검증한다.
+function protectedRoutes() {
+    return { _layout: RootLayout,
+        '(auth)/_layout': AuthLayout, '(auth)/index': () => <Text>로그인이 필요해요.</Text>,
+        '(auth)/login': () => <Text>로그인</Text>, '(auth)/signup': () => <Text>회원가입</Text>, '(auth)/onboarding': () => <Text>사용법 안내</Text>,
+        '(tabs)/_layout': TabLayout, '(tabs)/index': () => <Text>인증된 홈</Text>, '(tabs)/shelf': ShelfScreen,
+        '(tabs)/calendar': () => <Text>캘린더</Text>, '(tabs)/lounge': () => <Text>라운지</Text>, '(tabs)/my': () => <Text>마이</Text>,
+        'book-add/index': () => <Text>책 등록</Text>,
         'book/_layout': BookLayout, 'book/[id]/index': BookDetailScreen, 'book/[id]/edit': BookEditScreen };
 }
 let memory: ReturnType<typeof memorySQLite>;
@@ -48,15 +53,16 @@ beforeEach(async () => {
     const { db } = await prepareRecordDatabase(memory.sqlite);
     repository = createRecordRepository(db, () => 100000);
     jest.mocked(initializeDatabase).mockResolvedValue({ db, repository });
+    jest.mocked(useAuth).mockReturnValue({ status: 'signedOut', retry: jest.fn(), recoverSession: jest.fn(), completeOnboarding: jest.fn(), signIn: jest.fn(), signOut: jest.fn() });
 });
-afterEach(() => { memory.connection.close(); jest.restoreAllMocks(); });
+afterEach(() => { memory.connection.close(); queryClient.clear(); jest.restoreAllMocks(); });
 
 test.each(['', '/edit'])('FR-10 S-31 S-34 로그아웃 상태의 책 딥링크 %s는 Protected 가드가 차단해요', async suffix => {
     repository.books.save(book);
     const get = jest.spyOn(repository.books, 'get');
-    await renderRouter(protectedRoutes(false), { initialUrl: `/book/${id}${suffix}` });
+    await renderRouter(protectedRoutes(), { initialUrl: `/book/${id}${suffix}` });
     expect(await screen.findByText('로그인이 필요해요.')).toBeOnTheScreen();
-    expect(screen).toHavePathname('/login');
+    expect(screen).toHaveSegments(['(auth)']);
     expect(screen.queryByRole('button', { name: '정보 편집' })).toBeNull();
     expect(screen.queryByRole('button', { name: '저장' })).toBeNull();
     expect(get).not.toHaveBeenCalled();
@@ -64,7 +70,8 @@ test.each(['', '/edit'])('FR-10 S-31 S-34 로그아웃 상태의 책 딥링크 %
 
 test('FR-10 S-31 로그인 상태는 같은 Protected 가드 안에서 책 상세를 열 수 있어요', async () => {
     repository.books.save(book);
-    await renderRouter(protectedRoutes(true), { initialUrl: `/book/${id}` });
+    jest.mocked(useAuth).mockReturnValue({ ...useAuth(), status: 'signedIn' });
+    await renderRouter(protectedRoutes(), { initialUrl: `/book/${id}` });
     expect(await screen.findByRole('header', { name: '데미안' })).toBeOnTheScreen();
     expect(screen).toHavePathname(`/book/${id}`);
 });
@@ -178,6 +185,15 @@ test('FR-01 D7 S-34 완독 책 전체 쪽수 증가는 안내하고 지난 쪽�
     await fireEvent.press(screen.getByRole('button', { name: '저장' }));
     expect(screen.getByRole('alert')).toHaveTextContent(/다시 읽기를 시작한 뒤 편집/);
     expect(repository.books.get(id)).toMatchObject({ totalPages: 240, currentPage: 240, status: 'DONE', completedAt: 100, completedCount: 1 });
+});
+
+test('FR-01 S-34 복원된 완독 책의 현재 쪽이 전체보다 작아도 제목 편집은 저장해요', async () => {
+    repository.books.save({ ...book, status: 'DONE', completedAt: 100, completedCount: 1 });
+    await renderRouter(routes, { initialUrl: `/book/${id}/edit` });
+    await fireEvent.changeText(await screen.findByLabelText('제목'), '복원한 책 제목');
+    await fireEvent.press(screen.getByRole('button', { name: '저장' }));
+    expect(await screen.findByRole('header', { name: '복원한 책 제목' })).toBeOnTheScreen();
+    expect(repository.books.get(id)).toMatchObject({ title: '복원한 책 제목', status: 'DONE', currentPage: 84, totalPages: 240, completedAt: 100, completedCount: 1 });
 });
 
 test('FR-04 D-01 S-30 삭제 취소는 유지하고 확인하면 책장에서 사라져도 tombstone은 남아요', async () => {
