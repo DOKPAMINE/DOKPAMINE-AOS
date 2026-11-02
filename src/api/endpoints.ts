@@ -1,8 +1,8 @@
 import { apiRequest } from './client';
 import type { BookDto, BookReviewSearchResponse, CatalogBook, LoginRequest, MeResponse, QuoteDto, ReviewDto, SessionDto, SignupRequest, SyncSnapshot, TokenResponse } from './types';
 
-export const signup = (body: SignupRequest) => apiRequest<TokenResponse>('/api/auth/signup', { method: 'POST', body, authenticated: false });
-export const login = (body: LoginRequest) => apiRequest<TokenResponse>('/api/auth/login', { method: 'POST', body, authenticated: false });
+export const signup = (body: SignupRequest, signal?: AbortSignal) => apiRequest<TokenResponse>('/api/auth/signup', { method: 'POST', body, signal, authenticated: false });
+export const login = (body: LoginRequest, signal?: AbortSignal) => apiRequest<TokenResponse>('/api/auth/login', { method: 'POST', body, signal, authenticated: false });
 export const me = () => apiRequest<MeResponse>('/api/me');
 export const catalogIsbn = (isbn: string) => apiRequest<CatalogBook>(`/api/catalog/isbn/${encodeURIComponent(isbn)}`);
 export const catalogGenres = () => apiRequest<string[]>('/api/catalog/genres');

@@ -10,11 +10,17 @@ import HomeScreen from '../app/(tabs)/index';
 import { queryClient } from '../src/api/queryClient';
 import { initializeDatabase } from '../src/db/client';
 
+jest.mock('../src/sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn() }));
+
 jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn(() => Promise.resolve({})) }));
 
 jest.mock('@react-native-community/netinfo', () => ({
     __esModule: true,
     default: { addEventListener: jest.fn(() => jest.fn()) },
+}));
+
+jest.mock('expo-secure-store', () => ({
+    getItemAsync: jest.fn(async (key: string) => key === 'dokpamine.accessToken' ? 'test-token' : key === 'dokpamine.authSession' ? JSON.stringify({ accessToken: 'test-token', expiresAt: '2099-01-01T00:00:00Z' }) : 'true'),
 }));
 
 afterEach(() => queryClient.clear());
@@ -79,12 +85,12 @@ test('S-10 폰트를 불러오면 홈에서 재진입에도 같은 루트 QueryC
     expect(clients[0]).toBe(queryClient);
     expect(clients.every(client => client === clients[0])).toBe(true);
     expect(SplashScreen.hideAsync).toHaveBeenCalled();
-    expect(screen.getByRole('header', { name: '홈' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '홈' })).toBeOnTheScreen();
 });
 
 test('PRD 4장 · S-10 폰트를 불러오지 못해도 스플래시를 닫고 홈을 보여 줘요', async () => {
     await renderRouter({ _layout: RootLayout, '(tabs)/_layout': TabLayout, '(tabs)/index': HomeScreen }, { initialUrl: '/' });
 
     expect(SplashScreen.hideAsync).toHaveBeenCalled();
-    expect(screen.getByRole('header', { name: '홈' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '홈' })).toBeOnTheScreen();
 });

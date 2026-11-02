@@ -155,3 +155,52 @@ test.each(['fetch', 'body', 'storage'])('NFR-06 · S-22 %s 대기가 멈춰도 �
     }
     expect(jest.getTimerCount()).toBe(0);
 });
+
+test('FR-10 · S-02 잘못된 로그인 401은 세션 만료와 구분하고 서버 문구를 보존해요', async () => {
+    fetchMock.mockResolvedValue(response(401, { code: 'INVALID_CREDENTIALS', message: '로그인 정보가 맞지 않아요.' }));
+    await expect(apiRequest('/api/auth/login', { method: 'POST', authenticated: false, body: { email: 'reader@example.test', password: 'wrong-pass' } })).rejects.toMatchObject({ kind: 'credentials', status: 401, message: '로그인 정보가 맞지 않아요.' });
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+});
+
+test('FR-10 · S-02 성공한 204는 JSON을 읽지 않고 빈 응답으로 처리해요', async () => {
+    const json = jest.fn().mockRejectedValue(new SyntaxError());
+    fetchMock.mockResolvedValue({ ok: true, status: 204, json } as unknown as Response);
+    await expect(apiRequest<void>('/api/test', { authenticated: false })).resolves.toBeUndefined();
+    expect(json).not.toHaveBeenCalled();
+});
+
+test('FR-10 · S-02 이미 취소된 요청은 연결 확인과 전송 없이 종료해요', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(apiRequest('/api/me', { signal: controller.signal })).rejects.toMatchObject({ kind: 'cancelled' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(NetInfo.fetch).not.toHaveBeenCalled();
+});
+
+test.each(['fetch', 'storage', 'connectivity'])('FR-10 · S-02 %s 대기 중 취소도 즉시 종료하고 뒤늦은 요청을 막아요', async stage => {
+    jest.useFakeTimers();
+    await tokenStorage.save('unit-test-only-token');
+    let releaseToken: ((value: string) => void) | undefined;
+    if (stage === 'storage') jest.mocked(SecureStore.getItemAsync).mockReturnValue(new Promise(resolve => { releaseToken = resolve; }));
+    if (stage === 'connectivity') jest.mocked(NetInfo.fetch).mockReturnValue(new Promise(() => {}));
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    const controller = new AbortController();
+    const assertion = expect(apiRequest('/api/me', { signal: controller.signal })).rejects.toMatchObject({ kind: 'cancelled' });
+    await jest.advanceTimersByTimeAsync(0);
+    controller.abort();
+    await assertion;
+    releaseToken?.('unit-test-only-token');
+    await jest.advanceTimersByTimeAsync(500);
+    if (stage !== 'fetch') expect(fetchMock).not.toHaveBeenCalled();
+    else expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+});
+
+test.each(['empty', 'html', 'message-only'])('FR-10 · S-02 code 없는 로그인 401 %s는 만료가 아닌 로그인 정보를 안내해요', async format => {
+    const serverResponse = format === 'html'
+        ? { ok: false, status: 401, json: async () => { throw new SyntaxError(); } } as unknown as Response
+        : response(401, format === 'message-only' ? { message: '로그인 정보를 확인해 주세요.' } : undefined);
+    fetchMock.mockResolvedValue(serverResponse);
+    await expect(apiRequest('/api/auth/login', { method: 'POST', authenticated: false })).rejects.toMatchObject({ kind: 'credentials', status: 401, message: format === 'message-only' ? '로그인 정보를 확인해 주세요.' : '이메일 또는 비밀번호를 확인해 주세요.' });
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+});
