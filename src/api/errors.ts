@@ -1,4 +1,4 @@
-export type ApiErrorKind = 'offline' | 'unauthorized' | 'http' | 'timeout' | 'network' | 'invalid-response' | 'configuration' | 'storage';
+export type ApiErrorKind = 'offline' | 'unauthorized' | 'credentials' | 'cancelled' | 'http' | 'timeout' | 'network' | 'invalid-response' | 'configuration' | 'storage';
 
 /** message는 StateView 등에 그대로 전달할 수 있는 한국어 안내다. */
 export class ApiError extends Error {

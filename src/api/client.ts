@@ -1,12 +1,14 @@
 import { isOnline } from './connectivity';
 import { ApiError, offlineError } from './errors';
 import { tokenStorage } from './tokenStorage';
+import { notifyUnauthorized } from './authEvents';
 
 export interface ApiRequestOptions {
     method?: 'GET' | 'POST' | 'PUT';
     body?: unknown;
     authenticated?: boolean;
     timeoutMs?: number;
+    signal?: AbortSignal;
 }
 
 function getBaseUrl(): string {
@@ -26,12 +28,23 @@ function isErrorBody(value: unknown): value is { code: string; message: string }
 
 /** 화면은 개인 기록을 직접 PUT하지 않고 이후 공통 기록 저장소를 통해 저장한다. */
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-    if (!await isOnline()) throw offlineError();
-    const baseUrl = getBaseUrl();
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let requestToken: string | null = null;
+    let rejectCancellation: (error: ApiError) => void = () => {};
+    const cancellation = new Promise<never>((_, reject) => { rejectCancellation = reject; });
+    const cancel = () => {
+        rejectCancellation(new ApiError('cancelled', 'CANCELLED', '요청을 취소했어요.'));
+        controller.abort();
+    };
+    options.signal?.addEventListener('abort', cancel, { once: true });
+    if (options.signal?.aborted) cancel();
 
     const request = async (): Promise<T> => {
+        if (controller.signal.aborted) return await cancellation;
+        if (!await isOnline()) throw offlineError();
+        if (controller.signal.aborted) return await cancellation;
+        const baseUrl = getBaseUrl();
         const headers: Record<string, string> = { Accept: 'application/json' };
         if (options.body !== undefined) headers['Content-Type'] = 'application/json';
         if (options.authenticated !== false) {
@@ -45,6 +58,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
             if (controller.signal.aborted) throw new ApiError('timeout', 'TIMEOUT', '서버 응답이 늦어요. 다시 시도해 주세요.');
             if (!token) throw new ApiError('unauthorized', 'AUTH_REQUIRED', '로그인이 필요해요.');
             headers.Authorization = `Bearer ${token}`;
+            requestToken = token;
         }
 
         const response = await fetch(`${baseUrl}${path}`, {
@@ -53,6 +67,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
             body: options.body === undefined ? undefined : JSON.stringify(options.body),
             signal: controller.signal,
         });
+        if (controller.signal.aborted) throw new ApiError('cancelled', 'CANCELLED', '요청을 취소했어요.');
+        if (response.status === 204 && response.ok) return undefined as T;
         let body: unknown;
         try {
             body = await response.json();
@@ -60,9 +76,13 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
             // HTML/빈 오류 응답도 HTTP 상태(특히 401)를 보존한다.
             if (response.ok) throw new ApiError('invalid-response', 'INVALID_RESPONSE', '서버 응답을 확인하지 못했어요.');
         }
+        if (controller.signal.aborted) throw new ApiError('cancelled', 'CANCELLED', '요청을 취소했어요.');
         if (!response.ok) {
+            const invalidCredentials = options.authenticated === false && response.status === 401 &&
+                isErrorBody(body) && body.code === 'INVALID_CREDENTIALS';
+            if (response.status === 401 && requestToken) notifyUnauthorized(requestToken);
             throw new ApiError(
-                response.status === 401 ? 'unauthorized' : 'http',
+                invalidCredentials ? 'credentials' : response.status === 401 ? 'unauthorized' : 'http',
                 isErrorBody(body) ? body.code : `HTTP_${response.status}`,
                 isErrorBody(body) ? body.message : response.status === 401 ? '다시 로그인해 주세요.' : '요청을 처리하지 못했어요. 다시 시도해 주세요.',
                 response.status,
@@ -74,6 +94,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     try {
         return await Promise.race([
             request(),
+            cancellation,
             new Promise<never>((_, reject) => {
                 timer = setTimeout(() => {
                     reject(new ApiError('timeout', 'TIMEOUT', '서버 응답이 늦어요. 다시 시도해 주세요.'));
@@ -86,5 +107,6 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
         throw new ApiError('network', 'NETWORK_ERROR', '서버에 연결하지 못했어요. 인터넷 연결을 확인해 주세요.');
     } finally {
         clearTimeout(timer);
+        options.signal?.removeEventListener('abort', cancel);
     }
 }
