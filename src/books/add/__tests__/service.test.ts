@@ -64,3 +64,26 @@ test('FR-01 · S-23 필수 정보와 목록에 없는 장르로는 저장하지 
     expect(bookAddSchema.safeParse({ ...values, genre: '자유 장르' }).success).toBe(false);
     expect(bookAddSchema.safeParse(values).success).toBe(true);
 });
+
+test('FR-01 S-23 출판사는 BE 검증과 동일하게 100자까지 허용해요', () => {
+    expect(bookAddSchema.safeParse({ ...values, publisher: '가'.repeat(100) }).success).toBe(true);
+    expect(bookAddSchema.safeParse({ ...values, publisher: '가'.repeat(101) }).success).toBe(false);
+});
+
+test('FR-01 S-23 ISBN을 수정한 책은 조회한 다른 ISBN 표지를 지워 저장해요', async () => {
+    const memory = memorySQLite();
+    try {
+        const { repository } = await prepareRecordDatabase(memory.sqlite);
+        const result = saveNewBook(repository.books, { ...values, isbn: '080442957X', coverUrl: 'https://example.com/old.jpg' }, 'WANT', id1, values.isbn);
+        expect(result.book.coverUrl).toBeNull();
+    } finally { memory.connection.close(); }
+});
+
+test('FR-01 S-23 ISBN-10과 ISBN-13이 같은 책이면 표지는 유지해요', async () => {
+    const memory = memorySQLite();
+    try {
+        const { repository } = await prepareRecordDatabase(memory.sqlite);
+        const result = saveNewBook(repository.books, { ...values, isbn: '0-306-40615-2', coverUrl: 'https://example.com/cover.jpg' }, 'WANT', id1, values.isbn);
+        expect(result.book.coverUrl).toBe('https://example.com/cover.jpg');
+    } finally { memory.connection.close(); }
+});

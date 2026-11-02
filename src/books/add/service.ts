@@ -26,14 +26,15 @@ export function findExistingBook(books: EntityRepository<BookRecord>, isbn: stri
 }
 
 /** NFR-04~06 / S-22·S-25: 중복 확인과 저장 사이에는 await를 두지 않는다. */
-export function saveNewBook(books: EntityRepository<BookRecord>, values: BookAddValues, status: 'READING' | 'WANT', id: string) {
+export function saveNewBook(books: EntityRepository<BookRecord>, values: BookAddValues, status: 'READING' | 'WANT', id: string, originalIsbn = values.isbn) {
     const valid = bookAddSchema.parse(values);
     const existing = findExistingBook(books, valid.isbn);
     if (existing) return { kind: 'duplicate' as const, book: existing };
     const book = books.save({
         id, title: valid.title, author: valid.author, totalPages: parseTotalPages(valid.totalPages)!,
         genre: isBookGenre(valid.genre) ? valid.genre : '기타', isbn: normalizeIsbn(valid.isbn),
-        publisher: valid.publisher.trim() || null, coverUrl: valid.coverUrl || null,
+        publisher: valid.publisher.trim() || null,
+        coverUrl: normalizeIsbn(valid.isbn) === normalizeIsbn(originalIsbn) ? valid.coverUrl || null : null,
         status, currentPage: 0, completedCount: 0, completedAt: null,
     });
     return { kind: 'saved' as const, book };

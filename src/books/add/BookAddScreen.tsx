@@ -24,6 +24,7 @@ export function BookAddScreen() {
     const [saving, setSaving] = useState(false);
     const [permission, requestPermission] = useCameraPermissions();
     const [permissionFailed, setPermissionFailed] = useState(false);
+    const [cameraFailed, setCameraFailed] = useState(false);
     const [timedOut, setTimedOut] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
     const [attempt, setAttempt] = useState(0);
@@ -33,6 +34,14 @@ export function BookAddScreen() {
     const saveLocked = useRef(false);
     const clientId = useRef<string | null>(null);
     const focused = useIsFocused();
+    const [wasFocused, setWasFocused] = useState(focused);
+
+    // 포커스가 바뀌면 새 CameraView의 준비 이벤트를 기다린다.
+    if (focused !== wasFocused) {
+        setWasFocused(focused);
+        setCameraReady(false);
+        setTimedOut(false);
+    }
 
     useEffect(() => () => { requestVersion.current++; }, []);
     useEffect(() => {
@@ -79,7 +88,7 @@ export function BookAddScreen() {
         try {
             const books = await getBookRepository();
             clientId.current ??= uuid.v4();
-            const result = saveNewBook(books, input, status, clientId.current);
+            const result = saveNewBook(books, input, status, clientId.current, values.isbn);
             if (result.kind === 'duplicate') { showDuplicate(result.book); return; }
             // S-40은 6단계에서 구현하며 진입 경로만 계약에 맞춘다.
             router.replace((status === 'READING' ? `/reading-start?bookId=${result.book.id}` : `/book/${result.book.id}`) as Href);
@@ -98,12 +107,14 @@ export function BookAddScreen() {
     return (
         <Screen title={titles[step]}>
             {step === 'scan' && <>
-                {denied ? <StateView kind="empty" message="카메라 권한이 없어도 직접 입력으로 책을 등록할 수 있어요. 권한은 기기 설정에서 변경할 수 있어요." />
+                {cameraFailed ? <><StateView kind="error" message="카메라를 시작하지 못했어요. 다른 앱에서 카메라를 사용 중인지 확인하거나 직접 입력해 주세요." />
+                    <SecondaryButton label="카메라 다시 시도" onPress={() => { setCameraFailed(false); setCameraReady(false); setTimedOut(false); scanLocked.current = false; setAttempt(value => value + 1); }} /></>
+                    : denied ? <StateView kind="empty" message="카메라 권한이 없어도 직접 입력으로 책을 등록할 수 있어요. 권한은 기기 설정에서 변경할 수 있어요." />
                     : !permission ? <StateView kind="loading" message="카메라 권한을 확인하고 있어요." />
                         : permission.granted && focused ? <>
                             <CameraView key={attempt} style={styles.camera} facing="back" barcodeScannerSettings={{ barcodeTypes: ['ean13'] }}
                                 onCameraReady={() => setCameraReady(true)}
-                                onMountError={() => { setPermissionFailed(true); }}
+                                onMountError={() => { setCameraFailed(true); setCameraReady(false); }}
                                 onBarcodeScanned={timedOut ? undefined : ({ data }) => {
                                     if (scanLocked.current || !normalizeIsbn(data)) return;
                                     scanLocked.current = true;

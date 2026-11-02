@@ -4,6 +4,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { PrimaryButton, SecondaryButton, StateView } from '../../components';
 import { GENRES } from '../../domain/pageRules';
+import { normalizeIsbn } from '../../domain/bookAddRules';
 import { colors, radii, sizes, spacing, typography } from '../../theme';
 import { bookAddSchema, type BookAddValues } from './validation';
 
@@ -11,7 +12,7 @@ export function BookForm({ initialValues, onSave }: {
     initialValues: BookAddValues;
     onSave: (values: BookAddValues, status: 'READING' | 'WANT') => Promise<void>;
 }) {
-    const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<BookAddValues>({
+    const { control, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<BookAddValues>({
         resolver: zodResolver(bookAddSchema), defaultValues: initialValues,
     });
     const saving = useRef(false);
@@ -37,15 +38,20 @@ export function BookForm({ initialValues, onSave }: {
                     <Controller control={control} name={name} render={({ field: { onChange, onBlur, value, ref } }) => (
                         <TextInput ref={ref} accessibilityLabel={labels[name]} accessibilityHint={errors[name]?.message}
                             accessibilityState={{ disabled: isSubmitting }} editable={!isSubmitting}
-                            keyboardType={name === 'totalPages' || name === 'isbn' ? 'number-pad' : 'default'}
-                            onChangeText={onChange} onBlur={onBlur} value={value} style={[styles.input, errors[name] && styles.invalid]} />
+                            keyboardType={name === 'totalPages' ? 'number-pad' : 'default'}
+                            autoCapitalize={name === 'isbn' ? 'characters' : 'sentences'}
+                            maxLength={name === 'publisher' || name === 'author' ? 100 : name === 'title' ? 200 : undefined}
+                            onChangeText={text => {
+                                if (name === 'isbn' && normalizeIsbn(text) !== normalizeIsbn(initialValues.isbn)) setValue('coverUrl', '');
+                                onChange(text);
+                            }} onBlur={onBlur} value={value} style={[styles.input, errors[name] && styles.invalid]} />
                     )} />
                     {errors[name] && <Text accessibilityRole="alert" style={styles.error}>{errors[name]?.message}</Text>}
                 </View>
             ))}
             <Text accessibilityRole="header" style={styles.label}>장르 (필수)</Text>
             <Controller control={control} name="genre" render={({ field: { value, onChange } }) => (
-                <View style={styles.genres}>
+                <View style={styles.genres} accessibilityRole="radiogroup" accessibilityLabel="장르 선택">
                     {GENRES.map(genre => (
                         <Pressable key={genre} accessibilityRole="radio" accessibilityLabel={genre}
                             accessibilityState={{ checked: value === genre, disabled: isSubmitting }} disabled={isSubmitting}
