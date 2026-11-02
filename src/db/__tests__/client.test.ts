@@ -3,6 +3,7 @@ import { initializeDatabase } from '../client';
 import { memorySQLite } from './sqliteAdapter';
 
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
+jest.mock('../../sync/runtime', () => ({ startRecordSync: jest.fn() }));
 
 test('NFR-04 S-10 초기화 실패 후 재시도하고 동시 호출은 같은 마이그레이션 완료를 기다려요', async () => {
     const open = jest.mocked(openDatabaseAsync);
