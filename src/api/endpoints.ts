@@ -1,5 +1,5 @@
 import { apiRequest } from './client';
-import type { BookDto, BookReviewSearchResponse, CatalogBook, LoginRequest, MeResponse, ReviewDto, SessionDto, SignupRequest, TokenResponse } from './types';
+import type { BookDto, BookReviewSearchResponse, CatalogBook, LoginRequest, MeResponse, QuoteDto, ReviewDto, SessionDto, SignupRequest, SyncSnapshot, TokenResponse } from './types';
 
 export const signup = (body: SignupRequest, signal?: AbortSignal) => apiRequest<TokenResponse>('/api/auth/signup', { method: 'POST', body, signal, authenticated: false });
 export const login = (body: LoginRequest, signal?: AbortSignal) => apiRequest<TokenResponse>('/api/auth/login', { method: 'POST', body, signal, authenticated: false });
@@ -9,4 +9,6 @@ export const catalogGenres = () => apiRequest<string[]>('/api/catalog/genres');
 export const putBook = (body: BookDto) => apiRequest<BookDto>(`/api/books/${encodeURIComponent(body.id)}`, { method: 'PUT', body });
 export const putSession = (body: SessionDto) => apiRequest<SessionDto>(`/api/sessions/${encodeURIComponent(body.id)}`, { method: 'PUT', body });
 export const putReview = (body: ReviewDto) => apiRequest<ReviewDto>(`/api/reviews/${encodeURIComponent(body.id)}`, { method: 'PUT', body });
+export const putQuote = (body: QuoteDto) => apiRequest<QuoteDto>(`/api/quotes/${encodeURIComponent(body.id)}`, { method: 'PUT', body });
+export const syncSnapshot = () => apiRequest<SyncSnapshot>('/api/sync/snapshot');
 export const searchBookReviews = (query: string) => apiRequest<BookReviewSearchResponse>(`/api/feed/books?query=${encodeURIComponent(query)}`);

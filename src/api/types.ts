@@ -74,6 +74,24 @@ export interface ReviewDto {
     updatedAt: string;
 }
 
+export interface QuoteDto {
+    id: string;
+    bookId: string;
+    text: string;
+    page?: number | null;
+    memo?: string | null;
+    deleted: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface SyncSnapshot {
+    books: BookDto[];
+    sessions: SessionDto[];
+    reviews: ReviewDto[];
+    quotes: QuoteDto[];
+}
+
 export interface FeedItem {
     id: string;
     nickname: string;

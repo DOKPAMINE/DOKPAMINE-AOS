@@ -4,6 +4,7 @@ import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 import migrations from './migrations/migrations';
 import { createRecordRepository } from './repository';
 import * as schema from './schema';
+import { startRecordSync } from '../sync/runtime';
 
 /** 마이그레이션 실패는 호출자에게 전달하며 기존 기록을 초기화하거나 삭제하지 않는다. */
 export async function prepareRecordDatabase(sqlite: SQLiteDatabase) {
@@ -20,7 +21,9 @@ export function initializeDatabase() {
     if (!initialization) {
         initialization = openDatabaseAsync('dokpamine.db').then(async sqlite => {
             try {
-                return await prepareRecordDatabase(sqlite);
+                const prepared = await prepareRecordDatabase(sqlite);
+                startRecordSync(prepared.repository);
+                return prepared;
             } catch (error) {
                 await sqlite.closeAsync();
                 throw error;

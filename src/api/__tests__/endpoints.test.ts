@@ -1,8 +1,8 @@
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
 
-import { catalogGenres, catalogIsbn, login, me, putBook, putReview, putSession, searchBookReviews, signup } from '../endpoints';
-import type { BookDto, BookReviewSearchResponse, CatalogBook, MeResponse, ReviewDto, SessionDto, TokenResponse } from '../types';
+import { catalogGenres, catalogIsbn, login, me, putBook, putQuote, putReview, putSession, searchBookReviews, signup, syncSnapshot } from '../endpoints';
+import type { BookDto, BookReviewSearchResponse, CatalogBook, MeResponse, QuoteDto, ReviewDto, SessionDto, TokenResponse } from '../types';
 
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn() } }));
 jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn() }));
@@ -25,6 +25,8 @@ const review: ReviewDto = {
     visibility: 'PRIVATE', deleted: true, createdAt: timestamp, updatedAt: timestamp,
 };
 const user: MeResponse = { id: '00000000-0000-4000-8000-000000000004', email: 'reader@example.test', nickname: '독자', rankingOptIn: false };
+const quote: QuoteDto = { id: '00000000-0000-4000-8000-000000000005', bookId: book.id,
+    text: '문장', page: null, memo: null, deleted: true, createdAt: timestamp, updatedAt: timestamp };
 const token: TokenResponse = { accessToken: 'unit-test-only-token', expiresAt: timestamp, user };
 const credentials = { email: user.email, password: 'unit-test-only-password' };
 const newUser = { ...credentials, nickname: user.nickname };
@@ -60,6 +62,9 @@ test.each([
     { name: 'NFR-05 · S-31 책 전송', call: () => putBook(book), path: `/api/books/${book.id}`, method: 'PUT', body: book, response: book, auth: true },
     { name: 'NFR-05 · S-36 세션 전송', call: () => putSession(session), path: `/api/sessions/${session.id}`, method: 'PUT', body: session, response: session, auth: true },
     { name: 'NFR-05 · S-51 감상 전송', call: () => putReview(review), path: `/api/reviews/${review.id}`, method: 'PUT', body: review, response: review, auth: true },
+    { name: 'NFR-05 · S-52 문장 전송', call: () => putQuote(quote), path: `/api/quotes/${quote.id}`, method: 'PUT', body: quote, response: quote, auth: true },
+    { name: 'NFR-05 · S-02 로그인 복원', call: syncSnapshot, path: '/api/sync/snapshot', method: 'GET', body: undefined,
+        response: { books: [book], sessions: [session], reviews: [review], quotes: [quote] }, auth: true },
     { name: 'FR-16 · S-71 책별 감상 검색', call: () => searchBookReviews(query), path: `/api/feed/books?query=${encodeURIComponent(query)}`, method: 'GET', body: undefined, response: groups, auth: true },
 ])('$name 계약의 경로·본문·인증 헤더와 응답을 그대로 사용해요', async row => {
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => row.response } as Response);

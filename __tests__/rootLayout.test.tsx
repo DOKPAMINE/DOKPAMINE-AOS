@@ -1,13 +1,16 @@
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { QueryClient, useQueryClient } from '@tanstack/react-query';
-import { render } from '@testing-library/react-native';
+import { act, render } from '@testing-library/react-native';
 import { renderRouter, screen } from 'expo-router/testing-library';
 
 import RootLayout from '../app/_layout';
 import TabLayout from '../app/(tabs)/_layout';
 import HomeScreen from '../app/(tabs)/index';
 import { queryClient } from '../src/api/queryClient';
+import { initializeDatabase } from '../src/db/client';
+
+jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn(() => Promise.resolve({})) }));
 
 jest.mock('@react-native-community/netinfo', () => ({
     __esModule: true,
@@ -35,7 +38,19 @@ jest.mock('expo-splash-screen', () => ({
 
 beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(initializeDatabase).mockResolvedValue({} as Awaited<ReturnType<typeof initializeDatabase>>);
     jest.mocked(useFonts).mockReturnValue([false, new Error('폰트를 불러오지 못했습니다.')]);
+});
+
+test('NFR-04 S-10 DB 마이그레이션이 끝날 때까지 화면과 스플래시를 유지해요', async () => {
+    let finish!: (value: Awaited<ReturnType<typeof initializeDatabase>>) => void;
+    jest.mocked(initializeDatabase).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    await renderRouter({ _layout: RootLayout, '(tabs)/_layout': TabLayout, '(tabs)/index': HomeScreen }, { initialUrl: '/' });
+    expect(screen.queryByRole('header', { name: '홈' })).toBeNull();
+    expect(SplashScreen.hideAsync).not.toHaveBeenCalled();
+    await act(async () => { finish({} as Awaited<ReturnType<typeof initializeDatabase>>); });
+    expect(SplashScreen.hideAsync).toHaveBeenCalled();
+    expect(screen.getByRole('header', { name: '홈' })).toBeOnTheScreen();
 });
 
 test('PRD 4장 · S-10 폰트를 불러오는 동안 스플래시를 유지해요', async () => {
