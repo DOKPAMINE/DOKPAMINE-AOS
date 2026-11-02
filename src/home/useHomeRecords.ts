@@ -32,7 +32,6 @@ export function useHomeRecords() {
             }
         };
 
-        setRecords({ kind: 'loading' });
         void initializeDatabase().then(prepared => {
             if (!active) return;
             repository = prepared.repository;
@@ -59,6 +58,6 @@ export function useHomeRecords() {
         records,
         streak: streakDays(sessions, today),
         weekSeconds: thisWeekSeconds(sessions, today),
-        retry: () => setAttempt(value => value + 1),
+        retry: () => { setRecords({ kind: 'loading' }); setAttempt(value => value + 1); },
     };
 }
