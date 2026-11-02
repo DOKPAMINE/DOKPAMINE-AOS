@@ -73,6 +73,8 @@ function AuthNavigator() {
             </Stack.Protected>
             <Stack.Protected guard={status === 'signedIn'}>
                 <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="book-add" />
+                <Stack.Screen name="book" />
             </Stack.Protected>
         </Stack>
     );
