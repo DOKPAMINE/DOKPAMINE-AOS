@@ -13,7 +13,7 @@
 - `@expo/vector-icons`, `react-native-safe-area-context`
 - Jest + `jest-expo` + React Native Testing Library, ESLint flat config(`eslint-config-expo`)
 - npm만 사용하고 `package.json`·`package-lock.json`을 함께 커밋한다. Expo 의존성은 `npx expo install`로 SDK 호환 버전을 설치한다.
-- ADR-0001의 TanStack Query, expo-sqlite + Drizzle, Zustand, React Hook Form + Zod는 **4단계에서 도입**한다. 이번 뼈대에는 설치하지 않는다.
+- ADR-0001의 TanStack Query, expo-sqlite + Drizzle, Zustand, React Hook Form + Zod, `@react-native-community/netinfo`, `expo-secure-store`, `expo-camera`, `expo-notifications` 의존성은 도입되었다. 실제 기능은 이후 Issue에서 구현한다.
 
 ## 명령
 ```bash
@@ -27,6 +27,8 @@ npx expo-doctor
 npx expo export --platform android --output-dir dist
 ```
 Expo Go는 설치된 앱과 SDK가 호환되어야 한다. 버전이 맞지 않으면 호환 Expo Go 또는 Development Build를 사용한다. `dist/` 등 생성물과 비밀값은 커밋하지 않는다.
+`drizzle-kit generate` 뒤에는 `npx expo start --clear`, Jest는 `npx jest --clearCache`를 실행한다.
+Babel의 `api.cache(true)`와 `inline-import`는 `.sql` 변경으로 캐시를 무효화하지 않으므로 캐시를 직접 초기화해야 한다.
 
 ## 구조
 ```text
@@ -42,9 +44,10 @@ src/theme/                    Figma v1.0 색상·글꼴·간격·반경·터치 
 src/components/               Screen, PrimaryButton, SecondaryButton, Card, ProgressBar, StateView
 src/domain/                   플랫폼·IO에 의존하지 않는 순수 규칙과 __tests__
 __tests__/                    라우트 통합 테스트
+babel.config.js, metro.config.js  Drizzle .sql 인라인
 .github/workflows/ci.yml       PR(main 대상)·main push 시 타입 검사·린트·테스트
 ```
-`src/api/`·`src/db/`는 4단계 기능 구현 때 추가하며 이번에는 만들지 않는다. 라우트마다 PRD 화면 ID를 주석으로 남긴다.
+`src/api/`·`src/db/`·`src/sync/`는 이후 Issue에서 구현한다. 라우트마다 PRD 화면 ID를 주석으로 남긴다.
 
 ## 반드시 지킬 규칙
 1. **오프라인 우선(NFR-04~06).** 개인 기록(책, 세션, 감상, 문장)은 공통 기록 저장소를 통해 기기 DB에 먼저 저장하고 동기화를 예약한다. 화면에서 서버로 직접 쓰지 않는다. 4단계 도입 시 `syncPending`, `localVersion`, `deleted` tombstone을 유지하고 책 → 세션 → 감상 → 문장 순서로 전송한다. 전송 중 수정된 기록의 대기를 해제하지 않고 401이면 기록을 보존한다. 서버가 필요한 ISBN 조회·책별 공개 감상 검색·좋아요·랭킹은 연결 상태를 먼저 확인하며 오프라인이면 요청하지 않고 1초 안에 `StateView`의 오프라인 안내를 보여 준다(ADR-0003).

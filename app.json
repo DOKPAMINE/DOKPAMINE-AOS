@@ -16,7 +16,17 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-splash-screen"
+      "expo-splash-screen",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "책 바코드를 스캔하려면 카메라 접근을 허용해 주세요.",
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-notifications",
+      "expo-sqlite",
+      "expo-secure-store"
     ]
   }
 }
