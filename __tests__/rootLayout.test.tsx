@@ -7,6 +7,14 @@ import { renderRouter, screen } from 'expo-router/testing-library';
 import RootLayout from '../app/_layout';
 import TabLayout from '../app/(tabs)/_layout';
 import HomeScreen from '../app/(tabs)/index';
+import { queryClient } from '../src/api/queryClient';
+
+jest.mock('@react-native-community/netinfo', () => ({
+    __esModule: true,
+    default: { addEventListener: jest.fn(() => jest.fn()) },
+}));
+
+afterEach(() => queryClient.clear());
 
 // 폰트 로드가 실패한 상황을 만듭니다.
 jest.mock('expo-font', () => ({
@@ -53,6 +61,7 @@ test('S-10 폰트를 불러오면 홈에서 재진입에도 같은 루트 QueryC
     expect(firstRenderCount).toBeGreaterThan(0);
     expect(clients.length).toBeGreaterThan(firstRenderCount);
     expect(clients[0]).toBeInstanceOf(QueryClient);
+    expect(clients[0]).toBe(queryClient);
     expect(clients.every(client => client === clients[0])).toBe(true);
     expect(SplashScreen.hideAsync).toHaveBeenCalled();
     expect(screen.getByRole('header', { name: '홈' })).toBeOnTheScreen();
