@@ -37,7 +37,7 @@ export function latestPaged(sessions: readonly ReadingSession[]): ReadingSession
     }, null);
 }
 
-/** PRD D7 / S-40: 가장 최근 쪽수 기록의 끝 쪽. 기록이 없으면 현재 쪽(새 책은 0쪽)을 쓴다. */
-export function suggestedStartPage(sessions: readonly ReadingSession[], currentPage = 0): number {
-    return latestPaged(sessions)?.endPage ?? currentPage;
+/** PRD D7 / S-40·S-33: 저장·다시 읽기로 유지한 현재 쪽을 전체 쪽수 범위로 제한한다. */
+export function suggestedStartPage(currentPage: number, totalPages: number): number {
+    return Math.max(0, Math.min(currentPage, Math.max(totalPages, 0)));
 }

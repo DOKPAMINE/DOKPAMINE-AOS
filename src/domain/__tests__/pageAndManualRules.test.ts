@@ -41,10 +41,25 @@ test('FR-03 D6 30쪽에서 50쪽까지는 20쪽이고 되돌아 읽기와 시간
 test('FR-02 D7 S-40 지난 끝 쪽 84를 다음 시작 쪽으로 자동 입력해요', () => {
     const paged = session('paged', startedAt, 84);
     const list = [session('old', startedAt - 1, 120), paged, session('time', startedAt + 1, null), session('deleted', startedAt + 2, 200, { deleted: true })];
-    expect(suggestedStartPage(list)).toBe(84);
-    expect(suggestedStartPage([])).toBe(0);
-    expect(suggestedStartPage([], 20)).toBe(20);
+    const currentPage = currentPageAfterSave(60, 240, [], list);
+    expect(currentPage).toBe(84);
+    expect(suggestedStartPage(currentPage, 240)).toBe(84);
+    expect(suggestedStartPage(0, 240)).toBe(0);
+    expect(suggestedStartPage(20, 240)).toBe(20);
     expect(latestPaged([session('zero', startedAt, 0)])?.endPage).toBe(0);
+});
+
+test('FR-02 D7 S-33 다시 읽기 뒤 현재 0쪽이면 0쪽을 제안해요', () => {
+    const previous = session('finished', startedAt, 240);
+    const currentPage = currentPageAfterSave(0, 240, [previous], [previous]);
+    expect(suggestedStartPage(currentPage, 240)).toBe(0);
+});
+
+test('FR-02 D7 S-34 시작 쪽은 줄인 전체 쪽수로 제한해요', () => {
+    expect(suggestedStartPage(180, 150)).toBe(150);
+    expect(suggestedStartPage(150, 150)).toBe(150);
+    expect(suggestedStartPage(-1, 150)).toBe(0);
+    expect(suggestedStartPage(180, 0)).toBe(0);
 });
 test('FR-02 D7 S-40 시작 시각이 같으면 생성 시각과 ID로 최근 기록을 고정해요', () => {
     const a = session('a', startedAt, 10);
