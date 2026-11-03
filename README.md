@@ -1,8 +1,8 @@
 # DOKPAMINE-AOS
 
-독파민 Android 앱의 React Native + Expo(TypeScript) 뼈대입니다. Expo Router 하단 탭은 **책장 / 캘린더 / 홈 / 라운지 / 마이** 순서이며 처음에는 가운데 홈이 선택됩니다.
+독파민 Android 앱입니다. React Native + Expo(TypeScript)로 만들었습니다. Expo Router 하단 탭은 **책장 / 캘린더 / 홈 / 라운지 / 마이** 순서이며 처음에는 가운데 홈이 선택됩니다.
 
-현재 v0.2.0에는 Figma v1.0 테마, Noto Sans KR, 공통 컴포넌트, 5개 자리표시 화면과 테스트·CI가 들어 있습니다. 로그인·바코드·타이머·DB·서버 연결은 4단계에서 구현합니다. Android에서 검증하며 iOS 빌드는 하지 않습니다.
+PRD v1.0의 화면(계정, 책 등록, 홈, 책장, 독서 타이머·기록, 감상, 캘린더·통계, 라운지, 랭킹, 마이·설정)과 기기 DB·서버 동기화가 들어 있습니다. 주 대상은 Android이며, iPhone은 Expo Go로 실행해 확인합니다(정식 iOS 빌드는 하지 않습니다).
 
 색상은 Figma `독파민 / 색상 v1.0 (브라운 밝은안)`의 11개 역할 토큰을 사용합니다. `src/theme/tokens.ts`의 `colors.brand`·`surface`·`line`·`text`·`state`로 관리하며, 진행 막대는 빈 부분과 채운 부분에 서로 다른 글자색을 적용해 페이지 문구의 대비를 유지합니다.
 
@@ -10,12 +10,19 @@
 
 Node.js LTS와 npm을 설치한 뒤 실행합니다.
 
-```bash
+앱은 서버(`DOKPAMINE-BE`, `./gradlew bootRun`)가 켜져 있어야 로그인·동기화가 됩니다. `EXPO_PUBLIC_API_BASE_URL`에 휴대전화에서 접속할 수 있는 PC 주소를 넣습니다(`ipconfig`의 Wi-Fi IPv4 주소, Android 에뮬레이터는 `http://10.0.2.2:8080`).
+
+```powershell
 npm ci
-npx expo start
+$env:EXPO_PUBLIC_API_BASE_URL="http://<PC IP>:8080"; npx expo start
 ```
 
-Android의 Expo Go로 QR 코드를 스캔합니다. PC와 휴대전화를 같은 네트워크에 연결하고 프로젝트의 Expo SDK 58을 지원하는 Expo Go를 사용해 주세요. SDK가 맞지 않으면 호환 Expo Go 또는 Development Build가 필요합니다. Android 에뮬레이터에서는 개발 서버의 `a` 키 또는 `npm run android`를 사용합니다. 현재 뼈대 실행에는 백엔드와 비밀값이 필요하지 않습니다.
+PC와 휴대전화를 같은 네트워크에 연결하고 프로젝트의 Expo SDK 58을 지원하는 Expo Go를 사용해 주세요. 처음 서버를 켤 때 Windows 방화벽 창이 뜨면 허용합니다.
+
+- **Android:** Expo Go의 "Scan QR code"로 QR 코드를 스캔합니다. 에뮬레이터에서는 개발 서버의 `a` 키 또는 `npm run android`를 사용합니다.
+- **iPhone:** 기본 카메라 앱으로 QR 코드를 찍고 알림을 눌러 Expo Go로 엽니다. "로컬 네트워크" 권한을 허용해야 PC에 접속합니다. Mac이나 Apple 개발자 계정은 필요 없습니다.
+
+SDK가 맞지 않으면 호환 Expo Go 또는 Development Build가 필요합니다.
 
 ## 검증
 
