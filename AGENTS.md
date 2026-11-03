@@ -1,6 +1,6 @@
 # DOKPAMINE-AOS: 에이전트 작업 규칙
 
-독파민 Android 앱이다. React Native + Expo(TypeScript)로 개발하며 Android에서 검증한다. iOS는 구현·빌드·검증하지 않는다.
+독파민 Android 앱이다. React Native + Expo(TypeScript)로 개발하며 주 대상은 Android이며 Android에서 검증한다. iOS는 정식 빌드·배포를 하지 않지만, 팀원 iPhone에서 Expo Go로 실행해 확인하고 iOS에서만 생기는 화면·권한 문제는 고친다.
 제품 범위와 화면 ID는 `DOKPAMINE-DOCS/PRD.md` v1.0의 **S-xx**를 따른다. 요구사항 ID는 FR-xx, NFR-xx, UC-xx를 사용한다.
 서버는 `DOKPAMINE-BE`이며 **API 계약은 `DOKPAMINE-BE/docs/API.md`가 기준**이다.
 
@@ -13,7 +13,7 @@
 - `@expo/vector-icons`, `react-native-safe-area-context`
 - Jest + `jest-expo` + React Native Testing Library, ESLint flat config(`eslint-config-expo`)
 - npm만 사용하고 `package.json`·`package-lock.json`을 함께 커밋한다. Expo 의존성은 `npx expo install`로 SDK 호환 버전을 설치한다.
-- ADR-0001의 TanStack Query, expo-sqlite + Drizzle, Zustand, React Hook Form + Zod, `@react-native-community/netinfo`, `expo-camera`, `expo-notifications` 의존성은 도입되었다. 인증 정보의 안전한 보관을 위한 `expo-secure-store`도 별도로 도입되었다. 실제 기능은 이후 Issue에서 구현한다.
+- ADR-0001의 TanStack Query, expo-sqlite + Drizzle, Zustand, React Hook Form + Zod, `@react-native-community/netinfo`, `expo-camera`, `expo-notifications` 의존성은 도입되었다. 인증 정보의 안전한 보관을 위한 `expo-secure-store`도 별도로 도입되었다.
 
 ## 명령
 ```bash
@@ -51,16 +51,16 @@ babel.config.js, metro.config.js  Drizzle .sql 인라인
 `src/api/`는 API 클라이언트, `src/db/`는 로컬 기록 저장소, `src/sync/`는 대기 전송과 snapshot 복원을 담당한다. 라우트마다 PRD 화면 ID를 주석으로 남긴다.
 
 ## 반드시 지킬 규칙
-1. **오프라인 우선(NFR-04~06).** 개인 기록(책, 세션, 감상, 문장)은 공통 기록 저장소를 통해 기기 DB에 먼저 저장하고 동기화를 예약한다. 화면에서 서버로 직접 쓰지 않는다. 4단계 도입 시 `syncPending`, `localVersion`, `deleted` tombstone을 유지하고 책 → 세션 → 감상 → 문장 순서로 전송한다. 전송 중 수정된 기록의 대기를 해제하지 않고 401이면 기록을 보존한다. 서버가 필요한 ISBN 조회·책별 공개 감상 검색·좋아요·랭킹은 연결 상태를 먼저 확인하며 오프라인이면 요청하지 않고 1초 안에 `StateView`의 오프라인 안내를 보여 준다(ADR-0003).
+1. **오프라인 우선(NFR-04~06).** 개인 기록(책, 세션, 감상, 문장)은 공통 기록 저장소를 통해 기기 DB에 먼저 저장하고 동기화를 예약한다. 화면에서 서버로 직접 쓰지 않는다. `syncPending`, `localVersion`, `deleted` tombstone을 유지하고 책 → 세션 → 감상 → 문장 순서로 전송한다. 전송 중 수정된 기록의 대기를 해제하지 않고 401이면 기록을 보존한다. 서버가 필요한 ISBN 조회·책별 공개 감상 검색·좋아요·랭킹은 연결 상태를 먼저 확인하며 오프라인이면 요청하지 않고 1초 안에 `StateView`의 오프라인 안내를 보여 준다(ADR-0003).
 2. **ID는 클라이언트 UUID다.** 세션 ID는 타이머 시작 시 만든 값을 저장·재전송까지 그대로 사용해 중복 저장을 막는다.
 3. **타이머는 시각 기반이다.** 시작 시각·누적 시간·일시정지 상태를 저장하고 화면 카운터로 시간을 누적하지 않는다. 일시정지의 `runningSinceMs: null`을 직렬화에서 생략하지 않는다.
-4. **API 계약을 함께 맞춘다.** 계약 변경 시 BE `docs/API.md`와 이후 도입할 TypeScript API 타입을 함께 검토·갱신한다. 다른 저장소 변경은 별도 Issue·PR로 조율한다. 새 필드는 기본값·선택 값으로 구버전 서버와 호환되게 한다.
-5. **DB 스키마 변경에는 마이그레이션을 추가한다.** 4단계에서 expo-sqlite + Drizzle을 도입할 때 스키마와 마이그레이션을 함께 관리하고 기존 개인 기록을 보존한다.
+4. **API 계약을 함께 맞춘다.** 계약 변경 시 BE `docs/API.md`와 `src/api/`의 TypeScript API 타입을 함께 검토·갱신한다. 다른 저장소 변경은 별도 Issue·PR로 조율한다. 새 필드는 기본값·선택 값으로 구버전 서버와 호환되게 한다.
+5. **DB 스키마 변경에는 마이그레이션을 추가한다.** expo-sqlite + Drizzle 스키마(`src/db/`)와 마이그레이션을 함께 관리하고 기존 개인 기록을 보존한다.
 6. **UI는 토큰만 쓴다.** 색상·글자·간격·반경은 `src/theme/`, 공통 UI는 `src/components/`에서 가져온다. 색상은 Figma v1.0 `독파민 / 색상 v1.0 (브라운 밝은안)`의 11개 역할 토큰(`colors.brand`, `colors.surface`, `colors.line`, `colors.text`, `colors.state`)을 쓴다. 화면·컴포넌트에 hex 색상을 하드코딩하지 않는다. 기본 문구는 한국어 존댓말이다. PRD D6에 따라 진행 막대 안에는 `84 / 240쪽`을 표시하고 퍼센트를 표시하지 않는다.
 7. **접근성.** 모든 터치 영역은 최소 44dp이며 `accessibilityRole`·`accessibilityLabel`을 지정한다. 상태와 선택은 색뿐 아니라 텍스트·아이콘 형태·굵기 등으로 구분하고 선택·비활성 상태도 보조 기술에 전달한다.
 8. **권한은 필요한 순간에 처음 한 번만 요청한다.** 카메라는 바코드 스캔 진입 시, 알림은 첫 독서 시작 시 요청한다. 거절해도 직접 입력·앱 안 안내 등 대체 경로가 동작해야 한다(NFR-07, NFR-08).
 9. **새 규칙·계산은 `src/domain/` 순수 함수로 둔다.** PRD·분석서의 Given/When/Then과 경계값을 Jest 테스트로 옮기며 테스트 이름에 요구사항·화면 ID와 한국어 문장을 쓴다.
-10. 실제 기능은 4단계의 해당 Issue 범위에서 구현한다. 인증 화면·바코드·타이머 UI 등 다른 Issue 소유 영역을 함께 확장하지 않는다.
+10. 기능은 해당 Issue 범위에서 구현한다. 인증 화면·바코드·타이머 UI 등 다른 Issue 소유 영역을 함께 확장하지 않는다.
 
 ## 이번 학기 범위 밖(구현하지 않음)
 캐릭터 성장, 독서 지도, AI 추천, 댓글·대댓글, 신고·차단, 공유 카드·완독 카드, 칭호, 회차, 보관 위치, 별도 소장본, 책 사진 직접 촬영(표지는 API 또는 기본 표지), 제목·저자 외부 검색, 가로 화면, 푸시 알림(타이머 진행 알림만 제공).
