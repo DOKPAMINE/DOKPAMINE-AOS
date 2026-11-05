@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useCameraPermissions } from 'expo-camera';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused } from 'expo-router';
 import { BookAddScreen } from '../BookAddScreen';
 import { BookForm } from '../BookForm';
 import { emptyBookValues } from '../validation';
@@ -9,8 +9,10 @@ import { catalogIsbn } from '../../../api/endpoints';
 import { isOnline } from '../../../api/connectivity';
 
 jest.mock('expo', () => ({ uuid: { v4: () => '00000000-0000-4000-8000-000000000001' } }));
-jest.mock('expo-router', () => ({ router: { replace: jest.fn(), back: jest.fn(), canGoBack: () => false } }));
-jest.mock('@react-navigation/native', () => ({ ...jest.requireActual('@react-navigation/native'), useIsFocused: jest.fn() }));
+jest.mock('expo-router', () => ({
+    router: { replace: jest.fn(), back: jest.fn(), canGoBack: () => false },
+    useIsFocused: jest.fn(),
+}));
 jest.mock('expo-camera', () => {
     const React = jest.requireActual<typeof import('react')>('react');
     const { View } = jest.requireActual<typeof import('react-native')>('react-native');

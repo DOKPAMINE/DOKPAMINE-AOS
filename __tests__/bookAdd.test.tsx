@@ -8,8 +8,10 @@ import { isOnline } from '../src/api/connectivity';
 import { ApiError } from '../src/api/errors';
 
 jest.mock('expo', () => ({ uuid: { v4: () => '00000000-0000-4000-8000-000000000001' } }));
-jest.mock('expo-router', () => ({ router: { replace: jest.fn(), back: jest.fn(), canGoBack: () => false } }));
-jest.mock('@react-navigation/native', () => ({ ...jest.requireActual('@react-navigation/native'), useIsFocused: () => true }));
+jest.mock('expo-router', () => ({
+    router: { replace: jest.fn(), back: jest.fn(), canGoBack: () => false },
+    useIsFocused: () => true,
+}));
 jest.mock('expo-camera', () => {
     const React = require('react');
     const { View } = require('react-native');

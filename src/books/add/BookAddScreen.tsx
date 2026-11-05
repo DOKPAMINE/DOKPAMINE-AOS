@@ -1,7 +1,6 @@
 import { uuid } from 'expo';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { router, type Href } from 'expo-router';
-import { useIsFocused } from '@react-navigation/native';
+import { router, useIsFocused, type Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { ApiError } from '../../api/errors';
