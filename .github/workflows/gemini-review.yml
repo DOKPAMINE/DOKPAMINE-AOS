@@ -25,7 +25,8 @@ jobs:
       !github.event.pull_request.draft &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 요청 240초 × 최대 2회와 재시도 대기 후에도 건너뜀 코멘트를 남길 시간을 확보한다.
+    timeout-minutes: 15
     # 보조 리뷰의 인프라 오류도 기존 필수 검사(app)에 영향을 주지 않는다.
     continue-on-error: true
     steps:

@@ -4,11 +4,14 @@ import json
 import os
 import re
 import subprocess
+import time
 import urllib.error
 import urllib.request
 
 MARKER = "<!-- gemini-review -->"
 DIFF_LIMIT = 200_000
+REQUEST_TIMEOUT = 240
+RETRY_DELAY = 20
 MODEL = os.environ.get("GEMINI_MODEL") or "gemini-3.8-flash"
 # GitHub API 실패는 리뷰를 건너뛰고, 그 밖의 예외는 스크립트 버그로 보고 job을 실패시킨다.
 GITHUB_ERRORS = (subprocess.CalledProcessError, subprocess.TimeoutExpired)
@@ -27,6 +30,24 @@ AGENTS.md의 '반드시 지킬 규칙', CONTRIBUTING.md의 커밋·PR 규칙 위
 def warn(message):
     # 응답 본문·예외 문자열은 키나 사용자 입력을 포함할 수 있어 로그에 내보내지 않는다.
     print(f"::warning::{message}", flush=True)
+
+
+def diagnostic(reason, attempts, started, error=None):
+    details = []
+    if error is not None:
+        details.append(f"예외 {type(error).__name__}")
+        if isinstance(error, urllib.error.HTTPError):
+            details.append(f"HTTP {error.code}")
+        elif isinstance(error, urllib.error.URLError) and isinstance(error.reason, TimeoutError):
+            details.append("원인 TimeoutError")
+    details.extend((f"시도 {attempts}회", f"경과 {time.monotonic() - started:.1f}초"))
+    return f"{reason} ({', '.join(details)})"
+
+
+def skip_review(reason, attempts, started, error=None):
+    message = diagnostic(f"리뷰를 건너뜀: {reason}", attempts, started, error)
+    warn(message)
+    return message
 
 
 def gh(*args, payload=None):
@@ -74,41 +95,66 @@ def review_context(repo, number, sha, base_sha):
 
 
 def generate_review(context, key):
-    request = urllib.request.Request(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
-        data=json.dumps({
-            "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-            "contents": [{"role": "user", "parts": [{
-                "text": json.dumps(context, ensure_ascii=False),
-            }]}],
-            # 사고 토큰도 출력 한도에 포함되어 너무 작으면 본문이 비거나 잘린다.
-            "generationConfig": {"maxOutputTokens": 32768},
-        }).encode("utf-8"),
-        headers={"Content-Type": "application/json", "x-goog-api-key": key},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=180) as response:
-            data = json.load(response)
-    except urllib.error.HTTPError as error:
-        warn(f"Gemini API HTTP {error.code}: 리뷰를 건너뜀")
-        return f"리뷰를 건너뜀: Gemini API 오류(HTTP {error.code}, 쿼터·설정을 확인해 주세요)."
-    except (OSError, ValueError, http.client.HTTPException):
-        warn("Gemini API 연결 또는 응답 해석 실패: 리뷰를 건너뜀")
-        return "리뷰를 건너뜀: Gemini API 연결 또는 응답 해석에 실패했습니다."
+    started = time.monotonic()
+    payload = {
+        "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+        "contents": [{"role": "user", "parts": [{
+            "text": json.dumps(context, ensure_ascii=False),
+        }]}],
+        # medium 기본값의 긴 사고 대기를 줄이고 최종 리뷰에 쓸 토큰은 남긴다.
+        # https://ai.google.dev/gemini-api/docs/generate-content/thinking
+        "generationConfig": {"maxOutputTokens": 16384,
+                             "thinkingConfig": {"thinkingLevel": "low"}},
+    }
+    # 호환성 재전송까지 합쳐 최대 2회로 제한해 무료 쿼터와 job 시간을 보존한다.
+    for attempt in (1, 2):
+        request = urllib.request.Request(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-goog-api-key": key},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
+                data = json.load(response)
+        except urllib.error.HTTPError as error:
+            if error.fp is not None:
+                error.close()
+            if attempt == 1 and error.code in (500, 503):
+                warn(diagnostic("Gemini API 일시 오류: 20초 후 한 번 재시도", attempt, started, error))
+                time.sleep(RETRY_DELAY)
+                continue
+            if attempt == 1 and error.code == 400:
+                # Gemini 2.5 등 thinkingLevel 비호환 모델에도 기존 변수 설정을 허용한다.
+                payload["generationConfig"].pop("thinkingConfig")
+                warn(diagnostic("Gemini API 설정 거부: thinkingConfig 없이 한 번 재전송",
+                                attempt, started, error))
+                continue
+            return skip_review("Gemini API 오류로 쿼터·설정을 확인해 주세요", attempt, started, error)
+        except (OSError, ValueError, http.client.HTTPException) as error:
+            timed_out = isinstance(error, TimeoutError) or (
+                isinstance(error, urllib.error.URLError) and isinstance(error.reason, TimeoutError)
+            )
+            if attempt == 1 and timed_out:
+                warn(diagnostic("Gemini API 시간 초과: 20초 후 한 번 재시도", attempt, started, error))
+                time.sleep(RETRY_DELAY)
+                continue
+            return skip_review("Gemini API 연결 또는 응답 해석 실패", attempt, started, error)
+        break
 
     candidates = (data.get("candidates") if isinstance(data, dict) else None) or []
     candidate = candidates[0] if candidates else {}
     if candidate.get("finishReason") not in ("STOP", "MAX_TOKENS"):
-        warn("Gemini API에서 완료된 리뷰를 받지 못함: 리뷰를 건너뜀")
-        return "리뷰를 건너뜀: Gemini API 응답이 비어 있거나 차단되었습니다."
+        reason = ("Gemini API 안전 필터(SAFETY)로 차단되었습니다"
+                  if candidate.get("finishReason") == "SAFETY"
+                  else "Gemini API 응답이 비어 있거나 차단되었습니다")
+        return skip_review(reason, attempt, started)
     review = "\n".join(
         part.get("text", "") for part in candidate.get("content", {}).get("parts", [])
         if not part.get("thought")
     ).strip()
     if not review:
-        warn("Gemini API 빈 응답: 리뷰를 건너뜀")
-        return "리뷰를 건너뜀: Gemini API 응답이 비어 있습니다."
+        return skip_review("Gemini API 응답이 비어 있습니다", attempt, started)
     if candidate.get("finishReason") == "MAX_TOKENS":
         review += "\n\n※ 모델 출력 한도로 리뷰 응답 일부가 잘렸습니다."
     return review
