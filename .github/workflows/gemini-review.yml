@@ -1,5 +1,6 @@
 # 조직 Secret GEMINI_API_KEY를 이 저장소에 공개해야 리뷰를 호출할 수 있다.
-# 무료 등급은 요청·토큰 한도가 있고 입력이 제품 개선에 사용될 수 있어 민감한 diff에 주의한다.
+# 무료 등급은 프로젝트별 분당·일일 요청·토큰 한도(AI Studio에서 확인)가 있어 초과 시 429로 리뷰를 건너뛴다.
+# 무료 등급 입력은 제품 개선에 사용될 수 있어 민감한 diff에 주의한다.
 # 안정 Flash 기본값 근거: https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash
 # 무료 등급·데이터 정책: https://ai.google.dev/gemini-api/docs/pricing
 # 모델 교체는 저장소 변수 GEMINI_MODEL로, 중단은 Actions에서 이 워크플로를 Disable한다.
@@ -24,7 +25,7 @@ jobs:
       !github.event.pull_request.draft &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     # 보조 리뷰의 인프라 오류도 기존 필수 검사(app)에 영향을 주지 않는다.
     continue-on-error: true
     steps:

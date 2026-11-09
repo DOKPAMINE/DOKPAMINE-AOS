@@ -1,5 +1,5 @@
-"""Advisory Gemini review; use only the standard library and the runner's gh CLI."""
-
+# 러너 기본 환경만으로 돌도록 표준 라이브러리와 gh CLI만 쓴다.
+import http.client
 import json
 import os
 import re
@@ -10,6 +10,8 @@ import urllib.request
 MARKER = "<!-- gemini-review -->"
 DIFF_LIMIT = 200_000
 MODEL = os.environ.get("GEMINI_MODEL") or "gemini-3.8-flash"
+# GitHub API 실패는 리뷰를 건너뛰고, 그 밖의 예외는 스크립트 버그로 보고 job을 실패시킨다.
+GITHUB_ERRORS = (subprocess.CalledProcessError, subprocess.TimeoutExpired)
 SYSTEM_PROMPT = """당신은 독파민 Android 저장소의 코드 리뷰어입니다. 한국어 존댓말로 리뷰하세요.
 AGENTS.md의 '반드시 지킬 규칙', CONTRIBUTING.md의 커밋·PR 규칙 위반,
 실제 버그, 보안 문제(키·비밀값 커밋 등)를 우선 확인하세요. 비밀값 자체는 인용하지 마세요.
@@ -32,7 +34,8 @@ def gh(*args, payload=None):
         ["gh", *args],
         input=json.dumps(payload) if payload is not None else None,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
         timeout=30,
     )
@@ -49,7 +52,7 @@ def review_context(repo, number, sha, base_sha):
         "--json", "title,body,commits,headRefOid",
     ))
     if metadata["headRefOid"] != sha:
-        raise ValueError("stale PR")
+        return None, False
     diff = gh("pr", "diff", number, "--repo", repo).encode("utf-8")
     # PR에서 규칙을 약화하지 못하도록 이벤트의 base 커밋에서 읽는다.
     rules = {
@@ -78,22 +81,23 @@ def generate_review(context, key):
             "contents": [{"role": "user", "parts": [{
                 "text": json.dumps(context, ensure_ascii=False),
             }]}],
-            "generationConfig": {"maxOutputTokens": 8192},
+            # 사고 토큰도 출력 한도에 포함되어 너무 작으면 본문이 비거나 잘린다.
+            "generationConfig": {"maxOutputTokens": 32768},
         }).encode("utf-8"),
         headers={"Content-Type": "application/json", "x-goog-api-key": key},
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=90) as response:
+        with urllib.request.urlopen(request, timeout=180) as response:
             data = json.load(response)
     except urllib.error.HTTPError as error:
         warn(f"Gemini API HTTP {error.code}: 리뷰를 건너뜀")
         return f"리뷰를 건너뜀: Gemini API 오류(HTTP {error.code}, 쿼터·설정을 확인해 주세요)."
-    except (OSError, ValueError):
+    except (OSError, ValueError, http.client.HTTPException):
         warn("Gemini API 연결 또는 응답 해석 실패: 리뷰를 건너뜀")
         return "리뷰를 건너뜀: Gemini API 연결 또는 응답 해석에 실패했습니다."
 
-    candidates = data.get("candidates") or []
+    candidates = (data.get("candidates") if isinstance(data, dict) else None) or []
     candidate = candidates[0] if candidates else {}
     if candidate.get("finishReason") not in ("STOP", "MAX_TOKENS"):
         warn("Gemini API에서 완료된 리뷰를 받지 못함: 리뷰를 건너뜀")
@@ -139,28 +143,33 @@ def main():
     repo = os.environ["GITHUB_REPOSITORY"]
     number = os.environ["PR_NUMBER"]
     sha = os.environ["PR_HEAD_SHA"]
+    key = os.environ.get("GEMINI_API_KEY", "")
     truncated = False
-    try:
-        if not re.fullmatch(r"[A-Za-z0-9._-]+", MODEL):
-            raise ValueError("invalid model")
-        key = os.environ.get("GEMINI_API_KEY", "")
-        if not key:
-            warn("GEMINI_API_KEY가 없어 리뷰를 건너뜀")
-            review = "리뷰를 건너뜀: 조직 Secret GEMINI_API_KEY의 저장소 접근 설정을 확인해 주세요."
-        else:
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", MODEL):
+        warn("GEMINI_MODEL 형식이 올바르지 않아 리뷰를 건너뜀")
+        review = "리뷰를 건너뜀: 저장소 변수 GEMINI_MODEL 값을 확인해 주세요."
+    elif not key:
+        warn("GEMINI_API_KEY가 없어 리뷰를 건너뜀")
+        review = "리뷰를 건너뜀: 조직 Secret GEMINI_API_KEY의 저장소 접근 설정을 확인해 주세요."
+    else:
+        try:
             context, truncated = review_context(repo, number, sha, os.environ["PR_BASE_SHA"])
+        except GITHUB_ERRORS:
+            # 너무 큰 diff는 GitHub가 거절하므로 건너뛴 이유를 코멘트로 남긴다.
+            warn("GitHub에서 리뷰 입력을 가져오지 못해 리뷰를 건너뜀")
+            review = "리뷰를 건너뜀: GitHub에서 PR 정보나 diff를 가져오지 못했습니다."
+        else:
+            if context is None:
+                warn("새 커밋이 있어 이전 실행의 리뷰를 건너뜀")
+                return
             review = generate_review(context, key)
-    except Exception:
-        warn("리뷰 입력 수집 또는 응답 처리 실패: 리뷰를 건너뜀")
-        review = "리뷰를 건너뜀: 입력 수집 또는 응답 처리에 실패했습니다."
     try:
         # API 대기 중 새 push가 있었다면 이전 SHA의 리뷰로 최신 코멘트를 덮지 않는다.
         if current_head(repo, number) != sha:
             warn("새 커밋이 있어 이전 실행의 코멘트 갱신을 건너뜀")
             return
-        body = comment_body(MODEL, sha, review, truncated)
-        upsert_comment(repo, number, body)
-    except Exception:
+        upsert_comment(repo, number, comment_body(MODEL, sha, review, truncated))
+    except GITHUB_ERRORS:
         warn("Gemini 리뷰 코멘트를 갱신하지 못했습니다. 기존 CI는 계속 실행됩니다.")
 
 
