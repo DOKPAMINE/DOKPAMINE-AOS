@@ -6,7 +6,7 @@ import { bookDto, quoteDto, reviewDto, sessionDto, snapshotRecords } from './ser
 export interface SyncTransport {
     putBook(body: BookDto): Promise<unknown>;
     putSession(body: SessionDto): Promise<unknown>;
-    putReview(body: ReviewDto): Promise<unknown>;
+    putReview(body: ReviewDto): Promise<ReviewDto | void>;
     putQuote(body: QuoteDto): Promise<unknown>;
     snapshot(): Promise<SyncSnapshot>;
 }
@@ -19,7 +19,7 @@ export function createSyncEngine(repository: RecordRepository, transport: SyncTr
     let invalidSnapshotCount = 0;
     const listeners = new Set<() => void>();
     const setState = (next: Omit<SyncState, 'failedCount'>) => {
-        state = { ...next, failedCount: failedRows.size + invalidSnapshotCount };
+        state = { ...next, failedCount: failedRows.size + invalidSnapshotCount + repository.reviews.conflicts().length };
         listeners.forEach(listener => listener());
     };
     let active: Promise<void> | undefined;
@@ -52,6 +52,16 @@ export function createSyncEngine(repository: RecordRepository, transport: SyncTr
         for (const row of repository.books.list({ includeDeleted: true, syncPending: true })) {
             await attempt(`book:${row.id}`, () => sendBook(row.id));
         }
+        async function sendWithParent<T>(bookId: string, put: () => Promise<T>): Promise<T> {
+            checkStopped();
+            try { return await put(); } catch (error) {
+                if (!(error instanceof ApiError) || error.status !== 409 || error.code !== 'BOOK_NOT_SYNCED') throw error;
+                // 서버에 없는 부모는 로컬 완료 여부와 무관하게 다시 전송한다.
+                await sendBook(bookId);
+                checkStopped();
+                return put();
+            }
+        }
         async function sendChildren<T extends { id: string; bookId: string; localVersion: number }>(
             kind: string,
             entity: { list(options: { includeDeleted: boolean; syncPending: boolean }): T[]; markSynced(id: string, version: number): void },
@@ -59,21 +69,43 @@ export function createSyncEngine(repository: RecordRepository, transport: SyncTr
         ) {
             for (const row of entity.list({ includeDeleted: true, syncPending: true })) {
                 await attempt(`${kind}:${row.id}`, async () => {
-                    checkStopped();
-                    try { await put(row); } catch (error) {
-                        if (!(error instanceof ApiError) || error.status !== 409 || error.code !== 'BOOK_NOT_SYNCED') throw error;
-                        // 서버에 없는 부모는 로컬 완료 여부와 무관하게 다시 전송한다.
-                        await sendBook(row.bookId);
-                        checkStopped();
-                        await put(row);
-                    }
+                    await sendWithParent(row.bookId, () => put(row));
                     if (!stopped) entity.markSynced(row.id, row.localVersion);
                 });
             }
         }
         await sendChildren('session', repository.sessions, row => transport.putSession(sessionDto(row)));
-        await sendChildren('review', repository.reviews, row => transport.putReview(reviewDto(row)));
+        for (const row of repository.reviews.list({ includeDeleted: true, syncPending: true })) {
+            if (row.conflict) continue;
+            await attempt(`review:${row.id}`, async () => {
+                try {
+                    const saved = await sendWithParent(row.bookId, () => transport.putReview(reviewDto(row)));
+                    if (!stopped) repository.reviews.acknowledge(row, saved?.version ?? row.serverVersion);
+                } catch (error) {
+                    if (!(error instanceof ApiError) || error.status !== 409 || error.code !== 'REVIEW_VERSION_CONFLICT' || stopped) throw error;
+                    repository.reviews.markConflict(row.id);
+                }
+            });
+        }
         await sendChildren('quote', repository.quotes, row => transport.putQuote(quoteDto(row)));
+    }
+    async function loadConflictReviews() {
+        const unresolved = repository.reviews.conflicts().filter(row => row.conflict?.latest === undefined);
+        if (!unresolved.length || stopped) return;
+        const snapshot = await transport.snapshot();
+        if (stopped) return;
+        const reviews = new Map(snapshotRecords(snapshot).reviews.map(row => [row.id, row]));
+        const serverIds = new Set(snapshot.reviews.map(row => row.id));
+        for (const row of unresolved) {
+            const latest = reviews.get(row.id);
+            if (!serverIds.has(row.id) || latest?.deleted) {
+                repository.reviews.setConflictLatest(row.id, null);
+            } else if (latest && latest.serverVersion !== null) {
+                repository.reviews.setConflictLatest(row.id, {
+                    oneLine: latest.oneLine, body: latest.body, visibility: latest.visibility, version: latest.serverVersion,
+                });
+            }
+        }
     }
     async function run() {
         try {
@@ -96,7 +128,8 @@ export function createSyncEngine(repository: RecordRepository, transport: SyncTr
                     }
                 }
                 await upload();
-                if (!stopped) setState({ status: restoreError || failedRows.size || invalidSnapshotCount ? 'error' : 'idle', error: restoreError });
+                await loadConflictReviews();
+                if (!stopped) setState({ status: restoreError || failedRows.size || invalidSnapshotCount || repository.reviews.conflicts().length ? 'error' : 'idle', error: restoreError });
                 // 복원 알림은 다음 업로드를 예약할 수 있지만 복원 실패 자체는 즉시 반복하지 않는다.
             }
         } catch (error) {

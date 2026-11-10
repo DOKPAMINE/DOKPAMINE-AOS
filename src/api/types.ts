@@ -81,6 +81,7 @@ export interface SessionDto {
 }
 
 export interface ReviewDto {
+    version?: number | null;
     id: string;
     bookId: string;
     oneLine?: string | null;

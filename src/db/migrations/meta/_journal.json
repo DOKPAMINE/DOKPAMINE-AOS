@@ -8,6 +8,13 @@
       "when": 1793597069507,
       "tag": "0000_majestic_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794294153856,
+      "tag": "0001_quick_gargoyle",
+      "breakpoints": true
     }
   ]
 }

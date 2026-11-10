@@ -33,6 +33,9 @@ export function MyScreen() {
             <Text accessibilityRole="header" style={styles.heading}>동기화 상태</Text>
             {records.kind === 'ready' ? <Text accessibilityLiveRegion="polite" style={styles.body}>전송 대기 {records.pendingCount}건</Text>
                 : <Text style={styles.meta}>기록을 불러오면 전송 대기 건수를 확인할 수 있어요.</Text>}
+            {records.kind === 'ready' && records.conflictBooks.map(book => <SecondaryButton key={book.id}
+                label={`${book.title} · 감상 충돌 확인`}
+                onPress={() => router.push({ pathname: '/book/[id]/review', params: { id: book.id } })} />)}
         </Card>
         <SecondaryButton label="설정" onPress={() => router.push('/settings')} />
     </Screen>;

@@ -1,13 +1,13 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
 import { parseEndPage } from '../domain/pageRules';
 import { validateBook } from '../domain/bookRules';
 import { nextRecordVersion } from '../domain/recordVersion';
 import * as schema from './schema';
-import type { BookRecord, QuoteRecord, ReviewRecord, SessionRecord } from './schema';
+import type { BookRecord, QuoteRecord, ReviewConflict, ReviewRecord, SessionRecord } from './schema';
 
 type LocalRecord = Pick<BookRecord, 'id' | 'createdAt' | 'syncPending' | 'localVersion' | 'deleted'>;
-export type SaveInput<T extends LocalRecord> = Omit<T, keyof Omit<LocalRecord, 'id'> | 'updatedAt'>;
+export type SaveInput<T extends LocalRecord> = Omit<T, keyof Omit<LocalRecord, 'id'> | 'updatedAt' | 'serverVersion' | 'conflict'>;
 export interface ListOptions { readonly bookId?: string; readonly includeDeleted?: boolean; readonly syncPending?: boolean }
 export interface EntityRepository<T extends LocalRecord> {
     save(input: SaveInput<T>): T;
@@ -44,7 +44,7 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
             const timestamp = now();
             const localVersion = nextRecordVersion(timestamp, existing?.localVersion);
             return {
-                ...input, createdAt: existing?.createdAt ?? timestamp, syncPending: true,
+                ...existing, ...input, createdAt: existing?.createdAt ?? timestamp, syncPending: true,
                 localVersion, deleted, ...(updatedAt ? { updatedAt: timestamp } : {}),
             } as T;
         };
@@ -115,7 +115,7 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
             throw new Error('시작 페이지를 확인해 주세요.');
         }
     });
-    const reviews = entity<ReviewRecord>({
+    const reviewEntity = entity<ReviewRecord>({
         get: id => db.select().from(schema.reviews).where(eq(schema.reviews.id, id)).get(),
         list: ({ includeDeleted, syncPending, bookId }) => db.select().from(schema.reviews).where(and(
             includeDeleted ? undefined : eq(schema.reviews.deleted, false),
@@ -125,6 +125,59 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
         markSynced: (id, version) => { db.update(schema.reviews).set({ syncPending: false }).where(and(eq(schema.reviews.id, id), eq(schema.reviews.localVersion, version))).run(); },
         put: row => { db.insert(schema.reviews).values(row).onConflictDoUpdate({ target: schema.reviews.id, set: row }).run(); },
     }, true, (input, existing) => { parent(input, existing); });
+    const reviews = {
+        ...reviewEntity,
+        acknowledge(row: ReviewRecord, serverVersion: number | null) {
+            const current = reviewEntity.get(row.id, true);
+            if (!current || current.conflict || current.serverVersion !== row.serverVersion) return;
+            // 전송 중에 편집한 내용은 유지하고 방금 저장된 서버 버전만 이어받는다.
+            db.update(schema.reviews).set({
+                serverVersion, syncPending: current.localVersion !== row.localVersion,
+            }).where(eq(schema.reviews.id, row.id)).run();
+        },
+        conflicts(bookId?: string) {
+            return db.select().from(schema.reviews).where(and(
+                isNotNull(schema.reviews.conflict),
+                bookId === undefined ? undefined : eq(schema.reviews.bookId, bookId),
+            )).all();
+        },
+        markConflict(id: string) {
+            if (!reviewEntity.get(id, true)?.conflict) {
+                db.update(schema.reviews).set({ conflict: {} }).where(eq(schema.reviews.id, id)).run();
+                notify();
+            }
+        },
+        setConflictLatest(id: string, latest: NonNullable<ReviewConflict['latest']> | null) {
+            const current = reviewEntity.get(id, true);
+            if (!current?.conflict || current.conflict.latest !== undefined) return;
+            db.update(schema.reviews).set({ conflict: { latest } }).where(eq(schema.reviews.id, id)).run();
+            notify();
+        },
+        resolveConflict(id: string, latestVersion: number | null, visibility: ReviewRecord['visibility'], newId: string) {
+            transaction(() => {
+                const current = reviewEntity.get(id, true);
+                const latest = current?.conflict?.latest;
+                if (!current || latest === undefined || (latest?.version ?? null) !== latestVersion) {
+                    throw new Error('최신 감상을 다시 확인해 주세요.');
+                }
+                if (latest === null) {
+                    if (!current.deleted) {
+                        reviewEntity.save({ id: newId, bookId: current.bookId, oneLine: current.oneLine,
+                            body: current.body, visibility, publishedAt: null });
+                    }
+                    db.update(schema.reviews).set({ conflict: null, deleted: true, syncPending: false })
+                        .where(eq(schema.reviews.id, id)).run();
+                    return;
+                }
+                const timestamp = now();
+                db.update(schema.reviews).set({
+                    visibility, serverVersion: latest.version, conflict: null, syncPending: true,
+                    updatedAt: timestamp, localVersion: nextRecordVersion(timestamp, current.localVersion),
+                }).where(eq(schema.reviews.id, id)).run();
+            });
+            notify();
+        },
+    };
     const quotes = entity<QuoteRecord>({
         get: id => db.select().from(schema.quotes).where(eq(schema.quotes.id, id)).get(),
         list: ({ includeDeleted, syncPending, bookId }) => db.select().from(schema.quotes).where(and(

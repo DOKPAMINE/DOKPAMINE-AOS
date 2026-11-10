@@ -5,7 +5,7 @@ import type { RecordRepository } from '../db/repository';
 import type { BookRecord, QuoteRecord, ReviewRecord } from '../db/schema';
 
 type Records = { kind: 'loading' | 'error' } | {
-    kind: 'ready'; repository: RecordRepository; book: BookRecord | null; reviews: ReviewRecord[]; quotes: QuoteRecord[];
+    kind: 'ready'; repository: RecordRepository; book: BookRecord | null; reviews: ReviewRecord[]; conflicts: ReviewRecord[]; quotes: QuoteRecord[];
 };
 
 /** S-50~S-52 / NFR-04: 서버 없이 로컬 기록을 읽고 구독한다. */
@@ -22,6 +22,7 @@ export function useReviewRecords(bookId: string) {
                 try {
                     setRecords({ kind: 'ready', repository, book: repository.books.get(bookId),
                         reviews: repository.reviews.list({ bookId }).sort((a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id)),
+                        conflicts: repository.reviews.conflicts(bookId),
                         quotes: repository.quotes.list({ bookId }).sort((a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id)),
                     });
                 } catch { setRecords({ kind: 'error' }); }

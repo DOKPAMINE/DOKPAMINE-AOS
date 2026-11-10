@@ -1,3 +1,4 @@
+import migrations from '../migrations/migrations';
 import { openDatabaseAsync } from 'expo-sqlite';
 import { initializeDatabase, prepareRecordAccount } from '../client';
 import { createSyncEngine } from '../../sync/engine';
@@ -16,7 +17,7 @@ test('NFR-04 S-10 초기화 실패 후 재시도하고 동시 호출은 같은 �
     expect(initializeDatabase()).toBe(first);
     const ready = await first;
     expect(ready.repository.books.list()).toEqual([]);
-    expect(memory.connection.prepare('SELECT * FROM __drizzle_migrations').all()).toHaveLength(1);
+    expect(memory.connection.prepare('SELECT * FROM __drizzle_migrations').all()).toHaveLength(migrations.journal.entries.length);
     expect(open).toHaveBeenCalledTimes(2);
     expect(open).toHaveBeenLastCalledWith('dokpamine.db');
     memory.connection.close();

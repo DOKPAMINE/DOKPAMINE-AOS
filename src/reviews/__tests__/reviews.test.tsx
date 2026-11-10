@@ -134,3 +134,17 @@ test('NFR-04 S-50 저장소 오류에서 재시도할 수 있어요', async () =
     await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
     expect(await screen.findByRole('button', { name: '감상 쓰기' })).toBeOnTheScreen();
 });
+
+test('NFR-05·09 S-50 서버 비공개 감상과 공개 초안을 보고 비공개로 다시 저장해요', async () => {
+    const id = '00000000-0000-4000-8000-000000000003';
+    repository.reviews.save({ id, bookId, oneLine: '기기 초안', body: null, visibility: 'PUBLIC', publishedAt: null });
+    repository.reviews.markConflict(id);
+    repository.reviews.setConflictLatest(id, { oneLine: '서버 최신 감상', body: null, visibility: 'PRIVATE', version: 3 });
+
+    await renderRouter(routes, { initialUrl: base });
+    expect(await screen.findByText('서버의 최신 감상 · 비공개')).toBeOnTheScreen();
+    expect(screen.getByText('서버 최신 감상')).toBeOnTheScreen();
+    expect(screen.getByText('기기 초안')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: '초안을 비공개로 저장' }));
+    expect(repository.reviews.get(id)).toMatchObject({ visibility: 'PRIVATE', serverVersion: 3, conflict: null, syncPending: true });
+});

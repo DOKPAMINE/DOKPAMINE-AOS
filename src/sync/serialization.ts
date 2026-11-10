@@ -23,8 +23,8 @@ export function sessionDto(row: SessionRecord): SessionDto {
     return { ...record, createdAt: iso(row.createdAt), startedAt: iso(row.startedAt), endedAt: iso(row.endedAt) };
 }
 export function reviewDto(row: ReviewRecord): ReviewDto {
-    const { syncPending, localVersion, publishedAt, ...record } = row;
-    return { ...record, createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt) };
+    const { syncPending, localVersion, publishedAt, conflict, serverVersion, ...record } = row;
+    return { ...record, ...(serverVersion === null ? {} : { version: serverVersion }), createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt) };
 }
 export function quoteDto(row: QuoteRecord): QuoteDto {
     const { syncPending, localVersion, ...record } = row;
@@ -71,8 +71,10 @@ export function snapshotRecords(snapshot: SyncSnapshot) {
         reviews: convert(snapshot.reviews, (row): ReviewRecord => {
             valid(uuid(row.bookId) && text(row.oneLine, 100) && text(row.body, 5000) &&
                 !!(row.oneLine?.trim() || row.body?.trim()) && ['PRIVATE', 'PUBLIC'].includes(row.visibility));
-            return { ...row, ...local(row), oneLine: row.oneLine ?? null, body: row.body ?? null,
-                publishedAt: null, updatedAt: timestamp(row.updatedAt) };
+            const { version, ...review } = row;
+            valid(version == null || integer(version));
+            return { ...review, ...local(row), oneLine: row.oneLine ?? null, body: row.body ?? null,
+                publishedAt: null, serverVersion: version ?? null, conflict: null, updatedAt: timestamp(row.updatedAt) };
         }),
         quotes: convert(snapshot.quotes, (row): QuoteRecord => {
             valid(uuid(row.bookId) && typeof row.text === 'string' && row.text.length >= 1 && row.text.length <= 1000 &&
