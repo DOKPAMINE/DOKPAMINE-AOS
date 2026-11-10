@@ -281,3 +281,64 @@ test('NFR-05 S-81 로그아웃 중 도착한 응답은 기록의 대기를 해�
     expect(records.books.get(book.id)?.syncPending).toBe(true);
     expect(transport.putSession).not.toHaveBeenCalled();
 });
+
+test('NFR-05 S-51 첫 PUT 응답의 버전으로 전송 중 편집과 다음 삭제를 동기화해요', async () => {
+    const draft = { id: id(3), bookId: book.id, oneLine: '첫 감상', body: null, visibility: 'PRIVATE' as const, publishedAt: null };
+    records.reviews.save(draft);
+    transport.putReview.mockImplementationOnce(async request => {
+        records.reviews.save({ ...draft, oneLine: '전송 중 수정' });
+        return { ...request, version: 0 };
+    }).mockImplementation(async request => ({ ...request, version: (request.version ?? 0) + 1 }));
+    const engine = createSyncEngine(records, transport, online);
+    await engine.sync();
+    expect(transport.putReview.mock.calls[0][0]).not.toHaveProperty('version');
+    expect(records.reviews.get(draft.id)).toMatchObject({ serverVersion: 0, syncPending: true, oneLine: '전송 중 수정' });
+    await engine.sync();
+    expect(transport.putReview.mock.calls[1][0]).toMatchObject({ version: 0, oneLine: '전송 중 수정' });
+    records.reviews.softDelete(draft.id);
+    await engine.sync();
+    expect(transport.putReview.mock.calls[2][0]).toMatchObject({ version: 1, deleted: true });
+});
+
+test('NFR-05·09 S-50 오래된 공개 초안은 최신 비공개 감상을 확인하고 선택할 때까지 전송하지 않아요', async () => {
+    const draft = { id: id(3), bookId: book.id, oneLine: '로컬 초안', body: null, visibility: 'PUBLIC' as const, publishedAt: null };
+    const initial = records.reviews.save(draft);
+    records.reviews.markSynced(initial.id, initial.localVersion);
+    const server = { ...reviewDto(initial), oneLine: '서버 초기 감상', version: 0 };
+    transport.snapshot.mockResolvedValueOnce({ ...empty(), reviews: [server] });
+    const engine = createSyncEngine(records, transport, online);
+    await engine.afterLogin();
+    expect(records.reviews.get(draft.id)?.serverVersion).toBe(0);
+
+    records.reviews.save(draft);
+    transport.putReview.mockRejectedValueOnce(new ApiError('http', 'REVIEW_VERSION_CONFLICT', '버전 충돌', 409));
+    transport.snapshot.mockResolvedValueOnce({ ...empty(), reviews: [{ ...server, visibility: 'PRIVATE', oneLine: '서버 최신 감상', version: 2 }] });
+    await engine.sync();
+    const restarted = createSyncEngine(records, transport, online);
+    await restarted.sync();
+    expect(transport.putReview).toHaveBeenCalledTimes(1);
+    expect(records.reviews.get(draft.id)).toMatchObject({
+        oneLine: '로컬 초안', serverVersion: 0, syncPending: true,
+        conflict: { latest: { oneLine: '서버 최신 감상', visibility: 'PRIVATE', version: 2 } },
+    });
+
+    records.reviews.resolveConflict(draft.id, 2, 'PRIVATE', id(4));
+    transport.putReview.mockImplementationOnce(async request => ({ ...request, version: 3 }));
+    await restarted.sync();
+    expect(transport.putReview.mock.calls[1][0]).toMatchObject({ version: 2, visibility: 'PRIVATE', oneLine: '로컬 초안' });
+    expect(records.reviews.get(draft.id)).toMatchObject({ conflict: null, serverVersion: 3, syncPending: false });
+});
+
+test('NFR-05·09 S-50 서버에서 삭제한 감상은 초안을 다시 저장할 때 새 ID로 생성해요', async () => {
+    const draft = records.reviews.save({ id: id(3), bookId: book.id, oneLine: '로컬 초안', body: null, visibility: 'PRIVATE', publishedAt: null });
+    transport.putReview.mockRejectedValueOnce(new ApiError('http', 'REVIEW_VERSION_CONFLICT', '버전 충돌', 409));
+    const engine = createSyncEngine(records, transport, online);
+    await engine.sync();
+    expect(records.reviews.get(draft.id)).toMatchObject({ conflict: { latest: null }, oneLine: '로컬 초안' });
+
+    records.reviews.resolveConflict(draft.id, null, 'PRIVATE', id(4));
+    await engine.sync();
+    expect(records.reviews.get(draft.id)).toBeNull();
+    expect(transport.putReview.mock.calls[1][0]).toMatchObject({ id: id(4), oneLine: '로컬 초안' });
+    expect(transport.putReview.mock.calls[1][0]).not.toHaveProperty('version');
+});

@@ -7,7 +7,7 @@ import type { BookRecord, SessionRecord } from '../db/schema';
 import { subscribeSyncState } from '../sync';
 
 type MyRecords = { kind: 'loading' | 'error' } | {
-    kind: 'ready'; books: BookRecord[]; sessions: SessionRecord[]; pendingCount: number; now: number;
+    kind: 'ready'; books: BookRecord[]; sessions: SessionRecord[]; pendingCount: number; conflictBooks: { id: string; title: string }[]; now: number;
 };
 
 /** S-80 / NFR-04: 삭제 전송 대기를 포함해 모든 기록의 대기 행을 기존 읽기 API로 조회한다. */
@@ -23,7 +23,11 @@ export function useMyRecords() {
             try {
                 const pendingCount = [repository.books, repository.sessions, repository.reviews, repository.quotes]
                     .reduce((sum, entity) => sum + entity.list({ includeDeleted: true, syncPending: true }).length, 0);
-                setRecords({ kind: 'ready', books: repository.books.list(), sessions: repository.sessions.list(), pendingCount, now: Date.now() });
+                const conflictBookIds = new Set(repository.reviews.conflicts().map(row => row.bookId));
+                const conflictBooks = Array.from(conflictBookIds, id => ({
+                    id, title: repository?.books.get(id, true)?.title ?? '삭제된 책',
+                }));
+                setRecords({ kind: 'ready', books: repository.books.list(), sessions: repository.sessions.list(), pendingCount, conflictBooks, now: Date.now() });
             } catch { setRecords({ kind: 'error' }); }
         };
         void initializeDatabase().then(prepared => {

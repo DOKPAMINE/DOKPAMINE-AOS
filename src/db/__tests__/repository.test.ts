@@ -1,3 +1,4 @@
+import migrations from '../migrations/migrations';
 import { eq } from 'drizzle-orm';
 import { prepareRecordDatabase } from '../client';
 import { createRecordRepository, type EntityRepository, type RecordDatabase, type RecordRepository, type SaveInput } from '../repository';
@@ -173,7 +174,7 @@ test('NFR-04 S-30 마이그레이션을 다시 적용해도 기존 기록·삭�
     const before = repository.sessions.get(sessionId, true);
     await prepareRecordDatabase(memory.sqlite);
     expect(repository.sessions.get(sessionId, true)).toEqual(before);
-    expect(memory.connection.prepare('SELECT * FROM __drizzle_migrations').all()).toHaveLength(1);
+    expect(memory.connection.prepare('SELECT * FROM __drizzle_migrations').all()).toHaveLength(migrations.journal.entries.length);
     expect(db.select().from(books).all()).toHaveLength(1);
     expect(memory.connection.prepare('PRAGMA foreign_keys').get()).toMatchObject({ foreign_keys: 1 });
 });

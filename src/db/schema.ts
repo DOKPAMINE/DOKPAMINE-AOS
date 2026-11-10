@@ -2,6 +2,10 @@ import { sql } from 'drizzle-orm';
 import { check, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { Genre } from '../domain/pageRules';
 
+export type ReviewConflict = {
+    latest?: { oneLine: string | null; body: string | null; visibility: 'PRIVATE' | 'PUBLIC'; version: number } | null;
+};
+
 const recordColumns = () => ({
     // ID는 호출자가 만든 UUID를 그대로 저장한다(특히 타이머 시작 시 생성한 세션 ID).
     id: text('id').primaryKey().notNull(),
@@ -55,6 +59,8 @@ export const reviews = sqliteTable('reviews', {
     body: text('body'),
     visibility: text('visibility', { enum: ['PRIVATE', 'PUBLIC'] }).notNull().default('PRIVATE'),
     publishedAt: integer('published_at'),
+    serverVersion: integer('server_version'),
+    conflict: text('conflict', { mode: 'json' }).$type<ReviewConflict>(),
     updatedAt: integer('updated_at').notNull(),
 }, table => [
     index('reviews_book_id').on(table.bookId),
