@@ -57,12 +57,14 @@ function ReviewConflictCard({ review, repository }: { review: ReviewRecord; repo
         <Text style={styles.meta}>{review.deleted ? '기기에 저장된 삭제 요청' : `기기에 보관한 초안 · ${visibilityLabel(review.visibility)}`}</Text>
         {review.oneLine ? <Text style={styles.body}>{review.oneLine}</Text> : null}
         {review.body ? <Text style={styles.body}>{review.body}</Text> : null}
-        {latest === undefined ? <Text style={styles.meta}>인터넷에 연결되면 최신 감상을 확인해요.</Text> : <>
-            {latest === null ? <Text style={styles.meta}>서버에서 삭제된 감상이에요.</Text> : <>
-                <Text style={styles.label}>서버의 최신 감상 · {visibilityLabel(latest.visibility)}</Text>
-                {latest.oneLine ? <Text style={styles.body}>{latest.oneLine}</Text> : null}
-                {latest.body ? <Text style={styles.body}>{latest.body}</Text> : null}
-            </>}
+        <Text accessibilityLiveRegion="polite" style={latest ? styles.label : styles.meta}>
+            {latest === undefined ? '인터넷에 연결되면 최신 감상을 확인해요.'
+                : latest === null ? '서버에서 삭제된 감상이에요.'
+                    : `서버의 최신 감상 · ${visibilityLabel(latest.visibility)}`}
+        </Text>
+        {latest !== undefined && <>
+            {latest?.oneLine ? <Text style={styles.body}>{latest.oneLine}</Text> : null}
+            {latest?.body ? <Text style={styles.body}>{latest.body}</Text> : null}
             {review.deleted
                 ? <SecondaryButton label={latest === null ? '삭제 확인' : '최신 감상 삭제'} onPress={() => resolve(review.visibility)} />
                 : <>
