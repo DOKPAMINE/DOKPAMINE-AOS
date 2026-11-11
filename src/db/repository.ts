@@ -5,7 +5,7 @@ import { validateBook } from '../domain/bookRules';
 import { validateNewTimer, validateSessionPageRange } from '../domain/syncValidation';
 import { nextRecordVersion } from '../domain/recordVersion';
 import * as schema from './schema';
-import type { BookRecord, QuoteRecord, ReviewConflict, ReviewRecord, SessionRecord } from './schema';
+import type { BookRecord, QuoteRecord, ReviewConflict, ReviewRecord, SessionRecord, SyncRejection } from './schema';
 
 type LocalRecord = Pick<BookRecord, 'id' | 'createdAt' | 'syncPending' | 'localVersion' | 'deleted'>;
 export type SaveInput<T extends LocalRecord> = Omit<T, keyof Omit<LocalRecord, 'id'> | 'updatedAt' | 'serverVersion' | 'conflict'>;
@@ -208,6 +208,33 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
     };
     return {
         books, sessions, reviews, quotes,
+        syncRejections: {
+            list() {
+                return db.select().from(schema.syncRejections).all().filter(issue => {
+                    const row = (issue.kind === 'book' ? books : sessions).get(issue.recordId, true);
+                    return row?.syncPending && row.localVersion === issue.localVersion && books.get(issue.bookId) !== null;
+                });
+            },
+            save(issue: SyncRejection) {
+                db.insert(schema.syncRejections).values(issue).onConflictDoUpdate({ target: schema.syncRejections.key, set: issue }).run();
+            },
+            clear(key: string) { db.delete(schema.syncRejections).where(eq(schema.syncRejections.key, key)).run(); },
+        },
+        /** NFR-05·09: 서버 삭제는 종단 상태다. 동시 편집도 복원하지 않고 내용은 tombstone으로 보존한다. */
+        acceptDeletedBook(server: BookRecord) {
+            if (!server.deleted) return;
+            transaction(() => {
+                const current = books.get(server.id, true);
+                if (!current) return;
+                db.update(schema.books).set({ ...server, syncPending: false,
+                    localVersion: nextRecordVersion(now(), current.localVersion) }).where(eq(schema.books.id, server.id)).run();
+                for (const table of [schema.sessions, schema.reviews, schema.quotes]) {
+                    db.update(table).set({ deleted: true, syncPending: false,
+                        ...(table === schema.reviews ? { conflict: null } : {}) }).where(eq(table.bookId, server.id)).run();
+                }
+            });
+            notify();
+        },
         /** NFR-04 / S-45: 동기 작업 전체를 커밋한 뒤 한 번만 구독자에게 알린다. 실패는 롤백한다. */
         atomic<T>(work: () => T extends PromiseLike<unknown> ? never : T): T {
             const result = transaction(() => {

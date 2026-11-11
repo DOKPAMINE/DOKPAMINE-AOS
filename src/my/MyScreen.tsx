@@ -36,6 +36,14 @@ export function MyScreen() {
             {records.kind === 'ready' && records.conflictBooks.map(book => <SecondaryButton key={book.id}
                 label={`${book.title} · 감상 충돌 확인`}
                 onPress={() => router.push({ pathname: '/book/[id]/review', params: { id: book.id } })} />)}
+            {records.kind === 'ready' && records.rejections.map(issue => <View key={issue.key}>
+                <Text accessibilityRole="alert" style={styles.body}>{issue.message}</Text>
+                <Text style={styles.meta}>입력 내용을 보존했어요. 수정한 뒤 다시 동기화해요.</Text>
+                <SecondaryButton label={`${records.books.find(book => book.id === issue.bookId)?.title ?? '책'} · ${issue.kind === 'book' ? '책 정보 수정' : '기록 시간·쪽수 수정'}`}
+                    onPress={() => issue.kind === 'book'
+                        ? router.push({ pathname: '/book/[id]/edit', params: { id: issue.bookId } })
+                        : router.push({ pathname: '/book/[id]/records/[recordId]', params: { id: issue.bookId, recordId: issue.recordId } })} />
+            </View>)}
         </Card>
         <SecondaryButton label="설정" onPress={() => router.push('/settings')} />
     </Screen>;

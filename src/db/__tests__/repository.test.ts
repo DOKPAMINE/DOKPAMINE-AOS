@@ -1,5 +1,8 @@
 import migrations from '../migrations/migrations';
 import { eq } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/expo-sqlite';
+import { migrate } from 'drizzle-orm/expo-sqlite/migrator';
+import * as schema from '../schema';
 import { prepareRecordDatabase } from '../client';
 import { createRecordRepository, type EntityRepository, type RecordDatabase, type RecordRepository, type SaveInput } from '../repository';
 import { books, sessions, type BookRecord, type QuoteRecord, type ReviewRecord, type SessionRecord } from '../schema';
@@ -35,6 +38,24 @@ beforeEach(async () => {
 });
 afterEach(() => memory.connection.close());
 
+test('NFR-04 기존 DB를 업그레이드해도 책·세션과 삭제 기록을 보존해요', async () => {
+    const old = memorySQLite();
+    try {
+        const oldDb = drizzle(old.sqlite, { schema });
+        await migrate(oldDb, { journal: { ...migrations.journal, entries: migrations.journal.entries.slice(0, 2) },
+            migrations: { m0000: migrations.migrations.m0000, m0001: migrations.migrations.m0001 } });
+        const previous = createRecordRepository(oldDb, () => 100000);
+        previous.books.save(book);
+        previous.sessions.save(session);
+        previous.sessions.softDelete(sessionId);
+        const before = previous.sessions.get(sessionId, true);
+        const upgraded = (await prepareRecordDatabase(old.sqlite)).repository;
+        expect(upgraded.books.get(bookId)).toEqual(previous.books.get(bookId));
+        expect(upgraded.sessions.get(sessionId, true)).toEqual(before);
+        expect(upgraded.syncRejections.list()).toEqual([]);
+    } finally { old.connection.close(); }
+});
+
 test('NFR-04·05 세션 범위를 침해하는 책 수정은 원본과 대기를 보존해요', () => {
     repository.sessions.save({ ...session, startPage: 200, endPage: null });
     const before = repository.books.get(bookId);
@@ -46,7 +67,7 @@ test('NFR-04·05 세션 범위를 침해하는 책 수정은 원본과 대기를
 });
 
 test('FR-15 신규 TIMER는 경과 시간을 검사하고 기존 기록 수정과 MANUAL은 보존해요', () => {
-    expect(() => repository.sessions.save({ ...session, activeSeconds: 61 })).toThrow('입력 시간');
+    expect(() => repository.sessions.save({ ...session, activeSeconds: 61 })).toThrow('활성 시간');
     expect(repository.sessions.list()).toEqual([]);
     repository.sessions.save(session);
     repository.sessions.save({ ...session, activeSeconds: 61 });

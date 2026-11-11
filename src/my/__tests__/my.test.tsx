@@ -58,6 +58,8 @@ const routes = {
     'book/_layout': Slot,
     'book/[id]/review/write': ReviewWrite,
     'book/[id]/review/index': () => <Text>감상 목록</Text>,
+    'book/[id]/edit': () => <Text>책 정보 수정 화면</Text>,
+    'book/[id]/records/[recordId]': () => <Text>기록 수정 화면</Text>,
     'book-add': () => <Text>책 등록</Text>,
     'reading-start': () => <Text>독서 시작</Text>,
     lounge: () => <Text>라운지</Text>,
@@ -97,6 +99,18 @@ beforeEach(async () => {
     jest.mocked(initializeDatabase).mockResolvedValue({ db, repository });
 });
 afterEach(() => { memory.connection.close(); queryClient.clear(); jest.restoreAllMocks(); });
+
+test.each(['book', 'session'] as const)('NFR-04 S-80 거절된 %s의 안내와 저장된 입력의 수정 경로를 제공해요', async kind => {
+    const row = kind === 'book' ? repository.books.get(bookId)! : repository.sessions.get(sessionId)!;
+    repository.syncRejections.save({ key: `${kind}:${row.id}`, kind, recordId: row.id, bookId,
+        localVersion: row.localVersion, message: '저장된 기록의 입력을 확인해 주세요.' });
+    await renderRouter(routes, { initialUrl: '/my' });
+    expect(await screen.findByText('저장된 기록의 입력을 확인해 주세요.')).toBeOnTheScreen();
+    expect(screen.getByText('입력 내용을 보존했어요. 수정한 뒤 다시 동기화해요.')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: `데미안 · ${kind === 'book' ? '책 정보 수정' : '기록 시간·쪽수 수정'}` }));
+    expect(await screen.findByText(kind === 'book' ? '책 정보 수정 화면' : '기록 수정 화면')).toBeOnTheScreen();
+    expect(screen).toHavePathname(kind === 'book' ? `/book/${bookId}/edit` : `/book/${bookId}/records/${sessionId}`);
+});
 
 test('FR-10 S-80 닉네임과 monthlyStats 요약이 일치하고 삭제 전송 대기도 세어요', async () => {
     repository.quotes.save({ id: quoteId, bookId, text: '문장', page: null, memo: null });
