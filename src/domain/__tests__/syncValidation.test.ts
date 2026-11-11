@@ -17,6 +17,6 @@ test.each([
 
 test.each([0, 999, 1999])('FR-15 경과 초를 초과한 신규 TIMER만 거절해요: %i', endedAt => {
     const row = { startedAt: 0, endedAt, activeSeconds: Math.floor(endedAt / 1000) + 1 };
-    expect(() => validateNewTimer({ ...row, source: 'TIMER' })).toThrow('입력 시간');
+    expect(() => validateNewTimer({ ...row, source: 'TIMER' })).toThrow('활성 시간');
     expect(() => validateNewTimer({ ...row, source: 'MANUAL' })).not.toThrow();
 });

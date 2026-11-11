@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import { tokenStorage } from '../api/tokenStorage';
 import { initializeDatabase } from '../db/client';
 import { suggestedStartPage } from '../domain/pageRules';
+import { SyncValidationError } from '../domain/syncValidation';
 import { parseStartPage, stopAtReadingCheck } from '../domain/timerFlow';
 import { finishTimer, pauseTimer, resumeTimer, startTimer, type TimerState } from '../domain/timerState';
 import { requestReadingPermission } from './notifications';
@@ -131,7 +132,7 @@ export function useReadingTimer(bookId: string | undefined) {
                 storage.current!.clear();
                 setSaved(true);
                 setError(null);
-            } catch { setError(STORAGE_ERROR); }
+            } catch (cause) { setError(cause instanceof SyncValidationError ? cause.message : STORAGE_ERROR); }
         },
     };
 }

@@ -53,6 +53,19 @@ beforeEach(async () => {
 });
 afterEach(() => { memory.connection.close(); jest.restoreAllMocks(); jest.clearAllMocks(); jest.useRealTimers(); });
 
+test('FR-15 S-43 모순된 활성 시간은 저장하지 않고 타이머 입력과 시간 안내를 보존해요', async () => {
+    const timer = { ...startTimer(sessionId, id, 84, t0), accumulatedMs: 60000,
+        runningSinceMs: null, finishedAtMs: t0 + 1000, endPageDraft: '100' };
+    readingStorage('reader').save({ timer, confirmedChecks: 0 });
+    await open();
+    await fireEvent.press(await screen.findByRole('button', { name: '저장' }));
+    expect(await screen.findByText('활성 시간이 시작부터 종료까지의 시간을 초과해요. 기기 시각을 확인하거나 기록을 직접 추가해 주세요.')).toBeOnTheScreen();
+    expect(prepared.repository.sessions.list()).toEqual([]);
+    expect(prepared.repository.books.get(id)?.currentPage).toBe(84);
+    expect(readingStorage('reader').load()?.timer).toEqual(timer);
+    expect(screen.getByLabelText('마지막으로 읽은 쪽 (선택)')).toHaveDisplayValue('100');
+});
+
 test('FR-02 FR-03 S-40~45 시작·일시정지·재개·저장 후 책 쪽과 같은 UUID의 세션을 갱신해요', async () => {
     await open();
     expect(await screen.findByLabelText('시작 쪽')).toHaveDisplayValue('84');
