@@ -1,5 +1,4 @@
-import { beginReading, BookEditError, completeReading, groupShelfBooks, parseBookEdit, readingTimeLabel, type BookEditFields } from '../shelfRules';
-import { monthlyStats } from '../calendarRules';
+import { beginReading, BookEditError, completeReading, countShelfStatuses, filterShelfBooks, groupShelfBooks, parseBookEdit, readingTimeLabel, toggleShelfFilter, type BookEditFields } from '../shelfRules';import { monthlyStats } from '../calendarRules';
 
 const book = { id: 'book', title: '데미안', genre: '소설' as const, deleted: false, status: 'DONE' as const, currentPage: 84, totalPages: 240, completedCount: 1, completedAt: 100 };
 const fields: BookEditFields = { title: ' 데미안 ', author: ' 헤르만 헤세 ', publisher: '', totalPages: '240', genre: '소설' };
@@ -75,4 +74,28 @@ test('FR-01 S-34 출판사는 BE 검증과 같은 100자까지 저장하고 초�
     try { parseBookEdit({ ...fields, title: '' }, editingBook); } catch (error) {
         expect((error as BookEditError).field).toBe('title');
     }
+});
+
+const statusBook = (id: string, status: 'WANT' | 'READING' | 'DONE', deleted = false) => ({ id, status, deleted });
+
+test('FR-04 FR-17 S-30 삭제된 책을 빼고 상태별 권수를 세요', () => {
+    const books = [statusBook('a', 'READING'), statusBook('b', 'READING'), statusBook('c', 'DONE'), statusBook('d', 'WANT'), statusBook('e', 'DONE', true)];
+    expect(countShelfStatuses(books)).toEqual({ READING: 2, DONE: 1, WANT: 1 });
+    expect(countShelfStatuses([])).toEqual({ READING: 0, DONE: 0, WANT: 0 });
+});
+
+test('FR-04 S-30 필터가 없으면 모든 책을 그대로 보여요', () => {
+    const books = [statusBook('a', 'READING'), statusBook('b', 'DONE'), statusBook('c', 'WANT')];
+    expect(filterShelfBooks(books, null)).toEqual(books);
+});
+
+test('FR-04 S-30 읽는 중 필터를 고르면 읽는 중 책만 남겨요', () => {
+    const books = [statusBook('a', 'READING'), statusBook('b', 'DONE'), statusBook('c', 'READING')];
+    expect(filterShelfBooks(books, 'READING').map(item => item.id)).toEqual(['a', 'c']);
+});
+
+test('S-30 선택된 필터를 다시 누르면 선택을 풀고 다른 필터를 누르면 그쪽으로 옮겨요', () => {
+    expect(toggleShelfFilter('DONE', 'DONE')).toBeNull();
+    expect(toggleShelfFilter('READING', 'WANT')).toBe('WANT');
+    expect(toggleShelfFilter(null, 'READING')).toBe('READING');
 });

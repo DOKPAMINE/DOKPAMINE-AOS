@@ -10,6 +10,25 @@ export function groupShelfBooks<T extends ShelfBook>(books: readonly T[]) {
         .filter(group => group.books.length > 0);
 }
 
+export type ShelfStatus = ReadingBook['status'];
+
+/** FR-04·FR-17 / S-30: 삭제된 책을 빼고 상태별 권수를 센다. */
+export function countShelfStatuses<T extends { status: ShelfStatus; deleted: boolean }>(books: readonly T[]) {
+    const counts: Record<ShelfStatus, number> = { READING: 0, DONE: 0, WANT: 0 };
+    for (const book of books) if (!book.deleted) counts[book.status] += 1;
+    return counts;
+}
+
+/** FR-04 / S-30: 필터가 없으면 모든 책, 있으면 그 상태의 책만 남긴다. */
+export function filterShelfBooks<T extends { status: ShelfStatus }>(books: readonly T[], filter: ShelfStatus | null) {
+    return filter === null ? books : books.filter(book => book.status === filter);
+}
+
+/** S-30: 선택된 필터를 다시 누르면 선택을 풀고, 다른 필터를 누르면 그쪽으로 옮긴다. */
+export function toggleShelfFilter(current: ShelfStatus | null, pressed: ShelfStatus): ShelfStatus | null {
+    return current === pressed ? null : pressed;
+}
+
 /** FR-17·PRD D7 / S-32·S-33: 다시 읽어도 지난 쪽과 기존 기록은 보존한다. */
 export function beginReading<T extends ReadingBook>(book: T): Omit<T, 'status'> & { status: 'READING' } {
     return { ...book, status: 'READING' as const };
