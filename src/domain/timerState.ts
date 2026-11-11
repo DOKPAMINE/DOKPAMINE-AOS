@@ -1,6 +1,7 @@
 import type { ReadingSession } from './readingTypes';
 import type { EndPageInput } from './pageRules';
 import { nextRecordVersion } from './recordVersion';
+import { validateNewTimer } from './syncValidation';
 
 /** FR-02 / S-41·S-42: 시각 기반 상태. ID와 now는 호출자가 제공하며 플랫폼·저장소에 의존하지 않는다. */
 export interface TimerState {
@@ -45,6 +46,8 @@ export function toTimerSession(
         throw new Error('수정할 기록을 찾을 수 없어요.');
     }
     const endPage = input.kind === 'timeOnly' ? null : input.endPage;
+    validateNewTimer({ source: 'TIMER', startedAt: timer.startedAtMs, endedAt: timer.finishedAtMs,
+        activeSeconds: Math.floor(elapsedMs(timer, timer.finishedAtMs) / 1000) });
     const localVersion = nextRecordVersion(now, existing?.localVersion);
     return {
         session: {

@@ -31,6 +31,77 @@ beforeEach(async () => {
 });
 afterEach(() => memory.connection.close());
 
+test('NFR-05·09 BOOK_NOT_SYNCED 부모 재전송에서 삭제 응답이 오면 자식을 다시 올리지 않아요', async () => {
+    const parent = records.books.get(book.id)!;
+    records.books.markSynced(parent.id, parent.localVersion);
+    records.sessions.save({ ...session, id: id(7) });
+    transport.putSession.mockRejectedValueOnce(new ApiError('http', 'BOOK_NOT_SYNCED', '책이 아직 없어요.', 409));
+    transport.putBook.mockResolvedValueOnce({ ...bookDto(parent), deleted: true });
+    await createSyncEngine(records, transport, online).sync();
+    expect(transport.putSession).toHaveBeenCalledTimes(1);
+    expect(records.sessions.list()).toEqual([]);
+    expect(records.sessions.list({ includeDeleted: true }).every(row => row.deleted && !row.syncPending)).toBe(true);
+});
+
+test.each(['book', 'session'] as const)('NFR-04·05 %s의 400은 재실행에도 자동 반복하지 않고 수정 버전만 재전송해요', async kind => {
+    const put = kind === 'book' ? transport.putBook : transport.putSession;
+    put.mockRejectedValue(new ApiError('http', 'BAD_REQUEST', '입력 시간을 확인해 주세요.', 400));
+    const engine = createSyncEngine(records, transport, online);
+    await engine.sync();
+    const before = kind === 'book' ? records.books.get(book.id) : records.sessions.get(session.id);
+    expect(before?.syncPending).toBe(true);
+    expect(records.syncRejections.list()).toEqual([expect.objectContaining({ kind, localVersion: before?.localVersion })]);
+    await engine.sync();
+    const reopened = (await prepareRecordDatabase(memory.sqlite)).repository;
+    await createSyncEngine(reopened, transport, online).sync();
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(kind === 'book' ? reopened.books.get(book.id) : reopened.sessions.get(session.id)).toEqual(before);
+    if (kind === 'book') {
+        expect(transport.putSession).not.toHaveBeenCalled();
+        reopened.books.save({ ...book, totalPages: 300 });
+    } else reopened.sessions.save({ ...session, source: 'MANUAL', activeSeconds: 30 });
+    put.mockResolvedValue(undefined);
+    await createSyncEngine(reopened, transport, online).sync();
+    expect(put).toHaveBeenCalledTimes(2);
+    expect(reopened.syncRejections.list()).toEqual([]);
+    expect(kind === 'book' ? reopened.books.get(book.id)?.syncPending : reopened.sessions.get(session.id)?.syncPending).toBe(false);
+});
+
+test('NFR-05 400 전송 도중 수정된 버전은 이전 거절에 막히지 않아요', async () => {
+    transport.putSession.mockImplementationOnce(async () => {
+        records.sessions.save({ ...session, source: 'MANUAL', activeSeconds: 30 });
+        throw new ApiError('http', 'BAD_REQUEST', '입력 시간을 확인해 주세요.', 400);
+    });
+    const engine = createSyncEngine(records, transport, online);
+    await engine.sync();
+    expect(records.syncRejections.list()).toEqual([]);
+    await engine.sync();
+    expect(transport.putSession).toHaveBeenCalledTimes(2);
+    expect(records.sessions.get(session.id)?.syncPending).toBe(false);
+});
+
+test('NFR-05·09 서버 삭제 응답은 전송 중 편집에도 우선하며 하위 내용을 tombstone으로 보존해요', async () => {
+    records.reviews.save({ id: id(3), bookId: book.id, oneLine: '보존할 감상', body: null, visibility: 'PRIVATE', publishedAt: null });
+    records.quotes.save({ id: id(4), bookId: book.id, text: '보존할 문장', page: null, memo: null });
+    const server = { ...bookDto(records.books.get(book.id)!), title: '서버 삭제 책', deleted: true };
+    transport.putBook.mockImplementationOnce(async () => {
+        records.books.save({ ...book, title: '전송 중 수정' });
+        return server;
+    });
+    await createSyncEngine(records, transport, online).sync();
+    expect(records.books.get(book.id)).toBeNull();
+    expect(records.books.get(book.id, true)).toMatchObject({ title: '서버 삭제 책', deleted: true, syncPending: false });
+    expect(records.reviews.get(id(3), true)).toMatchObject({ oneLine: '보존할 감상', deleted: true, syncPending: false });
+    expect(records.quotes.get(id(4), true)).toMatchObject({ text: '보존할 문장', deleted: true, syncPending: false });
+    expect(records.sessions.list()).toEqual([]);
+    expect(transport.putSession).not.toHaveBeenCalled();
+    expect(transport.putReview).not.toHaveBeenCalled();
+    expect(transport.putQuote).not.toHaveBeenCalled();
+    expect(() => records.books.save(book)).toThrow('삭제한 기록');
+    records.books.save({ ...book, id: id(9) });
+    expect(records.books.get(id(9))).not.toBeNull();
+});
+
 test('NFR-04·05 S-80 책 → 세션 → 감상 → 문장 순서로 tombstone도 전송해요', async () => {
     records.reviews.save({ id: id(3), bookId: book.id, oneLine: '좋아요', body: null, visibility: 'PRIVATE', publishedAt: null });
     records.quotes.save({ id: id(4), bookId: book.id, text: '문장', page: 10, memo: null });
@@ -165,7 +236,7 @@ test('NFR-04 S-02 잘못된 snapshot 행만 건너뛰고 정상 행 복원과 �
     expect(records.books.get(book.id)?.syncPending).toBe(false);
 });
 
-test.each([400, 403])('NFR-05 S-80 %s 행 뒤의 행과 다음 기록 종류는 전송된다', async status => {
+test.each([403])('NFR-05 S-80 %s 행 뒤의 행과 다음 기록 종류는 전송된다', async status => {
     records.books.save({ ...book, id: id(5), title: '다음 책' });
     records.sessions.save({ ...session, id: id(6), bookId: id(5) });
     transport.putBook.mockRejectedValueOnce(new ApiError('http', 'REJECTED', '거부됨', status));
@@ -179,6 +250,19 @@ test.each([400, 403])('NFR-05 S-80 %s 행 뒤의 행과 다음 기록 종류는 
     expect(engine.getState()).toMatchObject({ status: 'error', failedCount: 2 });
     await engine.sync();
     expect(engine.getState()).toMatchObject({ status: 'idle', failedCount: 0 });
+});
+
+test('NFR-05 책 400의 자식은 대기하지만 다른 책과 세션은 전송해요', async () => {
+    records.books.save({ ...book, id: id(5), title: '다음 책' });
+    records.sessions.save({ ...session, id: id(6), bookId: id(5) });
+    transport.putBook.mockRejectedValueOnce(new ApiError('http', 'BAD_REQUEST', '쪽수를 확인해 주세요.', 400));
+    const engine = createSyncEngine(records, transport, online);
+    await engine.sync();
+    expect(records.books.get(book.id)?.syncPending).toBe(true);
+    expect(records.sessions.get(session.id)?.syncPending).toBe(true);
+    expect(records.books.get(id(5))?.syncPending).toBe(false);
+    expect(records.sessions.get(id(6))?.syncPending).toBe(false);
+    expect(engine.getState()).toMatchObject({ status: 'error', failedCount: 1 });
 });
 
 test.each([

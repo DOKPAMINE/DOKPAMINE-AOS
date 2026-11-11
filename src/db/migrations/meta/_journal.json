@@ -15,6 +15,13 @@
       "when": 1794294153856,
       "tag": "0001_quick_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794371387927,
+      "tag": "0002_dear_whiplash",
+      "breakpoints": true
     }
   ]
 }

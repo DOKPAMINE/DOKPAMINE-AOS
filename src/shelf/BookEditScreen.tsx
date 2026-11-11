@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Pressable, Text, TextInput, View } from 'react-na
 import { PrimaryButton, Screen, SecondaryButton, StateView } from '../components';
 import { GENRES } from '../domain/pageRules';
 import { BookEditError, parseBookEdit, type BookEditFields } from '../domain/shelfRules';
+import { validateSessionPageRange } from '../domain/syncValidation';
 import type { BookRecord } from '../db/schema';
 import type { RecordRepository } from '../db/repository';
 import { colors } from '../theme';
@@ -35,6 +36,7 @@ function BookEditForm({ book, repository }: { book: BookRecord; repository: Reco
         let changes: ReturnType<typeof parseBookEdit>;
         try {
             changes = parseBookEdit(fields, latest);
+            validateSessionPageRange(changes.totalPages, repository.sessions.list({ bookId: book.id }));
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : '입력 내용을 확인해 주세요.');
             setErrorField(cause instanceof BookEditError ? cause.field : null);

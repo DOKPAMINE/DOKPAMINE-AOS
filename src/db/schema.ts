@@ -86,3 +86,14 @@ export type BookRecord = typeof books.$inferSelect;
 export type SessionRecord = typeof sessions.$inferSelect;
 export type ReviewRecord = typeof reviews.$inferSelect;
 export type QuoteRecord = typeof quotes.$inferSelect;
+
+/** NFR-05: 계정별 DB에 거절된 버전을 보존해 재실행 후 같은 요청을 반복하지 않는다. */
+export const syncRejections = sqliteTable('sync_rejections', {
+    key: text('key').primaryKey().notNull(),
+    kind: text('kind', { enum: ['book', 'session'] }).notNull(),
+    recordId: text('record_id').notNull(),
+    bookId: text('book_id').notNull(),
+    localVersion: integer('local_version').notNull(),
+    message: text('message').notNull(),
+});
+export type SyncRejection = typeof syncRejections.$inferSelect;

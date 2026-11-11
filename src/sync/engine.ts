@@ -1,10 +1,11 @@
 import { ApiError } from '../api/errors';
 import type { BookDto, QuoteDto, ReviewDto, SessionDto, SyncSnapshot } from '../api/types';
 import type { RecordRepository } from '../db/repository';
+import type { SyncRejection } from '../db/schema';
 import { bookDto, quoteDto, reviewDto, sessionDto, snapshotRecords } from './serialization';
 
 export interface SyncTransport {
-    putBook(body: BookDto): Promise<unknown>;
+    putBook(body: BookDto): Promise<BookDto | void>;
     putSession(body: SessionDto): Promise<unknown>;
     putReview(body: ReviewDto): Promise<ReviewDto | void>;
     putQuote(body: QuoteDto): Promise<unknown>;
@@ -32,9 +33,19 @@ export function createSyncEngine(repository: RecordRepository, transport: SyncTr
         ['unauthorized', 'offline', 'network', 'timeout'].includes(error.kind) ||
         error.status === 401 || (error.status !== undefined && error.status >= 500)
     );
-    async function attempt(key: string, work: () => Promise<void>) {
-        try { await work(); failedRows.delete(key); } catch (error) {
+    async function attempt(key: string, work: () => Promise<void>, row?: Omit<SyncRejection, 'key' | 'message'>) {
+        if (row && repository.syncRejections.list().some(issue => issue.key === key && issue.localVersion === row.localVersion)) {
             failedRows.add(key);
+            return;
+        }
+        try {
+            await work(); failedRows.delete(key);
+            if (row) repository.syncRejections.clear(key);
+        } catch (error) {
+            failedRows.add(key);
+            if (row && error instanceof ApiError && error.status === 400) {
+                repository.syncRejections.save({ ...row, key, message: error.message });
+            }
             if (stopsUpload(error) || stopped) throw error;
         }
     }
@@ -43,39 +54,52 @@ export function createSyncEngine(repository: RecordRepository, transport: SyncTr
             const row = repository.books.get(id, true);
             if (!row) return;
             checkStopped();
-            await transport.putBook(bookDto(row));
+            const saved = await transport.putBook(bookDto(row));
             if (!stopped) {
-                repository.books.markSynced(row.id, row.localVersion);
+                if (saved?.deleted) {
+                    const snapshot = snapshotRecords({ books: [saved], sessions: [], reviews: [], quotes: [] });
+                    if (saved.id !== row.id || snapshot.skippedCount || !snapshot.books[0]) {
+                        throw new Error('서버의 책 응답을 확인할 수 없어요.');
+                    }
+                    repository.acceptDeletedBook(snapshot.books[0]);
+                } else repository.books.markSynced(row.id, row.localVersion);
                 failedRows.delete(`book:${row.id}`);
             }
         }
         for (const row of repository.books.list({ includeDeleted: true, syncPending: true })) {
-            await attempt(`book:${row.id}`, () => sendBook(row.id));
+            await attempt(`book:${row.id}`, () => sendBook(row.id), {
+                kind: 'book', recordId: row.id, bookId: row.id, localVersion: row.localVersion,
+            });
         }
-        async function sendWithParent<T>(bookId: string, put: () => Promise<T>): Promise<T> {
+        async function sendWithParent<T>(bookId: string, put: () => Promise<T>): Promise<T | undefined> {
             checkStopped();
             try { return await put(); } catch (error) {
                 if (!(error instanceof ApiError) || error.status !== 409 || error.code !== 'BOOK_NOT_SYNCED') throw error;
                 // 서버에 없는 부모는 로컬 완료 여부와 무관하게 다시 전송한다.
                 await sendBook(bookId);
                 checkStopped();
+                if (!repository.books.get(bookId)) return undefined;
                 return put();
             }
         }
-        async function sendChildren<T extends { id: string; bookId: string; localVersion: number }>(
+        async function sendChildren<T extends { id: string; bookId: string; localVersion: number; deleted: boolean }>(
             kind: string,
             entity: { list(options: { includeDeleted: boolean; syncPending: boolean }): T[]; markSynced(id: string, version: number): void },
             put: (row: T) => Promise<unknown>,
         ) {
             for (const row of entity.list({ includeDeleted: true, syncPending: true })) {
+                if (!row.deleted && !repository.books.get(row.bookId)) continue;
+                if (repository.syncRejections.list().some(issue => issue.kind === 'book' && issue.recordId === row.bookId)) continue;
                 await attempt(`${kind}:${row.id}`, async () => {
                     await sendWithParent(row.bookId, () => put(row));
                     if (!stopped) entity.markSynced(row.id, row.localVersion);
-                });
+                }, kind === 'session' ? { kind: 'session', recordId: row.id, bookId: row.bookId, localVersion: row.localVersion } : undefined);
             }
         }
         await sendChildren('session', repository.sessions, row => transport.putSession(sessionDto(row)));
         for (const row of repository.reviews.list({ includeDeleted: true, syncPending: true })) {
+            if (!row.deleted && !repository.books.get(row.bookId)) continue;
+            if (repository.syncRejections.list().some(issue => issue.kind === 'book' && issue.recordId === row.bookId)) continue;
             if (row.conflict) continue;
             await attempt(`review:${row.id}`, async () => {
                 try {

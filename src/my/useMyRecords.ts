@@ -3,11 +3,11 @@ import { useFocusEffect } from 'expo-router';
 import { AppState } from 'react-native';
 import { initializeDatabase } from '../db/client';
 import type { RecordRepository } from '../db/repository';
-import type { BookRecord, SessionRecord } from '../db/schema';
+import type { BookRecord, SessionRecord, SyncRejection } from '../db/schema';
 import { subscribeSyncState } from '../sync';
 
 type MyRecords = { kind: 'loading' | 'error' } | {
-    kind: 'ready'; books: BookRecord[]; sessions: SessionRecord[]; pendingCount: number; conflictBooks: { id: string; title: string }[]; now: number;
+    kind: 'ready'; books: BookRecord[]; sessions: SessionRecord[]; pendingCount: number; conflictBooks: { id: string; title: string }[]; rejections: SyncRejection[]; now: number;
 };
 
 /** S-80 / NFR-04: 삭제 전송 대기를 포함해 모든 기록의 대기 행을 기존 읽기 API로 조회한다. */
@@ -27,7 +27,8 @@ export function useMyRecords() {
                 const conflictBooks = Array.from(conflictBookIds, id => ({
                     id, title: repository?.books.get(id, true)?.title ?? '삭제된 책',
                 }));
-                setRecords({ kind: 'ready', books: repository.books.list(), sessions: repository.sessions.list(), pendingCount, conflictBooks, now: Date.now() });
+                setRecords({ kind: 'ready', books: repository.books.list(), sessions: repository.sessions.list(), pendingCount, conflictBooks,
+                    rejections: repository.syncRejections.list(), now: Date.now() });
             } catch { setRecords({ kind: 'error' }); }
         };
         void initializeDatabase().then(prepared => {

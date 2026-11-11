@@ -2,9 +2,10 @@ import { and, eq, isNotNull } from 'drizzle-orm';
 import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
 import { parseEndPage } from '../domain/pageRules';
 import { validateBook } from '../domain/bookRules';
+import { validateNewTimer, validateSessionPageRange } from '../domain/syncValidation';
 import { nextRecordVersion } from '../domain/recordVersion';
 import * as schema from './schema';
-import type { BookRecord, QuoteRecord, ReviewConflict, ReviewRecord, SessionRecord } from './schema';
+import type { BookRecord, QuoteRecord, ReviewConflict, ReviewRecord, SessionRecord, SyncRejection } from './schema';
 
 type LocalRecord = Pick<BookRecord, 'id' | 'createdAt' | 'syncPending' | 'localVersion' | 'deleted'>;
 export type SaveInput<T extends LocalRecord> = Omit<T, keyof Omit<LocalRecord, 'id'> | 'updatedAt' | 'serverVersion' | 'conflict'>;
@@ -97,7 +98,10 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
         )).all() : [],
         markSynced: (id, version) => { db.update(schema.books).set({ syncPending: false }).where(and(eq(schema.books.id, id), eq(schema.books.localVersion, version))).run(); },
         put: row => { db.insert(schema.books).values(row).onConflictDoUpdate({ target: schema.books.id, set: row }).run(); },
-    }, true, input => validateBook(input));
+    }, true, input => {
+        validateBook(input);
+        validateSessionPageRange(input.totalPages, db.select().from(schema.sessions).where(eq(schema.sessions.bookId, input.id)).all());
+    });
     const sessions = entity<SessionRecord>({
         get: id => db.select().from(schema.sessions).where(eq(schema.sessions.id, id)).get(),
         list: ({ includeDeleted, syncPending, bookId }) => db.select().from(schema.sessions).where(and(
@@ -109,6 +113,7 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
         put: row => { db.insert(schema.sessions).values(row).onConflictDoUpdate({ target: schema.sessions.id, set: row }).run(); },
     }, false, (input, existing) => {
         const book = parent(input, existing);
+        if (!existing) validateNewTimer(input);
         const end = parseEndPage(input.endPage === null ? '' : String(input.endPage), input.startPage, book.totalPages);
         if (end.kind === 'invalid') throw new Error(end.message);
         if (!Number.isSafeInteger(input.startPage) || input.startPage < 0 || input.startPage > book.totalPages) {
@@ -203,6 +208,33 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
     };
     return {
         books, sessions, reviews, quotes,
+        syncRejections: {
+            list() {
+                return db.select().from(schema.syncRejections).all().filter(issue => {
+                    const row = (issue.kind === 'book' ? books : sessions).get(issue.recordId, true);
+                    return row?.syncPending && row.localVersion === issue.localVersion && books.get(issue.bookId) !== null;
+                });
+            },
+            save(issue: SyncRejection) {
+                db.insert(schema.syncRejections).values(issue).onConflictDoUpdate({ target: schema.syncRejections.key, set: issue }).run();
+            },
+            clear(key: string) { db.delete(schema.syncRejections).where(eq(schema.syncRejections.key, key)).run(); },
+        },
+        /** NFR-05·09: 서버 삭제는 종단 상태다. 동시 편집도 복원하지 않고 내용은 tombstone으로 보존한다. */
+        acceptDeletedBook(server: BookRecord) {
+            if (!server.deleted) return;
+            transaction(() => {
+                const current = books.get(server.id, true);
+                if (!current) return;
+                db.update(schema.books).set({ ...server, syncPending: false,
+                    localVersion: nextRecordVersion(now(), current.localVersion) }).where(eq(schema.books.id, server.id)).run();
+                for (const table of [schema.sessions, schema.reviews, schema.quotes]) {
+                    db.update(table).set({ deleted: true, syncPending: false,
+                        ...(table === schema.reviews ? { conflict: null } : {}) }).where(eq(table.bookId, server.id)).run();
+                }
+            });
+            notify();
+        },
         /** NFR-04 / S-45: 동기 작업 전체를 커밋한 뒤 한 번만 구독자에게 알린다. 실패는 롤백한다. */
         atomic<T>(work: () => T extends PromiseLike<unknown> ? never : T): T {
             const result = transaction(() => {
