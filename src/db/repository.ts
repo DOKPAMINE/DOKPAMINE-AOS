@@ -2,6 +2,7 @@ import { and, eq, isNotNull } from 'drizzle-orm';
 import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
 import { parseEndPage } from '../domain/pageRules';
 import { validateBook } from '../domain/bookRules';
+import { validateNewTimer, validateSessionPageRange } from '../domain/syncValidation';
 import { nextRecordVersion } from '../domain/recordVersion';
 import * as schema from './schema';
 import type { BookRecord, QuoteRecord, ReviewConflict, ReviewRecord, SessionRecord } from './schema';
@@ -97,7 +98,10 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
         )).all() : [],
         markSynced: (id, version) => { db.update(schema.books).set({ syncPending: false }).where(and(eq(schema.books.id, id), eq(schema.books.localVersion, version))).run(); },
         put: row => { db.insert(schema.books).values(row).onConflictDoUpdate({ target: schema.books.id, set: row }).run(); },
-    }, true, input => validateBook(input));
+    }, true, input => {
+        validateBook(input);
+        validateSessionPageRange(input.totalPages, db.select().from(schema.sessions).where(eq(schema.sessions.bookId, input.id)).all());
+    });
     const sessions = entity<SessionRecord>({
         get: id => db.select().from(schema.sessions).where(eq(schema.sessions.id, id)).get(),
         list: ({ includeDeleted, syncPending, bookId }) => db.select().from(schema.sessions).where(and(
@@ -109,6 +113,7 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
         put: row => { db.insert(schema.sessions).values(row).onConflictDoUpdate({ target: schema.sessions.id, set: row }).run(); },
     }, false, (input, existing) => {
         const book = parent(input, existing);
+        if (!existing) validateNewTimer(input);
         const end = parseEndPage(input.endPage === null ? '' : String(input.endPage), input.startPage, book.totalPages);
         if (end.kind === 'invalid') throw new Error(end.message);
         if (!Number.isSafeInteger(input.startPage) || input.startPage < 0 || input.startPage > book.totalPages) {

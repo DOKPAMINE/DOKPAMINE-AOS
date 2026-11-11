@@ -35,6 +35,25 @@ beforeEach(async () => {
 });
 afterEach(() => memory.connection.close());
 
+test('NFR-04·05 세션 범위를 침해하는 책 수정은 원본과 대기를 보존해요', () => {
+    repository.sessions.save({ ...session, startPage: 200, endPage: null });
+    const before = repository.books.get(bookId);
+    expect(() => repository.books.save({ ...book, totalPages: 100 })).toThrow('시작·종료 쪽');
+    expect(repository.books.get(bookId)).toEqual(before);
+    repository.books.save({ ...book, totalPages: 200 });
+    repository.sessions.softDelete(sessionId);
+    repository.books.save({ ...book, totalPages: 100 });
+});
+
+test('FR-15 신규 TIMER는 경과 시간을 검사하고 기존 기록 수정과 MANUAL은 보존해요', () => {
+    expect(() => repository.sessions.save({ ...session, activeSeconds: 61 })).toThrow('입력 시간');
+    expect(repository.sessions.list()).toEqual([]);
+    repository.sessions.save(session);
+    repository.sessions.save({ ...session, activeSeconds: 61 });
+    repository.sessions.save({ ...session, id: quoteId, source: 'MANUAL', activeSeconds: 100 });
+    expect(repository.sessions.list()).toHaveLength(2);
+});
+
 test('NFR-04 S-45 책 진행과 세션을 원자적으로 저장한 뒤 한 번만 알려요', () => {
     const committed: { page: number; sessions: number }[] = [];
     repository.subscribe(() => committed.push({ page: repository.books.get(bookId)!.currentPage, sessions: repository.sessions.list().length }));

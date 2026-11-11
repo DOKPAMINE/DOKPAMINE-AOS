@@ -26,6 +26,18 @@ beforeEach(async () => {
 });
 afterEach(() => { memory.connection.close(); });
 
+test('NFR-04 S-34 과거 세션보다 작은 전체 쪽수는 입력을 보존하고 수정 안내를 보여요', async () => {
+    repository.sessions.save({ id: '00000000-0000-4000-8000-000000000002', bookId: id,
+        startedAt: 0, endedAt: 1000, activeSeconds: 1, source: 'TIMER', startPage: 200, endPage: null });
+    await renderRouter(routes, { initialUrl: `/book/${id}/edit` });
+    await fireEvent.changeText(await screen.findByLabelText('전체 쪽수'), '100');
+    await fireEvent.press(screen.getByRole('button', { name: '저장' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/시작·종료 쪽/);
+    expect(screen.getByLabelText('전체 쪽수').props.value).toBe('100');
+    expect(repository.books.get(id)?.totalPages).toBe(240);
+    expect(screen).toHavePathname(`/book/${id}/edit`);
+});
+
 test.each([['기록 보기', 'records', '기록 목록 연결'], ['감상과 문장', 'review', '감상과 문장 연결']])(
     'FR-04 S-31 책 상세의 %s는 책 ID를 유지한 %s 경로로 이동해요', async (label, suffix, target) => {
         await renderRouter(routes, { initialUrl: `/book/${id}` });
