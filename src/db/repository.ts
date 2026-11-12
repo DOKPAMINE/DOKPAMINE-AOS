@@ -5,6 +5,7 @@ import { validateBook } from '../domain/bookRules';
 import { validateNewTimer, validateSessionPageRange } from '../domain/syncValidation';
 import { nextRecordVersion } from '../domain/recordVersion';
 import * as schema from './schema';
+import type { SessionDto } from '../api/types';
 import type { BookRecord, QuoteRecord, ReviewConflict, ReviewRecord, SessionRecord, SyncRejection } from './schema';
 
 type LocalRecord = Pick<BookRecord, 'id' | 'createdAt' | 'syncPending' | 'localVersion' | 'deleted'>;
@@ -102,7 +103,7 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
         validateBook(input);
         validateSessionPageRange(input.totalPages, db.select().from(schema.sessions).where(eq(schema.sessions.bookId, input.id)).all());
     });
-    const sessions = entity<SessionRecord>({
+    const sessionEntity = entity<SessionRecord>({
         get: id => db.select().from(schema.sessions).where(eq(schema.sessions.id, id)).get(),
         list: ({ includeDeleted, syncPending, bookId }) => db.select().from(schema.sessions).where(and(
             includeDeleted ? undefined : eq(schema.sessions.deleted, false),
@@ -120,6 +121,23 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
             throw new Error('시작 페이지를 확인해 주세요.');
         }
     });
+    const sessions = {
+        ...sessionEntity,
+        acknowledge(row: SessionRecord, saved: SessionDto | void) {
+            const sourceChanged = transaction(() => {
+                const current = sessionEntity.get(row.id, true);
+                if (!current) return false;
+                const source = current.source === 'MANUAL' || saved?.source === 'MANUAL' ? 'MANUAL' : current.source;
+                // NFR-05, FR-15: 서버의 MANUAL은 보존하고 전송 중 편집·삭제는 덮어쓰지 않는다.
+                db.update(schema.sessions).set({
+                    source,
+                    syncPending: current.localVersion !== row.localVersion,
+                }).where(eq(schema.sessions.id, row.id)).run();
+                return source !== current.source;
+            });
+            if (sourceChanged) notify();
+        },
+    };
     const reviewEntity = entity<ReviewRecord>({
         get: id => db.select().from(schema.reviews).where(eq(schema.reviews.id, id)).get(),
         list: ({ includeDeleted, syncPending, bookId }) => db.select().from(schema.reviews).where(and(
