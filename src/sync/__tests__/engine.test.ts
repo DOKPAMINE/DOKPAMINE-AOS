@@ -426,3 +426,48 @@ test('NFR-05·09 S-50 서버에서 삭제한 감상은 초안을 다시 저장�
     expect(transport.putReview.mock.calls[1][0]).toMatchObject({ id: id(4), oneLine: '로컬 초안' });
     expect(transport.putReview.mock.calls[1][0]).not.toHaveProperty('version');
 });
+
+test('NFR-05 FR-15 세션 PUT의 MANUAL 응답을 즉시 반영해요', async () => {
+    const listener = jest.fn();
+    records.subscribe(listener);
+    transport.putSession.mockImplementation(async request => ({ ...request, source: 'MANUAL' }));
+    await createSyncEngine(records, transport, online).sync();
+    expect(records.sessions.get(session.id)).toMatchObject({ source: 'MANUAL', syncPending: false });
+    expect(listener).toHaveBeenCalledTimes(1);
+});
+
+test.each(['edit', 'delete'] as const)('NFR-05 FR-15 MANUAL 응답 중 %s한 내용과 전송 대기를 보존해요', async action => {
+    transport.putSession.mockImplementationOnce(async request => {
+        if (action === 'edit') records.sessions.save({ ...session, endPage: 90 });
+        else records.sessions.softDelete(session.id);
+        return { ...request, source: 'MANUAL' };
+    });
+    await createSyncEngine(records, transport, online).sync();
+    expect(records.sessions.get(session.id, true)).toMatchObject({
+        source: 'MANUAL', syncPending: true, deleted: action === 'delete',
+        endPage: action === 'edit' ? 90 : session.endPage,
+    });
+    transport.putSession.mockImplementation(async request => request);
+    await createSyncEngine(records, transport, online).sync();
+    expect(transport.putSession.mock.calls[1][0].source).toBe('MANUAL');
+    expect(records.sessions.get(session.id, true)?.syncPending).toBe(false);
+});
+
+test('NFR-05 FR-15 늦은 TIMER 응답은 전송 중 MANUAL 수정을 되돌리지 않아요', async () => {
+    transport.putSession.mockImplementationOnce(async request => {
+        records.sessions.save({ ...session, source: 'MANUAL', activeSeconds: 30 });
+        return request;
+    });
+    await createSyncEngine(records, transport, online).sync();
+    expect(records.sessions.get(session.id)).toMatchObject({ source: 'MANUAL', activeSeconds: 30, syncPending: true });
+});
+
+test('NFR-05 S-81 로그아웃 뒤의 MANUAL 응답은 로컬 세션을 바꾸지 않아요', async () => {
+    const engine = createSyncEngine(records, transport, online);
+    transport.putSession.mockImplementationOnce(async request => {
+        engine.stop();
+        return { ...request, source: 'MANUAL' };
+    });
+    await engine.sync();
+    expect(records.sessions.get(session.id)).toMatchObject({ source: 'TIMER', syncPending: true });
+});

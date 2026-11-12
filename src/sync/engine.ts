@@ -6,7 +6,7 @@ import { bookDto, quoteDto, reviewDto, sessionDto, snapshotRecords } from './ser
 
 export interface SyncTransport {
     putBook(body: BookDto): Promise<BookDto | void>;
-    putSession(body: SessionDto): Promise<unknown>;
+    putSession(body: SessionDto): Promise<SessionDto | void>;
     putReview(body: ReviewDto): Promise<ReviewDto | void>;
     putQuote(body: QuoteDto): Promise<unknown>;
     snapshot(): Promise<SyncSnapshot>;
@@ -96,7 +96,14 @@ export function createSyncEngine(repository: RecordRepository, transport: SyncTr
                 }, kind === 'session' ? { kind: 'session', recordId: row.id, bookId: row.bookId, localVersion: row.localVersion } : undefined);
             }
         }
-        await sendChildren('session', repository.sessions, row => transport.putSession(sessionDto(row)));
+        for (const row of repository.sessions.list({ includeDeleted: true, syncPending: true })) {
+            if (!row.deleted && !repository.books.get(row.bookId)) continue;
+            if (repository.syncRejections.list().some(issue => issue.kind === 'book' && issue.recordId === row.bookId)) continue;
+            await attempt(`session:${row.id}`, async () => {
+                const saved = await sendWithParent(row.bookId, () => transport.putSession(sessionDto(row)));
+                if (!stopped) repository.sessions.acknowledge(row, saved);
+            }, { kind: 'session', recordId: row.id, bookId: row.bookId, localVersion: row.localVersion });
+        }
         for (const row of repository.reviews.list({ includeDeleted: true, syncPending: true })) {
             if (!row.deleted && !repository.books.get(row.bookId)) continue;
             if (repository.syncRejections.list().some(issue => issue.kind === 'book' && issue.recordId === row.bookId)) continue;
