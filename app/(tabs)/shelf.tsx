@@ -1,9 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, StateView } from '../../src/components';
-import { countShelfStatuses, filterShelfBooks, groupShelfBooks, toggleShelfFilter, type ShelfStatus } from '../../src/domain/shelfRules';
+import type { Genre } from '../../src/domain/pageRules';
+import { countShelfGenres, countShelfStatuses, filterShelfBooks, filterShelfGenre, groupShelfBooks, toggleShelfFilter, type ShelfStatus } from '../../src/domain/shelfRules';
 import { bookStatusIcons, bookStatusLabels } from '../../src/shelf/BookStatus';
 import { useShelfRepository } from '../../src/shelf/useShelfRepository';
 import { shelfStyles } from '../../src/shelf/styles';
@@ -28,14 +30,37 @@ function spineTitle(title: string) {
     return (chars.length > SPINE_CHARS ? [...chars.slice(0, SPINE_CHARS - 1), '…'] : chars).join('\n');
 }
 
+/** S-30: 고른 상태·장르에 맞는 책이 없을 때 보여 줄 안내 문구 */
+function emptyMessage(status: ShelfStatus | null, genre: Genre | null) {
+    if (status !== null && genre !== null) return '고른 조건에 맞는 책이 없어요. 다른 장르나 상태를 골라 보세요.';
+    if (genre !== null) return `${genre} 책이 없어요.`;
+    return status !== null ? emptyFilterMessages[status] : '';
+}
+
 // S-30 책장 · FR-04, FR-17
 export default function ShelfScreen() {
+    const insets = useSafeAreaInsets();
     const { repository, error, retry } = useShelfRepository();
     const [filter, setFilter] = useState<ShelfStatus | null>(null);
+    const [genre, setGenre] = useState<Genre | null>(null);
+    const [genreSheetOpen, setGenreSheetOpen] = useState(false);
+
     const books = repository ? repository.books.list() : [];
     const counts = countShelfStatuses(books);
     const total = counts.READING + counts.DONE + counts.WANT;
-    const groups = groupShelfBooks(filterShelfBooks(books, filter));
+    const statusBooks = filterShelfBooks(books, filter);
+    const genreCounts = countShelfGenres(statusBooks);
+    const genreOptions: { genre: Genre | null; count: number }[] = [
+        { genre: null, count: genreCounts.reduce((sum, item) => sum + item.count, 0) },
+        ...genreCounts,
+    ];
+    const groups = groupShelfBooks(filterShelfGenre(statusBooks, genre));
+    const genreLabel = genre ?? '전체';
+
+    const chooseGenre = (next: Genre | null) => {
+        setGenre(next);
+        setGenreSheetOpen(false);
+    };
 
     let content;
     if (error) content = <StateView kind="error" message="책장을 불러오지 못했어요." onRetry={retry} />;
@@ -51,15 +76,25 @@ export default function ShelfScreen() {
                     style={({ pressed }) => [shelfStyles.choice, styles.filter, selected && shelfStyles.selected, pressed && shelfStyles.pressed]}>
                     <View style={styles.filterInner}>
                         <MaterialCommunityIcons name={bookStatusIcons[status]} color={colors.brand.espresso} size={sizes.icon * 0.75} accessible={false} />
-                                                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={[styles.filterText, selected && styles.filterTextSelected]}>
-                                                    {selected ? '✓ ' : ''}{bookStatusLabels[status]}
-                                                </Text>
-                                                <Text numberOfLines={1} style={[styles.filterText, selected && styles.filterTextSelected]}>{counts[status]}</Text>
+                        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={[styles.filterText, selected && styles.filterTextSelected]}>
+                            {selected ? '✓ ' : ''}{bookStatusLabels[status]}
+                        </Text>
+                        <Text numberOfLines={1} style={[styles.filterText, selected && styles.filterTextSelected]}>{counts[status]}</Text>
                     </View>
                 </Pressable>;
             })}
         </View>
-        {filter !== null && groups.length === 0 ? <StateView kind="empty" message={emptyFilterMessages[filter]} /> :
+
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: genreSheetOpen }}
+            accessibilityLabel={`장르 선택, 지금은 ${genreLabel}`}
+            onPress={() => setGenreSheetOpen(true)}
+            style={({ pressed }) => [shelfStyles.choice, styles.genreButton, genre !== null && shelfStyles.selected, pressed && shelfStyles.pressed]}>
+            <MaterialCommunityIcons name="shape-outline" color={colors.brand.espresso} size={sizes.icon * 0.75} accessible={false} />
+            <Text style={[styles.genreButtonText, genre !== null && styles.filterTextSelected]}>장르: {genreLabel}</Text>
+            <MaterialCommunityIcons name="chevron-down" color={colors.brand.espresso} size={sizes.icon} accessible={false} />
+        </Pressable>
+
+        {(filter !== null || genre !== null) && groups.length === 0 ? <StateView kind="empty" message={emptyMessage(filter, genre)} /> :
             groups.map(group => <View key={group.genre} style={shelfStyles.section}>
                 <Text accessibilityRole="header" style={shelfStyles.title}>{group.genre} · {group.books.length}권</Text>
                 <ScrollView horizontal contentContainerStyle={styles.books}>
@@ -73,6 +108,33 @@ export default function ShelfScreen() {
                 </ScrollView>
                 <View style={styles.plank} />
             </View>)}
+
+        <Modal visible={genreSheetOpen} transparent animationType="slide" onRequestClose={() => setGenreSheetOpen(false)}>
+            <View style={styles.sheetRoot}>
+                <Pressable style={styles.backdrop} accessibilityRole="button" accessibilityLabel="장르 선택 닫기" onPress={() => setGenreSheetOpen(false)} />
+                <View accessibilityViewIsModal style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+                    <Text accessibilityRole="header" style={shelfStyles.title}>장르 선택</Text>
+                    <ScrollView style={styles.sheetList}>
+                        {genreOptions.map(option => {
+                            const selected = genre === option.genre;
+                            const name = option.genre ?? '전체';
+                            return <Pressable key={name} accessibilityRole="button" accessibilityState={{ selected }}
+                                accessibilityLabel={`${name} ${option.count}권`}
+                                onPress={() => chooseGenre(option.genre)}
+                                style={({ pressed }) => [styles.option, pressed && shelfStyles.pressed]}>
+                                <Text style={[shelfStyles.body, selected && styles.optionSelected]}>{name}</Text>
+                                <View style={styles.optionRight}>
+                                    <Text style={shelfStyles.muted}>{option.count}권</Text>
+                                    {selected
+                                        ? <MaterialCommunityIcons name="check" color={colors.brand.espresso} size={sizes.icon} accessible={false} />
+                                        : <View style={styles.checkSpace} />}
+                                </View>
+                            </Pressable>;
+                        })}
+                    </ScrollView>
+                </View>
+            </View>
+        </Modal>
     </>;
 
     return <Screen title="책장">{content}</Screen>;
@@ -84,6 +146,8 @@ const styles = StyleSheet.create({
     filterInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
     filterText: { ...typography.caption, color: colors.brand.espresso, flexShrink: 1 },
     filterTextSelected: { fontFamily: typography.heading.fontFamily },
+    genreButton: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.sm },
+    genreButtonText: { ...typography.label, color: colors.brand.espresso },
     books: { gap: spacing.xs, alignItems: 'flex-end', paddingHorizontal: spacing.xs },
     spine: { width: sizes.minTouch, minHeight: sizes.minTouch * 4, paddingVertical: spacing.sm, gap: spacing.sm, alignItems: 'center', justifyContent: 'space-between', borderTopLeftRadius: radii.small, borderTopRightRadius: radii.small },
     spineTitle: { ...typography.caption, textAlign: 'center' },
@@ -91,6 +155,13 @@ const styles = StyleSheet.create({
     done: { backgroundColor: colors.text.muted },
     want: { backgroundColor: colors.brand.sand },
     plank: { height: spacing.sm, backgroundColor: colors.brand.espresso, marginTop: -spacing.md },
+    sheetRoot: { flex: 1, justifyContent: 'flex-end' },
+    backdrop: { ...StyleSheet.absoluteFill },
+    sheet: { maxHeight: '70%', gap: spacing.md, paddingTop: spacing.xl, paddingHorizontal: spacing.xl, backgroundColor: colors.surface.paper, borderTopLeftRadius: radii.card, borderTopRightRadius: radii.card, borderWidth: 1, borderBottomWidth: 0, borderColor: colors.line.border },    option: { minHeight: sizes.minTouch, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.line.border },
+    sheetList: { flexGrow: 0 },
+    optionRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    optionSelected: { fontFamily: typography.heading.fontFamily },
+    checkSpace: { width: sizes.icon },
 });
 
 const spineBackground = { READING: styles.reading, DONE: styles.done, WANT: styles.want } as const;
