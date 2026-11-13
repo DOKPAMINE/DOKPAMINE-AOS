@@ -1,4 +1,6 @@
-import { beginReading, BookEditError, completeReading, countShelfStatuses, filterShelfBooks, groupShelfBooks, parseBookEdit, readingTimeLabel, toggleShelfFilter, type BookEditFields } from '../shelfRules';import { monthlyStats } from '../calendarRules';
+import { beginReading, BookEditError, completeReading, countShelfGenres, countShelfStatuses, filterShelfBooks, filterShelfGenre, groupShelfBooks, parseBookEdit, readingTimeLabel, toggleShelfFilter, type BookEditFields } from '../shelfRules';
+import { monthlyStats } from '../calendarRules';
+import type { Genre } from '../pageRules';
 
 const book = { id: 'book', title: '데미안', genre: '소설' as const, deleted: false, status: 'DONE' as const, currentPage: 84, totalPages: 240, completedCount: 1, completedAt: 100 };
 const fields: BookEditFields = { title: ' 데미안 ', author: ' 헤르만 헤세 ', publisher: '', totalPages: '240', genre: '소설' };
@@ -98,4 +100,17 @@ test('S-30 선택된 필터를 다시 누르면 선택을 풀고 다른 필터�
     expect(toggleShelfFilter('DONE', 'DONE')).toBeNull();
     expect(toggleShelfFilter('READING', 'WANT')).toBe('WANT');
     expect(toggleShelfFilter(null, 'READING')).toBe('READING');
+});
+const genreBook = (id: string, genre: Genre, deleted = false) => ({ id, genre, deleted });
+
+test('FR-04 S-30 책이 있는 장르만 고정 순서로 권수를 세고 삭제된 책은 빼요', () => {
+    const books = [genreBook('a', 'SF'), genreBook('b', '소설'), genreBook('c', '소설'), genreBook('d', '과학', true)];
+    expect(countShelfGenres(books)).toEqual([{ genre: '소설', count: 2 }, { genre: 'SF', count: 1 }]);
+    expect(countShelfGenres([])).toEqual([]);
+});
+
+test('FR-04 S-30 장르를 고르지 않으면 모든 책을, 고르면 그 장르 책만 보여요', () => {
+    const books = [genreBook('a', 'SF'), genreBook('b', '소설'), genreBook('c', 'SF')];
+    expect(filterShelfGenre(books, null)).toEqual(books);
+    expect(filterShelfGenre(books, 'SF').map(item => item.id)).toEqual(['a', 'c']);
 });
