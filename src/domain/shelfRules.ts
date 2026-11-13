@@ -28,7 +28,16 @@ export function filterShelfBooks<T extends { status: ShelfStatus }>(books: reado
 export function toggleShelfFilter(current: ShelfStatus | null, pressed: ShelfStatus): ShelfStatus | null {
     return current === pressed ? null : pressed;
 }
+/** FR-04 / S-30: 삭제된 책을 빼고, 책이 있는 장르만 고정 장르 순서로 권수를 센다. */
+export function countShelfGenres<T extends { genre: Genre; deleted: boolean }>(books: readonly T[]) {
+    return GENRES.map(genre => ({ genre, count: books.filter(book => !book.deleted && book.genre === genre).length }))
+        .filter(item => item.count > 0);
+}
 
+/** FR-04 / S-30: 장르를 고르지 않으면 모든 책, 고르면 그 장르의 책만 남긴다. */
+export function filterShelfGenre<T extends { genre: Genre }>(books: readonly T[], genre: Genre | null) {
+    return genre === null ? books : books.filter(book => book.genre === genre);
+}
 /** FR-17·PRD D7 / S-32·S-33: 다시 읽어도 지난 쪽과 기존 기록은 보존한다. */
 export function beginReading<T extends ReadingBook>(book: T): Omit<T, 'status'> & { status: 'READING' } {
     return { ...book, status: 'READING' as const };
