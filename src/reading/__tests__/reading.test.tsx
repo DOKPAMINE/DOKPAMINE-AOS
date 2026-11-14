@@ -37,7 +37,12 @@ const t0 = Date.parse('2026-11-02T01:00:00Z');
 const book: SaveInput<BookRecord> = { id, title: '데미안', author: '헤르만 헤세', isbn: null, publisher: null, totalPages: 240, currentPage: 84, genre: '소설', status: 'READING', coverUrl: null, completedCount: 0, completedAt: null };
 let memory: ReturnType<typeof memorySQLite>;
 let prepared: Awaited<ReturnType<typeof prepareRecordDatabase>>;
-const routes = { 'reading-start': ReadingScreen, '(tabs)/index': () => <Text>홈</Text>, '(tabs)/calendar': () => <Text>캘린더 날짜별 기록</Text> };
+const routes = { 'reading-start': ReadingScreen, '(tabs)/index': () => <Text>홈</Text>, 'book/[id]/review/index': () => <Text>감상과 문장</Text> };
+/** #63 / S-50: 저장하면 이 책의 감상과 문장 화면으로 이동해요. */
+const expectReviewScreen = async () => {
+    expect(await screen.findByText('감상과 문장')).toBeOnTheScreen();
+    expect(screen).toHavePathname(`/book/${id}/review`);
+};
 const open = () => renderRouter(routes, { initialUrl: `/reading-start?bookId=${id}` });
 beforeEach(async () => {
     Storage.clearSync();
@@ -59,14 +64,16 @@ test('FR-15 S-43 모순된 활성 시간은 저장하지 않고 타이머 입력
     readingStorage('reader').save({ timer, confirmedChecks: 0 });
     await open();
     await fireEvent.press(await screen.findByRole('button', { name: '저장' }));
+    await fireEvent.press(screen.getByRole('button', { name: '기록 저장' }));
     expect(await screen.findByText('활성 시간이 시작부터 종료까지의 시간을 초과해요. 기기 시각을 확인하거나 기록을 직접 추가해 주세요.')).toBeOnTheScreen();
     expect(prepared.repository.sessions.list()).toEqual([]);
     expect(prepared.repository.books.get(id)?.currentPage).toBe(84);
     expect(readingStorage('reader').load()?.timer).toEqual(timer);
+    await fireEvent.press(screen.getByRole('button', { name: '쪽 다시 입력' }));
     expect(screen.getByLabelText('마지막으로 읽은 쪽 (선택)')).toHaveDisplayValue('100');
 });
 
-test('FR-02 FR-03 S-40~45 시작·일시정지·재개·저장 후 책 쪽과 같은 UUID의 세션을 갱신해요', async () => {
+test('FR-02 FR-03 S-40~44 S-50 시작·일시정지·재개·기록 저장 후 책 쪽과 같은 UUID의 세션을 갱신하고 감상으로 이동해요', async () => {
     await open();
     expect(await screen.findByLabelText('시작 쪽')).toHaveDisplayValue('84');
     await fireEvent.changeText(screen.getByLabelText('시작 쪽'), '60');
@@ -82,13 +89,11 @@ test('FR-02 FR-03 S-40~45 시작·일시정지·재개·저장 후 책 쪽과 �
     await fireEvent.changeText(screen.getByLabelText('지금 읽는 쪽 (선택)'), '120');
     await fireEvent.press(screen.getByRole('button', { name: '마치기' }));
     await fireEvent.press(screen.getByRole('button', { name: '저장' }));
-    expect(await screen.findByRole('header', { name: '저장 완료' })).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: '기록 저장' }));
+    await expectReviewScreen();
     expect(prepared.repository.sessions.list()).toEqual([expect.objectContaining({ id: draft.timer.sessionId, source: 'TIMER', startPage: 60, endPage: 120, activeSeconds: 91, syncPending: true })]);
     expect(prepared.repository.books.get(id)).toMatchObject({ currentPage: 120, status: 'READING', syncPending: true });
     expect(readingStorage('reader').load()).toBeNull();
-    await fireEvent.press(screen.getByRole('button', { name: '캘린더에서 보기' }));
-    expect(await screen.findByText('캘린더 날짜별 기록')).toBeOnTheScreen();
-    expect(screen).toHaveSearchParams({ date: '2026-11-02' });
 });
 
 test.each([true, false])('FR-02 S-41 S-42 재시작 복원은 일시정지=%s와 세션 ID·입력을 유지해요', async paused => {
@@ -111,8 +116,11 @@ test('FR-03 S-43 E-02 범위 오류는 저장하지 않고 빈칸은 시간만 �
     expect(prepared.repository.sessions.list()).toHaveLength(0);
     await fireEvent.changeText(screen.getByLabelText('마지막으로 읽은 쪽 (선택)'), '');
     await fireEvent.press(screen.getByRole('button', { name: '저장' }));
+    expect(screen.getByRole('button', { name: '완독으로 저장' })).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: '기록 저장' }));
     expect(prepared.repository.sessions.get(sessionId)?.endPage).toBeNull();
-    expect(prepared.repository.books.get(id)?.currentPage).toBe(84);
+    expect(prepared.repository.books.get(id)).toMatchObject({ currentPage: 84, status: 'READING' });
+    await expectReviewScreen();
 });
 
 test('FR-03 S-44 완독 확인 후 끝 쪽·완독 횟수·날짜를 저장해요', async () => {
@@ -121,12 +129,25 @@ test('FR-03 S-44 완독 확인 후 끝 쪽·완독 횟수·날짜를 저장해�
     await open();
     await fireEvent.press(await screen.findByRole('button', { name: '저장' }));
     expect(prepared.repository.sessions.list()).toHaveLength(0);
-    expect(screen.getByRole('button', { name: '아직 읽는 중으로 저장' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: '기록 저장' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '완독으로 저장' }));
     expect(prepared.repository.books.get(id)).toMatchObject({ currentPage: 240, status: 'DONE', completedCount: 1, completedAt: t0 + 60000 });
+    await expectReviewScreen();
     await act(() => { prepared.repository.atomic(() => saveReading(prepared.repository, timer, true, t0 + 70000)); });
     expect(prepared.repository.books.get(id)?.completedCount).toBe(1);
     expect(prepared.repository.sessions.list()).toHaveLength(1);
+});
+
+test('#63 FR-03 S-44 마지막 쪽이 아니어도 완독으로 저장하고 감상으로 이동해요', async () => {
+    readingStorage('reader').save({ timer: { ...finishTimer(startTimer(sessionId, id, 84, t0), t0 + 60000), endPageDraft: '120' }, confirmedChecks: 0 });
+    await open();
+    await fireEvent.press(await screen.findByRole('button', { name: '저장' }));
+    expect(screen.getByRole('header', { name: '완독하셨나요?' })).toBeOnTheScreen();
+    expect(prepared.repository.sessions.list()).toHaveLength(0);
+    await fireEvent.press(screen.getByRole('button', { name: '완독으로 저장' }));
+    expect(prepared.repository.sessions.get(sessionId)?.endPage).toBe(120);
+    expect(prepared.repository.books.get(id)).toMatchObject({ status: 'DONE', currentPage: 240, completedCount: 1, completedAt: t0 + 60000 });
+    await expectReviewScreen();
 });
 
 test('FR-03 E-02 되돌아 읽기는 확인하고 저장해요', async () => {
@@ -136,6 +157,7 @@ test('FR-03 E-02 되돌아 읽기는 확인하고 저장해요', async () => {
     expect(prepared.repository.sessions.list()).toHaveLength(0);
     await fireEvent.press(screen.getByRole('button', { name: '되돌아 읽기로 저장' }));
     expect(prepared.repository.books.get(id)?.currentPage).toBe(60);
+    await expectReviewScreen();
 });
 
 test('NFR-04 S-45 기기 쓰기 실패는 책 변경을 롤백하고 같은 ID로 재시도해요', async () => {
@@ -143,11 +165,12 @@ test('NFR-04 S-45 기기 쓰기 실패는 책 변경을 롤백하고 같은 ID�
     const save = jest.spyOn(prepared.repository.sessions, 'save').mockImplementationOnce(() => { throw new Error('SQLITE_FULL'); });
     await open();
     await fireEvent.press(await screen.findByRole('button', { name: '저장' }));
+    await fireEvent.press(screen.getByRole('button', { name: '기록 저장' }));
     expect(screen.getByRole('alert')).toHaveTextContent(/저장하지 못했어요/);
     expect(prepared.repository.books.get(id)?.currentPage).toBe(84);
     expect(readingStorage('reader').load()?.timer.sessionId).toBe(sessionId);
     save.mockRestore();
-    await fireEvent.press(screen.getByRole('button', { name: '저장' }));
+    await fireEvent.press(screen.getByRole('button', { name: '기록 저장' }));
     expect(prepared.repository.sessions.get(sessionId)?.endPage).toBe(120);
 });
 
@@ -217,9 +240,8 @@ test('FR-03 S-44 이미 완독한 책은 읽는 중 저장 선택을 숨기고 �
     expect(screen.getByRole('header', { name: '오늘 읽은 만큼' })).toBeOnTheScreen();
     expect(screen.queryByRole('header', { name: '완독하셨나요?' })).toBeNull();
     expect(screen.queryByRole('button', { name: '완독으로 저장' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '아직 읽는 중으로 저장' })).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: '기록 저장' }));
-    expect(await screen.findByRole('header', { name: '저장 완료' })).toBeOnTheScreen();
+    await expectReviewScreen();
     expect(prepared.repository.books.get(id)).toMatchObject({ status: 'DONE', currentPage: 240, completedCount: 2, completedAt: t0 + 30000 });
 });
 
@@ -235,6 +257,7 @@ test.each([true, false])('NFR-04 S-42 S-45 저장 뒤 초기화가 실패한 세
     await open();
     jest.mocked(Storage.removeItemSync).mockImplementationOnce(() => { throw new Error('SQLITE_FULL'); });
     await fireEvent.press(await screen.findByRole('button', { name: '저장' }));
+    await fireEvent.press(screen.getByRole('button', { name: '기록 저장' }));
     expect(screen.getByRole('alert')).toHaveTextContent(/저장하지 못했어요/);
     expect(prepared.repository.sessions.get(sessionId)).not.toBeNull();
     await screen.unmount();
@@ -244,7 +267,7 @@ test.each([true, false])('NFR-04 S-42 S-45 저장 뒤 초기화가 실패한 세
         expect(await screen.findByText(/이미 삭제한 독서 기록의 타이머/)).toBeOnTheScreen();
         expect(screen.getByRole('button', { name: '독서 시작' })).toBeOnTheScreen();
     } else {
-        expect(await screen.findByRole('header', { name: '저장 완료' })).toBeOnTheScreen();
+        await expectReviewScreen();
     }
     expect(readingStorage('reader').load()).toBeNull();
     expect(prepared.repository.sessions.list({ includeDeleted: true })).toHaveLength(1);
