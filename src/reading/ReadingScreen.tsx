@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Modal, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Card, PrimaryButton, ProgressBar, Screen, SecondaryButton, StateView } from '../components';
-import { kstDate } from '../domain/kstDate';
 import { parseEndPage } from '../domain/pageRules';
 import { readingCheckDue, timerTimeLabel } from '../domain/timerFlow';
 import { elapsedMs } from '../domain/timerState';
@@ -24,16 +23,19 @@ export default function ReadingScreen() {
     const finished = timer?.finishedAtMs !== null && timer !== undefined;
     const paused = timer?.runningSinceMs === null;
     const checkDue = Boolean(draft && !saved && readingCheckDue(draft.timer, draft.confirmedChecks, now));
-    const title = saved ? '저장 완료' : confirmation === 'complete' && book.status !== 'DONE' ? '완독하셨나요?' : finished ? '오늘 읽은 만큼' : timer ? paused ? '잠깐 쉬는 중이에요' : '독서 측정 중' : '독서 시작';
+    const title = confirmation === 'complete' && book.status !== 'DONE' ? '완독하셨나요?' : finished ? '오늘 읽은 만큼' : timer ? paused ? '잠깐 쉬는 중이에요' : '독서 측정 중' : '독서 시작';
     const save = () => {
         if (!timer) return;
         const result = parseEndPage(timer.endPageDraft, timer.startPage, book.totalPages);
         if (result.kind === 'invalid') { setPageError(result.message); return; }
         setPageError(null);
         if (result.kind === 'reread') { setConfirmation('reread'); return; }
-        if (result.kind === 'valid' && result.endPage === book.totalPages) { setConfirmation('complete'); return; }
-        reading.save(false);
+        // #63: 마지막 쪽이 아니어도 완독을 고를 수 있게 항상 확인 화면을 보여 준다.
+        setConfirmation('complete');
     };
+
+    // #63 / S-50: 저장하면 저장 완료 화면(S-45) 대신 이 책의 감상과 문장 화면으로 이동한다.
+    if (saved && timer) return <Redirect href={{ pathname: '/book/[id]/review', params: { id: timer.bookId } }} />;
 
     return <Screen title={title}>
         <Text style={styles.book}>{book.title}</Text>
@@ -54,10 +56,7 @@ export default function ReadingScreen() {
         {/* S-43·44·E-02 */}
         {timer && finished && !saved && confirmation === null && <><PageField label="마지막으로 읽은 쪽 (선택)" value={timer.endPageDraft} onChange={text => { setPageError(null); reading.setEndPage(text); }} /><Text style={styles.secondary}>빈칸으로 두시면 독서 시간만 저장해요.</Text><PrimaryButton label="저장" onPress={save} /></>}
         {!saved && confirmation === 'reread' && <><Text style={styles.body}>시작 쪽보다 앞쪽을 입력하셨어요. 되돌아 읽은 기록으로 저장할까요? 읽은 쪽수는 0쪽으로 집계해요.</Text><PrimaryButton label="되돌아 읽기로 저장" onPress={() => reading.save(false)} /><SecondaryButton label="쪽 다시 입력" onPress={() => setConfirmation(null)} /></>}
-        {!saved && confirmation === 'complete' && <><Text style={styles.body}>{book.status === 'DONE' ? '이미 완독한 책이에요. 완독 상태를 유지하고 기록을 저장해요.' : '마지막 쪽까지 읽으셨어요. 완독한 책으로 표시할까요?'}</Text><PrimaryButton label={book.status === 'DONE' ? '기록 저장' : '완독으로 저장'} onPress={() => reading.save(true)} />{book.status !== 'DONE' && <SecondaryButton label="아직 읽는 중으로 저장" onPress={() => reading.save(false)} />}<SecondaryButton label="쪽 다시 입력" onPress={() => setConfirmation(null)} /></>}
-
-        {/* S-45: 날짜별 라우트 도입 전에는 캘린더 탭에 날짜를 전달한다. */}
-        {saved && timer && <><Text style={styles.body}>독서 기록을 기기에 저장했어요. 연결되면 자동으로 동기화해요.</Text><PrimaryButton label="캘린더에서 보기" onPress={() => router.dismissTo({ pathname: '/(tabs)/calendar', params: { date: kstDate(timer.startedAtMs) } })} /><SecondaryButton label="홈으로" onPress={home} /></>}
+        {!saved && confirmation === 'complete' && <><Text style={styles.body}>{book.status === 'DONE' ? '이미 완독한 책이에요. 완독 상태를 유지하고 기록을 저장해요.' : '이 책을 완독하셨나요? 마지막 쪽까지 읽지 않으셨어도 완독으로 저장할 수 있어요.'}</Text>{book.status === 'DONE' ? <PrimaryButton label="기록 저장" onPress={() => reading.save(true)} /> : <><PrimaryButton label="완독으로 저장" onPress={() => reading.save(true)} /><SecondaryButton label="기록 저장" onPress={() => reading.save(false)} /></>}<SecondaryButton label="쪽 다시 입력" onPress={() => setConfirmation(null)} /></>}
 
         {/* S-46 / NFR-08: 알림 권한과 독립된 앱 안 대화상자 */}
         <Modal visible={checkDue} animationType="none" onRequestClose={() => reading.confirmCheck(false)}>
