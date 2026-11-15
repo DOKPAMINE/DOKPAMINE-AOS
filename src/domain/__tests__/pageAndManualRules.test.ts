@@ -1,6 +1,6 @@
 import { parseStartedAt } from '../kstDate';
 import { currentPageAfterSave, toManualSession, validateManualSession, type ValidManualSession } from '../manualSessionRules';
-import { GENRES, latestPaged, parseEndPage, suggestedStartPage } from '../pageRules';
+import { GENRES, latestPaged, parseEndPage, readingDisplayPage, suggestedStartPage } from '../pageRules';
 import { readingProgress } from '../readingProgress';
 import { pagesRead, type ReadingSession } from '../readingTypes';
 
@@ -154,4 +154,11 @@ test('FR-02 T09 S-36 최근 기록 순서가 바뀌면 현재 쪽은 전체 쪽�
     const newer = session('newer', startedAt + 60000, 100);
     expect(currentPageAfterSave(100, 150, [stale, newer], [stale, { ...newer, startedAt: startedAt - 60000 }])).toBe(150);
     expect(currentPageAfterSave(100, -1, [newer], [stale])).toBe(0);
+});
+test('#66 FR-03 S-41~43 진행 막대는 지금 읽는 쪽, 없거나 잘못되면 시작 쪽을 보여 줘요', () => {
+    expect(readingDisplayPage('120', 100, 240)).toBe(120);
+    expect(readingDisplayPage('60', 100, 240)).toBe(60);
+    expect(readingDisplayPage('', 100, 240)).toBe(100);
+    expect(readingDisplayPage('241', 100, 240)).toBe(100);
+    expect(readingDisplayPage('abc', 100, 240)).toBe(100);
 });

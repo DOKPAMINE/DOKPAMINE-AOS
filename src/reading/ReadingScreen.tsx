@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Modal, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Card, PrimaryButton, ProgressBar, Screen, SecondaryButton, StateView } from '../components';
-import { parseEndPage } from '../domain/pageRules';
+import { parseEndPage, readingDisplayPage } from '../domain/pageRules';
 import { readingCheckDue, timerTimeLabel } from '../domain/timerFlow';
 import { elapsedMs } from '../domain/timerState';
 import { colors, radii, sizes, spacing, typography } from '../theme';
@@ -42,7 +42,8 @@ export default function ReadingScreen() {
         <Text style={styles.secondary}>{book.author}</Text>
         {draft && bookId && draft.timer.bookId !== bookId && <Text style={styles.secondary}>진행 중이던 책의 독서를 이어서 보여 드려요.</Text>}
         {timer && <Card><Text style={styles.secondary}>오늘 독서한 시간</Text><Text accessibilityLabel={`독서 시간 ${timerTimeLabel(elapsedMs(timer, now))}`} style={styles.time}>{timerTimeLabel(elapsedMs(timer, now))}</Text><Text style={styles.secondary}>시작한 쪽 · {timer.startPage}쪽</Text></Card>}
-        <ProgressBar currentPage={book.currentPage} totalPages={book.totalPages} />
+        {/* #66: 독서 중에는 지금 읽는 쪽, 없으면 시작 쪽으로 진행 막대를 보여 준다. */}
+        <ProgressBar currentPage={timer ? readingDisplayPage(timer.endPageDraft, timer.startPage, book.totalPages) : book.currentPage} totalPages={book.totalPages} />
         {reading.notice && <Text style={styles.secondary}>{reading.notice}</Text>}
         {reading.error && <StateView kind="error" message={reading.error} />}
         {pageError && <View accessibilityRole="alert"><Text style={styles.error}>페이지를 확인해 주세요</Text><Text style={styles.error}>{pageError}</Text></View>}

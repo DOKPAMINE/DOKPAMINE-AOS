@@ -26,6 +26,12 @@ export function parseEndPage(input: string, startPage: number, totalPages: numbe
     return { kind: page < startPage ? 'reread' : 'valid', endPage: page };
 }
 
+/** #66 / S-41~43: 독서 중 진행 막대는 입력한 지금 읽는 쪽을, 비었거나 잘못되면 시작 쪽을 보여 준다. */
+export function readingDisplayPage(endPageDraft: string, startPage: number, totalPages: number): number {
+    const page = parseEndPage(endPageDraft, startPage, totalPages);
+    return page.kind === 'valid' || page.kind === 'reread' ? page.endPage : startPage;
+}
+
 /** 삭제·시간만 기록 제외. 시작 시각 → 생성 시각 → ID로 순서를 고정한다. 한 책의 기록을 받는다. */
 export function latestPaged(sessions: readonly ReadingSession[]): ReadingSession | null {
     return sessions.reduce<ReadingSession | null>((latest, session) => {
@@ -41,5 +47,4 @@ export function latestPaged(sessions: readonly ReadingSession[]): ReadingSession
 export function suggestedStartPage(currentPage: number, totalPages: number): number {
     if (currentPage >= totalPages) return 0;
     return Math.max(0, currentPage);
-    
 }

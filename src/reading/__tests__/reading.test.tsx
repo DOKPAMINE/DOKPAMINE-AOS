@@ -293,3 +293,18 @@ test('NFR-04 S-42 저장소 읽기 오류는 임시 기록을 지우지 않고 �
     await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
     expect(await screen.findByRole('header', { name: '독서 측정 중' })).toBeOnTheScreen();
 });
+test('#66 FR-02 FR-03 S-40~43 시작 쪽과 지금 읽는 쪽을 진행 막대와 현재 쪽에 반영해요', async () => {
+    await open();
+    await fireEvent.changeText(await screen.findByLabelText('시작 쪽'), '100');
+    await fireEvent.press(screen.getByRole('button', { name: '독서 시작' }));
+    expect(screen.getByRole('progressbar', { name: '독서 진행' })).toHaveAccessibilityValue({ text: '100 / 240쪽' });
+    await fireEvent.changeText(screen.getByLabelText('지금 읽는 쪽 (선택)'), '120');
+    expect(screen.getByRole('progressbar', { name: '독서 진행' })).toHaveAccessibilityValue({ text: '120 / 240쪽' });
+    await fireEvent.changeText(screen.getByLabelText('지금 읽는 쪽 (선택)'), '');
+    jest.setSystemTime(t0 + 60000);
+    await fireEvent.press(screen.getByRole('button', { name: '마치기' }));
+    await fireEvent.press(screen.getByRole('button', { name: '저장' }));
+    await fireEvent.press(screen.getByRole('button', { name: '기록 저장' }));
+    await expectReviewScreen();
+    expect(prepared.repository.books.get(id)).toMatchObject({ currentPage: 100, status: 'READING' });
+});
