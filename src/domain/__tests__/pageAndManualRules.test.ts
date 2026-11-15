@@ -55,9 +55,11 @@ test('FR-02 D7 S-33 다시 읽기 뒤 현재 0쪽이면 0쪽을 제안해요', (
     expect(suggestedStartPage(currentPage, 240)).toBe(0);
 });
 
-test('FR-02 D7 S-34 시작 쪽은 줄인 전체 쪽수로 제한해요', () => {
-    expect(suggestedStartPage(180, 150)).toBe(150);
-    expect(suggestedStartPage(150, 150)).toBe(150);
+test('#65 FR-02 D7 S-33 S-34 S-40 현재 쪽이 마지막 쪽 이상이면 0쪽부터 다시 읽도록 제안해요', () => {
+    expect(suggestedStartPage(240, 240)).toBe(0);
+    expect(suggestedStartPage(239, 240)).toBe(239);
+    expect(suggestedStartPage(180, 150)).toBe(0);
+    expect(suggestedStartPage(150, 150)).toBe(0);
     expect(suggestedStartPage(-1, 150)).toBe(0);
     expect(suggestedStartPage(180, 0)).toBe(0);
 });
