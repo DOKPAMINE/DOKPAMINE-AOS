@@ -37,7 +37,9 @@ export function latestPaged(sessions: readonly ReadingSession[]): ReadingSession
     }, null);
 }
 
-/** PRD D7 / S-40·S-33: 저장·다시 읽기로 유지한 현재 쪽을 전체 쪽수 범위로 제한한다. */
+/** PRD D7 / S-40·S-33·S-36: 지난 끝 쪽을 제안하되, 마지막 쪽까지 읽었으면 처음부터 다시 읽는 것으로 보고 0쪽을 제안한다(#65). */
 export function suggestedStartPage(currentPage: number, totalPages: number): number {
-    return Math.max(0, Math.min(currentPage, Math.max(totalPages, 0)));
+    if (currentPage >= totalPages) return 0;
+    return Math.max(0, currentPage);
+    
 }
