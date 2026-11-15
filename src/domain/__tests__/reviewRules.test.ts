@@ -28,6 +28,3 @@ test('FR-07 S-52 문장은 필수이고 빈 쪽수는 null이며 0쪽도 보존�
 test.each(['-1', '1.5', 'abc', '1e3', '9007199254740992'])('FR-07 S-52 잘못된 쪽수 %s는 거절해요', page => {
     expect(quoteSchema.safeParse({ ...emptyQuoteFields, text: '문장', page }).success).toBe(false);
 });
-test.each([[500, true], [501, false]])('FR-07 S-52 선택 메모 %i자 허용 여부는 %s예요', (count, success) => {
-    expect(quoteSchema.safeParse({ ...emptyQuoteFields, text: '문장', memo: '가'.repeat(count) }).success).toBe(success);
-});

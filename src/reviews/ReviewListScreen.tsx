@@ -33,7 +33,6 @@ export function ReviewListScreen() {
                 {records.quotes.length === 0 ? <StateView kind="empty" message="아직 남긴 문장이 없어요. 간직하고 싶은 문장을 적어 주세요." /> : records.quotes.map(quote => <Card key={quote.id}>
                     <Text style={styles.body}>{quote.text}</Text>
                     {quote.page !== null && <Text style={styles.meta}>{quote.page}쪽</Text>}
-                    {quote.memo ? <Text style={styles.body}>{quote.memo}</Text> : null}
                     {quote.syncPending && <Text style={styles.meta}>기기에 저장됨 · 동기화 대기</Text>}
                 </Card>)}
             </View>}

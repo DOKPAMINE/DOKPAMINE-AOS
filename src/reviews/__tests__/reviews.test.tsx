@@ -63,17 +63,23 @@ test('FR-07 S-51 길이 오류는 저장을 막고 수정 후 저장할 수 있�
     expect(await screen.findByText('가'.repeat(100))).toBeOnTheScreen();
 });
 
-test('FR-07 NFR-04 S-52 문장과 0쪽·메모를 저장하면 목록에 나타나요', async () => {
+test('#69 FR-07 NFR-04 S-52 문장과 0쪽을 저장하면 메모 없이 목록에 나타나요', async () => {
     await renderRouter(routes, { initialUrl: base });
     await fireEvent.press(await screen.findByRole('button', { name: '문장 추가' }));
     await fireEvent.changeText(await screen.findByLabelText('좋아하는 문장'), '새는 알에서 나오려고 투쟁한다.');
     await fireEvent.changeText(screen.getByLabelText('쪽수 (선택)'), '0');
-    await fireEvent.changeText(screen.getByLabelText('메모 (선택)'), '다시 읽고 싶은 구절');
+    expect(screen.queryByLabelText('메모 (선택)')).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: '문장 저장' }));
     expect(await screen.findByText('새는 알에서 나오려고 투쟁한다.')).toBeOnTheScreen();
     expect(screen.getByText('0쪽')).toBeOnTheScreen();
-    expect(screen.getByText('다시 읽고 싶은 구절')).toBeOnTheScreen();
-    expect(repository.quotes.list()[0]).toMatchObject({ bookId, page: 0, memo: '다시 읽고 싶은 구절', syncPending: true });
+    expect(repository.quotes.list()[0]).toMatchObject({ bookId, page: 0, memo: null, syncPending: true });
+});
+
+test('#69 FR-07 S-50 예전에 남긴 메모는 문장 목록에 보이지 않아요', async () => {
+    repository.quotes.save({ id: '00000000-0000-4000-8000-000000000002', bookId, text: '예전 문장', page: 10, memo: '예전 메모' });
+    await renderRouter(routes, { initialUrl: base });
+    expect(await screen.findByText('예전 문장')).toBeOnTheScreen();
+    expect(screen.queryByText('예전 메모')).toBeNull();
 });
 
 test.each(['write', 'quote'])('FR-07 D-03 S-51 S-52 %s 작성 중 닫기를 취소하면 내용을 유지하고 확인하면 버려요', async route => {

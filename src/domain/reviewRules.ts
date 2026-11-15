@@ -16,7 +16,6 @@ export const quoteSchema = z.object({
     text: z.string().max(1000, '문장은 1,000자 이내로 입력해 주세요.').trim().min(1, '문장을 입력해 주세요.'),
     page: z.string().trim().refine(value => value === '' || (/^\d+$/.test(value) && Number.isSafeInteger(Number(value))),
         '쪽수는 0 이상의 정수로 입력해 주세요.').transform(value => value === '' ? null : Number(value)),
-    memo: z.string().max(500, '메모는 500자 이내로 입력해 주세요.').transform(value => value.trim()),
 });
 export type QuoteFields = z.input<typeof quoteSchema>;
-export const emptyQuoteFields: QuoteFields = { text: '', page: '', memo: '' };
+export const emptyQuoteFields: QuoteFields = { text: '', page: '' };
