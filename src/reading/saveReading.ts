@@ -14,7 +14,8 @@ export function saveReading(repository: RecordRepository, timer: TimerState, com
     if (!book) throw new Error('책을 찾을 수 없어요.');
     const page = parseEndPage(timer.endPageDraft, timer.startPage, book.totalPages);
     if (page.kind === 'invalid') throw new Error(page.message);
-    const result = toTimerSession(timer, page, book.currentPage, now);
+    // #66: 마지막 쪽을 비워 두면 시작 쪽을 현재 쪽으로 저장한다. 완독한 책은 아래에서 현재 쪽을 유지한다.
+    const result = toTimerSession(timer, page, timer.startPage, now);
     const nextBook = { ...book, currentPage: book.status === 'DONE' ? book.currentPage : result.currentPage, status: book.status === 'WANT' ? 'READING' as const : book.status };
     repository.books.save(complete ? completeReading(nextBook, timer.finishedAtMs!) : nextBook);
     return repository.sessions.save(result.session);
