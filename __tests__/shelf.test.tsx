@@ -168,6 +168,7 @@ test.each(['책장으로', '삭제'])('FR-04 D-01 S-31 %s 이동은 기존 책�
     await renderRouter(routes, { initialUrl: '/shelf' });
     await fireEvent.press(await screen.findByRole('button', { name: '데미안, 헤르만 헤세, 읽는 중, 책 상세 보기' }));
     if (action === '삭제') {
+        await fireEvent.press(await screen.findByRole('button', { name: '정보 편집' }));
         await fireEvent.press(await screen.findByRole('button', { name: '데미안 책 삭제' }));
         await act(async () => { alert.mock.calls[0][2]?.find(button => button.text === '삭제')?.onPress?.(); });
     } else {
@@ -201,9 +202,9 @@ test('FR-04 D-01 S-30 삭제 취소는 유지하고 확인하면 책장에서 �
     repository.sessions.save({ id: sessionId, bookId: id, startedAt: 0, endedAt: 61000, activeSeconds: 61, startPage: 0, endPage: 84, source: 'TIMER' });
     const alert = jest.spyOn(Alert, 'alert');
     await renderRouter(routes, { initialUrl: `/book/${id}` });
+    await fireEvent.press(await screen.findByRole('button', { name: '정보 편집' }));
     await fireEvent.press(await screen.findByRole('button', { name: '데미안 책 삭제' }));
-    expect(alert).toHaveBeenCalledWith('책을 삭제할까요?', expect.stringContaining('데미안'), expect.any(Array));
-    expect(repository.books.get(id)).not.toBeNull();
+    expect(alert).toHaveBeenCalledWith('책을 삭제할까요?', expect.stringContaining('데미안'), expect.any(Array));expect(repository.books.get(id)).not.toBeNull();
     const actions = alert.mock.calls[0][2]!;
     await act(async () => { actions.find(action => action.text === '삭제')?.onPress?.(); });
     expect(await screen.findByText('아직 책장에 책이 없어요. 홈에서 읽는 책이나 읽고 싶은 책을 등록해 주세요.')).toBeOnTheScreen();
