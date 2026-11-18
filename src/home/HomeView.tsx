@@ -70,7 +70,6 @@ export function HomeView() {
                     )
                 )}
                 <SecondaryButton label="책 등록하기" onPress={() => router.push('/book-add')} />
-                <SecondaryButton label="읽고 싶은 책 등록하기" onPress={() => router.push('/book-add')} />
             </View>
 
             <Card>

@@ -49,7 +49,7 @@ beforeEach(() => {
 });
 afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
 
-test('FR-04 S-10 로딩 후 책이 없으면 빈 안내와 두 등록 진입을 보여 줘요', async () => {
+test('FR-04 S-10 로딩 후 책이 없으면 빈 안내와 등록 진입을 보여 줘요', async () => {
     let finish!: (value: Awaited<ReturnType<typeof initializeDatabase>>) => void;
     jest.mocked(initializeDatabase).mockReturnValue(new Promise(resolve => { finish = resolve; }));
     await renderRouter(routes, { initialUrl: '/' });
@@ -60,11 +60,11 @@ test('FR-04 S-10 로딩 후 책이 없으면 빈 안내와 두 등록 진입을 
     expect(screen.getByText('0일')).toBeOnTheScreen();
     expect(screen.getByText('0초')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '책 등록하기' })).toBeOnTheScreen();
-    expect(screen.getByRole('button', { name: '읽고 싶은 책 등록하기' })).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: '읽고 싶은 책 등록하기' })).toBeNull();
     expect(screen.getByRole('header', { name: '오늘의 명언' })).toBeOnTheScreen();
 }, 30_000);
 
-test.each([['책 등록하기', '/book-add', {}], ['읽고 싶은 책 등록하기', '/book-add', {}]])(
+test.each([['책 등록하기', '/book-add', {}]])(
     'FR-04 S-10 %s에서 등록 경로와 상태를 전달해요', async (label, pathname, params) => {
         await renderRouter(routes, { initialUrl: '/' });
         await fireEvent.press(screen.getByRole('button', { name: label }));
