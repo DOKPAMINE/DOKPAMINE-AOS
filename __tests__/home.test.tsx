@@ -61,7 +61,7 @@ test('FR-04 S-10 로딩 후 책이 없으면 빈 안내와 등록 진입을 보�
     expect(screen.getByText('0초')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '책 등록하기' })).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: '읽고 싶은 책 등록하기' })).toBeNull();
-    expect(screen.getByRole('header', { name: '오늘의 명언' })).toBeOnTheScreen();
+    expect(screen.queryByRole('header', { name: '오늘의 명언' })).toBeNull();
 }, 30_000);
 
 test.each([['책 등록하기', '/book-add', {}]])(
@@ -157,4 +157,26 @@ test('FR-05 S-10 앱 복귀 시 KST 날짜와 저장된 기록을 다시 읽어�
     expect(screen.getByText('0일')).toBeOnTheScreen();
     await rendered.unmount();
     expect(remove).toHaveBeenCalled();
+});
+
+test('FR-04 S-10 읽는 중 책이 2권 이하면 페이지 버튼 없이 모두 보여요', async () => {
+    repository.books.list.mockReturnValue([1, 2].map(n => book(`b${n}`, `책 ${n}`)));
+    await renderRouter(routes, { initialUrl: '/' });
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: '다음 페이지' })).toBeNull();
+});
+
+test('FR-04 S-10 읽는 중 책이 3권 이상이면 2권씩 넘겨 보고 넘긴 책으로 독서를 시작해요', async () => {
+    repository.books.list.mockReturnValue([1, 2, 3].map(n => book(`b${n}`, `책 ${n}`)));
+    await renderRouter(routes, { initialUrl: '/' });
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+    expect(screen.getByText('1 / 2')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: '이전 페이지' })).toBeDisabled();
+    await fireEvent.press(screen.getByRole('button', { name: '다음 페이지' }));
+    expect(screen.getAllByRole('radio')).toHaveLength(1);
+    expect(screen.getByText('2 / 2')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: '다음 페이지' })).toBeDisabled();
+    await fireEvent.press(screen.getByRole('radio', { name: '책 3, 지은이' }));
+    await fireEvent.press(screen.getByRole('button', { name: '책 3 독서 시작하기' }));
+    expect(screen).toHavePathname('/reading-start');
 });
