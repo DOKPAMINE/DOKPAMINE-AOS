@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card, PrimaryButton, ProgressBar, Screen, SecondaryButton, StateView } from '../components';
 import { beginReading, completeReading, readingTimeLabel } from '../domain/shelfRules';
 import type { BookRecord } from '../db/schema';
@@ -44,6 +44,12 @@ function BookDetail({ book, repository }: { book: BookRecord; repository: Record
             setNotice('변경하지 못했어요. 기기 저장 공간을 확인하고 다시 시도해 주세요.');
         }
     };
+    const done = book.status === 'DONE';
+    // FR-04 / S-31: 실수로 누르지 않도록 확인 후 완독 처리한다. 다시 읽기는 아래 "다시 읽기" 버튼으로 한다.
+    const confirmComplete = () => Alert.alert('완독으로 표시할까요?', `「${book.title}」을(를) 다 읽은 책으로 옮겨요.`, [
+        { text: '취소', style: 'cancel' },
+        { text: '완독', onPress: () => changeStatus(true) },
+    ]);
     return <Screen title={book.title}>
         <Card>
             <View style={local.cardHeader}>
@@ -61,7 +67,14 @@ function BookDetail({ book, repository }: { book: BookRecord; repository: Record
             <Text style={styles.muted}>{book.publisher ?? '출판사 정보가 없어요'} · {book.genre} · {book.totalPages}쪽</Text>
         </Card>
         {book.status !== 'WANT' && <Card>
-            <Text accessibilityRole="header" style={styles.title}>독서 현황</Text>
+            <View style={local.cardHeader}>
+                <Text accessibilityRole="header" style={styles.title}>독서 현황</Text>
+                <Pressable accessibilityRole="checkbox" accessibilityLabel="완독으로 표시" accessibilityState={{ checked: done, disabled: done }}
+                    disabled={done} onPress={confirmComplete} style={({ pressed }) => [local.checkButton, pressed && styles.pressed]}>
+                    <MaterialCommunityIcons name={done ? 'checkbox-marked' : 'checkbox-blank-outline'} color={colors.brand.espresso} size={sizes.icon} accessible={false} />
+                    <Text style={styles.label}>{done ? '완독함' : '완독으로 표시'}</Text>
+                </Pressable>
+            </View>
             <ProgressBar currentPage={book.currentPage} totalPages={book.totalPages} />
             <Pressable accessibilityRole="button" accessibilityLabel="기록 보기" accessibilityHint={`누적 독서 시간 ${timeLabel}`}
                 onPress={openRecords} style={({ pressed }) => [local.linkRow, pressed && styles.pressed]}>
@@ -84,7 +97,6 @@ function BookDetail({ book, repository }: { book: BookRecord; repository: Record
         {book.status === 'DONE' && <PrimaryButton label="다시 읽기" onPress={() => changeStatus(false)} />}
         {book.status === 'READING' && <>
             <PrimaryButton label="이어서 읽기" onPress={read} />
-            <SecondaryButton label="완독 표시" onPress={() => changeStatus(true)} />
         </>}
         <SecondaryButton label="책장으로" onPress={() => router.dismissTo('/shelf')} />
     </Screen>;
@@ -93,6 +105,7 @@ function BookDetail({ book, repository }: { book: BookRecord; repository: Record
 const local = StyleSheet.create({
     cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
     editButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, minHeight: sizes.minTouch, minWidth: sizes.minTouch, paddingHorizontal: spacing.sm },
+    checkButton: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: sizes.minTouch, paddingHorizontal: spacing.xs },
     linkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: sizes.minTouch, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.line.border },
     linkText: { flex: 1, gap: spacing.xs },
     chevron: { ...typography.heading, color: colors.text.muted },
