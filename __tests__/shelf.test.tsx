@@ -126,8 +126,12 @@ test('FR-04 S-31 이어서 읽기는 같은 책 ID로 독서 시작에 연결해
 
 test('FR-04 S-31 완독 표시 후 S-33에서 회차 없이 다시 읽기를 제공해요', async () => {
     repository.books.save(book);
+    const alert = jest.spyOn(Alert, 'alert');
     await renderRouter(routes, { initialUrl: `/book/${id}` });
-    await fireEvent.press(await screen.findByRole('button', { name: '완독 표시' }));
+    await fireEvent.press(await screen.findByRole('checkbox', { name: '완독으로 표시' }));
+    expect(alert).toHaveBeenCalledWith('완독으로 표시할까요?', expect.stringContaining('데미안'), expect.any(Array));
+    expect(repository.books.get(id)?.status).toBe('READING');
+    await act(async () => { alert.mock.calls.at(-1)?.[2]?.find(button => button.text === '완독')?.onPress?.(); });
     expect(repository.books.get(id)).toMatchObject({ status: 'DONE', currentPage: 240, completedCount: 1, syncPending: true });
     expect(await screen.findByRole('button', { name: '다시 읽기' })).toBeOnTheScreen();
     expect(screen.queryByText(/회차/)).toBeNull();
@@ -168,6 +172,7 @@ test.each(['책장으로', '삭제'])('FR-04 D-01 S-31 %s 이동은 기존 책�
     await renderRouter(routes, { initialUrl: '/shelf' });
     await fireEvent.press(await screen.findByRole('button', { name: '데미안, 헤르만 헤세, 읽는 중, 책 상세 보기' }));
     if (action === '삭제') {
+        await fireEvent.press(await screen.findByRole('button', { name: '정보 편집' }));
         await fireEvent.press(await screen.findByRole('button', { name: '데미안 책 삭제' }));
         await act(async () => { alert.mock.calls[0][2]?.find(button => button.text === '삭제')?.onPress?.(); });
     } else {
@@ -201,6 +206,7 @@ test('FR-04 D-01 S-30 삭제 취소는 유지하고 확인하면 책장에서 �
     repository.sessions.save({ id: sessionId, bookId: id, startedAt: 0, endedAt: 61000, activeSeconds: 61, startPage: 0, endPage: 84, source: 'TIMER' });
     const alert = jest.spyOn(Alert, 'alert');
     await renderRouter(routes, { initialUrl: `/book/${id}` });
+    await fireEvent.press(await screen.findByRole('button', { name: '정보 편집' }));
     await fireEvent.press(await screen.findByRole('button', { name: '데미안 책 삭제' }));
     expect(alert).toHaveBeenCalledWith('책을 삭제할까요?', expect.stringContaining('데미안'), expect.any(Array));
     expect(repository.books.get(id)).not.toBeNull();

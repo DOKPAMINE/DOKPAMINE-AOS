@@ -1,13 +1,14 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { KeyboardAvoidingView, Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { PrimaryButton, Screen, SecondaryButton, StateView } from '../components';
 import { GENRES } from '../domain/pageRules';
 import { BookEditError, parseBookEdit, type BookEditFields } from '../domain/shelfRules';
 import { validateSessionPageRange } from '../domain/syncValidation';
 import type { BookRecord } from '../db/schema';
 import type { RecordRepository } from '../db/repository';
-import { colors } from '../theme';
+import { colors, radii, sizes, spacing, typography } from '../theme';
 import { shelfStyles as styles } from './styles';
 import { useShelfRepository } from './useShelfRepository';
 
@@ -47,7 +48,22 @@ function BookEditForm({ book, repository }: { book: BookRecord; repository: Reco
             detail();
         } catch { setError('저장하지 못했어요. 기기 저장 공간을 확인하고 다시 시도해 주세요.'); }
     };
-    return <KeyboardAvoidingView style={{ flex: 1 }} behavior="height"><Screen title="책 정보 편집">
+    // S-34: 책 삭제는 편집 화면 맨 아래에 두고, 함께 지워지는 기록을 확인한 뒤에만 삭제한다.
+    const confirmDelete = () => Alert.alert('책을 삭제할까요?', `「${book.title}」 책을 삭제하면 이 책의 독서 기록·감상·문장도 함께 삭제돼요.`, [
+        { text: '취소', style: 'cancel' },
+        { text: '삭제', style: 'destructive', onPress: () => {
+            try {
+                repository.books.softDelete(book.id);
+                router.dismissTo('/shelf');
+            } catch { setError('삭제하지 못했어요. 기기 저장 공간을 확인하고 다시 시도해 주세요.'); }
+        } },
+    ]);
+    const deleteButton = <Pressable accessibilityRole="button" accessibilityLabel={`${book.title} 책 삭제`} onPress={confirmDelete}
+        style={({ pressed }) => [local.deleteButton, pressed && styles.pressed]}>
+        <MaterialCommunityIcons name="trash-can-outline" color={colors.state.error} size={sizes.icon * 0.75} accessible={false} />
+        <Text style={local.deleteText}>삭제</Text>
+    </Pressable>;
+    return <KeyboardAvoidingView style={{ flex: 1 }} behavior="height"><Screen title="책 정보 편집" action={deleteButton}>
         {(['title', 'author', 'publisher', 'totalPages'] as const).map(key => {
             const label = { title: '제목', author: '저자', publisher: '출판사 (선택)', totalPages: '전체 쪽수' }[key];
             return <View key={key} style={styles.section}>
@@ -70,3 +86,8 @@ function BookEditForm({ book, repository }: { book: BookRecord; repository: Reco
         <SecondaryButton label="취소" onPress={detail} />
     </Screen></KeyboardAvoidingView>;
 }
+
+const local = StyleSheet.create({
+    deleteButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, minHeight: sizes.minTouch, minWidth: sizes.minTouch, paddingHorizontal: spacing.md, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.state.error, backgroundColor: colors.state.errorBg },
+    deleteText: { ...typography.label, fontFamily: typography.heading.fontFamily, color: colors.state.error },
+});
