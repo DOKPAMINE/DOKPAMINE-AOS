@@ -25,6 +25,8 @@ export const books = sqliteTable('books', {
     totalPages: integer('total_pages').notNull(),
     genre: text('genre').$type<Genre>().notNull(),
     coverUrl: text('cover_url'),
+    sideCoverUrl: text('side_cover_url'),
+    yes24ProductUrl: text('yes24_product_url'),
     status: text('status', { enum: ['WANT', 'READING', 'DONE'] }).notNull().default('READING'),
     currentPage: integer('current_page').notNull().default(0),
     completedCount: integer('completed_count').notNull().default(0),

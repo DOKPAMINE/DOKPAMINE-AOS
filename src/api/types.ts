@@ -46,6 +46,8 @@ export interface CatalogBook {
     totalPages?: number | null;
     genre?: string | null;
     coverUrl?: string | null;
+    sideCoverUrl?: string | null;
+    yes24ProductUrl?: string | null;
     source: 'nlk' | 'kakao' | 'google' | 'openlibrary';
 }
 
@@ -58,6 +60,8 @@ export interface BookDto {
     totalPages: number;
     genre: string;
     coverUrl?: string | null;
+    sideCoverUrl?: string | null;
+    yes24ProductUrl?: string | null;
     status: 'WANT' | 'READING' | 'DONE';
     currentPage: number;
     completedCount: number;

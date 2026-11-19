@@ -51,13 +51,13 @@ export function snapshotRecords(snapshot: SyncSnapshot) {
         books: convert(snapshot.books, (row): BookRecord => {
             validateBook(row);
             valid(['WANT', 'READING', 'DONE'].includes(row.status) && integer(row.completedCount) &&
-                typeof row.genre === 'string' && text(row.isbn, Infinity) && text(row.publisher, Infinity) && text(row.coverUrl, Infinity));
+                typeof row.genre === 'string' && text(row.isbn, Infinity) && text(row.publisher, Infinity) && text(row.coverUrl, Infinity) && text(row.sideCoverUrl, Infinity) && text(row.yes24ProductUrl, Infinity));
             const createdAt = local(row), updatedAt = timestamp(row.updatedAt);
             const completedAt = row.completedAt == null ? null : timestamp(row.completedAt);
             totalPages.set(row.id, row.totalPages);
             return { ...row, ...createdAt, isbn: row.isbn ?? null, publisher: row.publisher ?? null,
-                coverUrl: row.coverUrl ?? null, genre: GENRES.find(genre => genre === row.genre) ?? '기타',
-                completedAt, updatedAt };
+                coverUrl: row.coverUrl ?? null, sideCoverUrl: row.sideCoverUrl ?? null, yes24ProductUrl: row.yes24ProductUrl ?? null,
+                genre: GENRES.find(genre => genre === row.genre) ?? '기타',                completedAt, updatedAt };
         }),
         sessions: convert(snapshot.sessions, (row): SessionRecord => {
             valid(uuid(row.bookId) && integer(row.activeSeconds) && integer(row.startPage) &&

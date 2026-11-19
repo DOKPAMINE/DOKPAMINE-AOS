@@ -15,6 +15,7 @@ export async function lookupBook(isbn: string): Promise<BookAddValues> {
     return {
         ...emptyBookValues, isbn: normalized, title: result.title ?? '', author: result.author ?? '',
         publisher: result.publisher ?? '', coverUrl: result.coverUrl ?? '',
+        sideCoverUrl: result.sideCoverUrl ?? '', yes24ProductUrl: result.yes24ProductUrl ?? '',
         totalPages: result.totalPages == null ? '' : String(result.totalPages),
         genre: result.genre && isBookGenre(result.genre) ? result.genre : '',
     };
@@ -30,11 +31,15 @@ export function saveNewBook(books: EntityRepository<BookRecord>, values: BookAdd
     const valid = bookAddSchema.parse(values);
     const existing = findExistingBook(books, valid.isbn);
     if (existing) return { kind: 'duplicate' as const, book: existing };
+    // 조회한 ISBN과 저장할 ISBN이 같을 때만 조회 결과의 표지·책등·상품 링크를 저장한다.
+    const sameIsbn = normalizeIsbn(valid.isbn) === normalizeIsbn(originalIsbn);
     const book = books.save({
         id, title: valid.title, author: valid.author, totalPages: parseTotalPages(valid.totalPages)!,
         genre: isBookGenre(valid.genre) ? valid.genre : '기타', isbn: normalizeIsbn(valid.isbn),
         publisher: valid.publisher.trim() || null,
-        coverUrl: normalizeIsbn(valid.isbn) === normalizeIsbn(originalIsbn) ? valid.coverUrl || null : null,
+        coverUrl: sameIsbn ? valid.coverUrl || null : null,
+        sideCoverUrl: sameIsbn ? valid.sideCoverUrl || null : null,
+        yes24ProductUrl: sameIsbn ? valid.yes24ProductUrl || null : null,
         status, currentPage: 0, completedCount: 0, completedAt: null,
     });
     return { kind: 'saved' as const, book };

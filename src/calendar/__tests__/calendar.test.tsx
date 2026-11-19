@@ -12,7 +12,7 @@ const now = Date.parse('2026-11-02T00:00:00+09:00');
 const book: BookRecord = {
     id: 'book', title: '데미안', author: '헤르만 헤세', genre: '소설', totalPages: 240,
     currentPage: 240, status: 'DONE', completedAt: Date.parse('2026-10-31T14:59:59Z'),
-    isbn: null, publisher: null, coverUrl: null, completedCount: 1,
+    isbn: null, publisher: null, coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, completedCount: 1,
     createdAt: now, updatedAt: now, deleted: false, syncPending: true, localVersion: 1,
 };
 function session(id: string, day: string, seconds: number, extra: Partial<SessionRecord> = {}): SessionRecord {
