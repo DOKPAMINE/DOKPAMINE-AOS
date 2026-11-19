@@ -1,11 +1,12 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, StateView } from '../../src/components';
 import type { Genre } from '../../src/domain/pageRules';
 import { countShelfGenres, countShelfStatuses, filterShelfBooks, filterShelfGenre, groupShelfBooks, toggleShelfFilter, type ShelfStatus } from '../../src/domain/shelfRules';
+import type { BookRecord } from '../../src/db/schema';
 import { bookStatusIcons, bookStatusLabels } from '../../src/shelf/BookStatus';
 import { useShelfRepository } from '../../src/shelf/useShelfRepository';
 import { shelfStyles } from '../../src/shelf/styles';
@@ -28,6 +29,37 @@ const SPINE_CHARS = 9;
 function spineTitle(title: string) {
     const chars = Array.from(title.replace(/\s+/g, ''));
     return (chars.length > SPINE_CHARS ? [...chars.slice(0, SPINE_CHARS - 1), '…'] : chars).join('\n');
+}
+
+const SPINE_IMAGE_HEIGHT = sizes.minTouch * 5;
+const SPINE_IMAGE_MIN = spacing.lg;
+const SPINE_IMAGE_MAX = sizes.minTouch * 2;
+
+/** S-30: 책등 이미지 비율대로 폭을 정하되 너무 얇거나 두껍지 않게 제한한다. */
+function spineImageWidth(ratio: number | null) {
+    if (ratio === null || !Number.isFinite(ratio) || ratio <= 0) return sizes.minTouch;
+    return Math.min(SPINE_IMAGE_MAX, Math.max(SPINE_IMAGE_MIN, Math.round(SPINE_IMAGE_HEIGHT * ratio)));
+}
+
+/** S-30: 책등 이미지가 있으면 실제 책등을, 없거나 불러오지 못하면 색 책등과 세로 제목을 보여 준다. */
+function ShelfSpine({ book }: { book: BookRecord }) {
+    const [failed, setFailed] = useState(false);
+    const [ratio, setRatio] = useState<number | null>(null);
+    const label = `${book.title}, ${book.author}, ${bookStatusLabels[book.status]}, 책 상세 보기`;
+    const open = () => router.push({ pathname: '/book/[id]', params: { id: book.id } });
+    if (book.sideCoverUrl && !failed) {
+        const width = spineImageWidth(ratio);
+        return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={open}
+            style={({ pressed }) => [styles.imageSpine, { width: Math.max(sizes.minTouch, width) }, pressed && shelfStyles.pressed]}>
+            <Image testID={`spine-image-${book.id}`} source={{ uri: book.sideCoverUrl }} accessible={false} resizeMode="stretch"
+                onLoad={event => { const { width: w, height: h } = event.nativeEvent.source; if (w > 0 && h > 0) setRatio(w / h); }}
+                onError={() => setFailed(true)} style={[styles.spineImage, { width }]} />
+        </Pressable>;
+    }
+    return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={open}
+        style={({ pressed }) => [styles.spine, spineBackground[book.status], pressed && shelfStyles.pressed]}>
+        <Text style={[styles.spineTitle, { color: spineInk[book.status] }]}>{spineTitle(book.title)}</Text>
+    </Pressable>;
 }
 
 /** S-30: 고른 상태·장르에 맞는 책이 없을 때 보여 줄 안내 문구 */
@@ -98,13 +130,7 @@ export default function ShelfScreen() {
             groups.map(group => <View key={group.genre} style={shelfStyles.section}>
                 <Text accessibilityRole="header" style={shelfStyles.title}>{group.genre} · {group.books.length}권</Text>
                 <ScrollView horizontal contentContainerStyle={styles.books}>
-                    {group.books.map(book => <Pressable key={book.id} accessibilityRole="button"
-                        accessibilityLabel={`${book.title}, ${book.author}, ${bookStatusLabels[book.status]}, 책 상세 보기`}
-                        onPress={() => router.push({ pathname: '/book/[id]', params: { id: book.id } })}
-                        style={({ pressed }) => [styles.spine, spineBackground[book.status], pressed && shelfStyles.pressed]}>
-                        <Text style={[styles.spineTitle, { color: spineInk[book.status] }]}>{spineTitle(book.title)}</Text>
-                        <MaterialCommunityIcons name={bookStatusIcons[book.status]} color={spineInk[book.status]} size={sizes.icon} accessible={false} />
-                    </Pressable>)}
+                    {group.books.map(book => <ShelfSpine key={book.id} book={book} />)}
                 </ScrollView>
                 <View style={styles.plank} />
             </View>)}
@@ -151,13 +177,16 @@ const styles = StyleSheet.create({
     books: { gap: spacing.xs, alignItems: 'flex-end', paddingHorizontal: spacing.xs },
     spine: { width: sizes.minTouch, minHeight: sizes.minTouch * 4, paddingVertical: spacing.sm, gap: spacing.sm, alignItems: 'center', justifyContent: 'space-between', borderTopLeftRadius: radii.small, borderTopRightRadius: radii.small },
     spineTitle: { ...typography.caption, textAlign: 'center' },
+    imageSpine: { height: SPINE_IMAGE_HEIGHT, alignItems: 'center' },
+    spineImage: { height: SPINE_IMAGE_HEIGHT, borderTopLeftRadius: radii.small, borderTopRightRadius: radii.small },
     reading: { backgroundColor: colors.brand.espresso },
     done: { backgroundColor: colors.text.muted },
     want: { backgroundColor: colors.brand.sand },
     plank: { height: spacing.sm, backgroundColor: colors.brand.espresso, marginTop: -spacing.md },
     sheetRoot: { flex: 1, justifyContent: 'flex-end' },
     backdrop: { ...StyleSheet.absoluteFill },
-    sheet: { maxHeight: '70%', gap: spacing.md, paddingTop: spacing.xl, paddingHorizontal: spacing.xl, backgroundColor: colors.surface.paper, borderTopLeftRadius: radii.card, borderTopRightRadius: radii.card, borderWidth: 1, borderBottomWidth: 0, borderColor: colors.line.border },    option: { minHeight: sizes.minTouch, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.line.border },
+    sheet: { maxHeight: '70%', gap: spacing.md, paddingTop: spacing.xl, paddingHorizontal: spacing.xl, backgroundColor: colors.surface.paper, borderTopLeftRadius: radii.card, borderTopRightRadius: radii.card, borderWidth: 1, borderBottomWidth: 0, borderColor: colors.line.border },
+    option: { minHeight: sizes.minTouch, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.line.border },
     sheetList: { flexGrow: 0 },
     optionRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     optionSelected: { fontFamily: typography.heading.fontFamily },
