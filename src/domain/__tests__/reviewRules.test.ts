@@ -1,4 +1,4 @@
-import { bookOneLine, bookReports, emptyQuoteFields, emptyReviewFields, oneLineSchema, planOneLineSave, planReviewSave, quoteSchema, reviewSchema } from '../reviewRules';
+import { bookOneLine, bookReports, emptyQuoteFields, emptyReviewFields, oneLineSchema, planOneLineSave, planReviewSave, quoteSchema, reportSchema, reviewSchema } from '../reviewRules';
 
 test.each([[100, true], [101, false]])('FR-07 S-51 한줄평 %i자 허용 여부는 %s예요', (count, success) => {
     expect(reviewSchema.safeParse({ ...emptyReviewFields, oneLine: '가'.repeat(count) }).success).toBe(success);
@@ -86,4 +86,11 @@ test('#75 S-51 기존 한줄평을 비우거나 바꾸지 않으면 저장하지
         .toEqual({ kind: 'invalid', message: '한줄평은 비울 수 없어요. 남길 한줄평을 입력해 주세요.' });
     expect(planOneLineSave({ text: ' 기존 한줄평 ', visibility: 'PRIVATE' }, current))
         .toEqual({ kind: 'invalid', message: '바뀐 내용이 없어요. 한줄평이나 공개 범위를 고친 뒤 저장해 주세요.' });
+});
+test.each([[5000, true], [5001, false]])('#75 FR-07 S-51 독후감 화면은 %i자 허용 여부가 %s예요', (count, success) => {
+    expect(reportSchema.safeParse({ text: '가'.repeat(count) }).success).toBe(success);
+});
+test('#75 FR-08 S-51 독후감은 공백만 입력하면 저장할 수 없고 공개 범위를 생략하면 비공개예요', () => {
+    expect(reportSchema.safeParse({ text: '	 ' }).success).toBe(false);
+    expect(reportSchema.parse({ text: ' 독후감 ' })).toEqual({ text: '독후감', visibility: 'PRIVATE' });
 });

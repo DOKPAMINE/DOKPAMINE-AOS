@@ -5,6 +5,7 @@ import ReviewList from '../../../app/book/[id]/review';
 import ReviewWrite from '../../../app/book/[id]/review/write';
 import QuoteWrite from '../../../app/book/[id]/review/quote';
 import OneLineWrite from '../../../app/book/[id]/review/one-line';
+import ReportWrite from '../../../app/book/[id]/review/report';
 import { initializeDatabase, prepareRecordDatabase } from '../../db/client';
 import { createRecordRepository, type RecordRepository } from '../../db/repository';
 import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
@@ -19,6 +20,7 @@ const routes = {
     'book/[id]/review/write': ReviewWrite,
     'book/[id]/review/quote': QuoteWrite,
     'book/[id]/review/one-line': OneLineWrite,
+    'book/[id]/review/report': ReportWrite,
 };
 let memory: ReturnType<typeof memorySQLite>;
 let repository: RecordRepository;
@@ -261,4 +263,22 @@ test.each([
     await fireEvent.press(screen.getByRole('button', { name: '한줄평 저장' }));
     expect(screen.getByRole('alert')).toHaveTextContent(message);
     expect(repository.reviews.get(id)).toEqual(before);
+});
+
+test('#75 FR-08 S-51 독후감 쓰기 화면은 독후감 칸 하나만 두고 저장할 때마다 한줄평을 건드리지 않고 새로 쌓아요', async () => {
+    const oneLineId = '00000000-0000-4000-8000-000000000008';
+    const oneLine = repository.reviews.save({ id: oneLineId, bookId, oneLine: '기존 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    await renderRouter(routes, { initialUrl: `${base}/report` });
+    for (const [body, visibility] of [['첫 독후감', 'PRIVATE'], ['둘째 독후감', 'PUBLIC']] as const) {
+        if (body !== '첫 독후감') await act(async () => router.push(`${base}/report`));
+        await fireEvent.changeText(await screen.findByLabelText('독후감'), body);
+        expect(screen.queryByLabelText('한줄평')).toBeNull();
+        if (visibility === 'PUBLIC') await fireEvent.press(screen.getByRole('radio', { name: '공개' }));
+        await fireEvent.press(screen.getByRole('button', { name: '독후감 저장' }));
+        expect(await screen.findByText(body)).toBeOnTheScreen();
+    }
+    expect(repository.reviews.get(oneLineId)).toEqual(oneLine);
+    const reports = repository.reviews.list({ bookId }).filter(review => review.body);
+    expect(reports.map(({ oneLine: line, body, visibility }) => ({ line, body, visibility })).sort((a, b) => a.body!.localeCompare(b.body!)))
+        .toEqual([{ line: null, body: '둘째 독후감', visibility: 'PUBLIC' }, { line: null, body: '첫 독후감', visibility: 'PRIVATE' }]);
 });
