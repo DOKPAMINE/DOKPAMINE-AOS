@@ -108,6 +108,17 @@ test('FR-04 S-30 장르별 책등에서 상세로 이동하고 쪽수·누적 �
     expect(screen.getByText('나를 돌아봤어요.')).toBeOnTheScreen();
 });
 
+test('#75 S-31 책 상세에는 독후감이 아닌 최신 한줄평을 보여 줘요', async () => {
+    repository.books.save(book);
+    repository.reviews.save({ id: reviewId, bookId: id, oneLine: '처음 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.save({ id: '00000000-0000-4000-8000-0000000000aa', bookId: id, oneLine: null, body: '독후감', visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.save({ id: reviewId, bookId: id, oneLine: '고친 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    await renderRouter(routes, { initialUrl: `/book/${id}` });
+    expect(await screen.findByText('고친 한줄평')).toBeOnTheScreen();
+    expect(screen.queryByText('처음 한줄평')).toBeNull();
+    expect(screen.queryByText('독후감')).toBeNull();
+});
+
 test.each(['WANT', 'DONE'] as const)('FR-17 S-32 S-33 %s 책을 읽기 시작하면 로컬 상태와 동기화 대기를 저장해요', async status => {
     const first = repository.books.save({ ...book, status, completedCount: 1, completedAt: 100 });
     await renderRouter(routes, { initialUrl: `/book/${id}` });
