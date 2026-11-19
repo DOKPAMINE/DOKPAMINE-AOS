@@ -10,7 +10,8 @@ import RootLayout from '../../../app/_layout';
 import My from '../../../app/(tabs)/my';
 import Settings from '../../../app/settings';
 import SettingsLayout from '../../../app/settings/_layout';
-import ReviewWrite from '../../../app/book/[id]/review/write';
+import OneLineWrite from '../../../app/book/[id]/review/one-line';
+import ReportWrite from '../../../app/book/[id]/review/report';
 import Consent from '../../../app/ranking/consent';
 import Withdraw from '../../../app/ranking/withdraw';
 import { me, patchMe } from '../../api/endpoints';
@@ -56,7 +57,8 @@ const routes = {
     'ranking/consent': Consent,
     'ranking/withdraw': Withdraw,
     'book/_layout': Slot,
-    'book/[id]/review/write': ReviewWrite,
+    'book/[id]/review/one-line': OneLineWrite,
+    'book/[id]/review/report': ReportWrite,
     'book/[id]/review/index': () => <Text>감상 목록</Text>,
     'book/[id]/edit': () => <Text>책 정보 수정 화면</Text>,
     'book/[id]/records/[recordId]': () => <Text>기록 수정 화면</Text>,
@@ -147,12 +149,15 @@ test('FR-08 S-81 S-51 기본 공개 범위가 재진입 후 유지되고 새 감
     await first.unmount();
     await renderRouter(routes, { initialUrl: '/settings' });
     expect(await screen.findByRole('radio', { name: '기본 공개' })).toBeChecked();
-    await act(async () => router.push(`/book/${bookId}/review/write`));
-    expect(await screen.findByRole('radio', { name: '공개' })).toBeChecked();
-    await fireEvent.changeText(screen.getByLabelText('한줄평'), '설정한 공개 범위로 저장해요.');
-    await fireEvent.press(screen.getByRole('button', { name: '감상 저장' }));
-    await screen.findByText('감상 목록');
-    expect(repository.reviews.list()[0]).toMatchObject({ visibility: 'PUBLIC', syncPending: true });
+    for (const [route, label] of [['one-line', '한줄평'], ['report', '독후감']] as const) {
+        await act(async () => router.push(`/book/${bookId}/review/${route}`));
+        expect(await screen.findByRole('radio', { name: '공개' })).toBeChecked();
+        await fireEvent.changeText(screen.getByLabelText(label), '설정한 공개 범위로 저장해요.');
+        await fireEvent.press(screen.getByRole('button', { name: `${label} 저장` }));
+        await screen.findByText('감상 목록');
+    }
+    expect(repository.reviews.list()).toEqual([
+        expect.objectContaining({ visibility: 'PUBLIC', syncPending: true }), expect.objectContaining({ visibility: 'PUBLIC', syncPending: true })]);
 });
 
 test('FR-08 S-81 공개 범위 저장 실패는 기존 선택과 기존 감상을 유지해요', async () => {

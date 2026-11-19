@@ -4,6 +4,7 @@ import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card, PrimaryButton, ProgressBar, Screen, SecondaryButton, StateView } from '../components';
 import { beginReading, completeReading, readingTimeLabel } from '../domain/shelfRules';
+import { bookOneLine } from '../domain/reviewRules';
 import type { BookRecord } from '../db/schema';
 import type { RecordRepository } from '../db/repository';
 import { BookStatus } from './BookStatus';
@@ -24,8 +25,7 @@ function BookDetail({ book, repository }: { book: BookRecord; repository: Record
     const [notice, setNotice] = useState<string | null>(null);
     const [coverFailed, setCoverFailed] = useState(false);
     const sessions = repository.sessions.list({ bookId: book.id });
-    const review = repository.reviews.list({ bookId: book.id }).filter(row => row.oneLine?.trim())
-        .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    const review = bookOneLine(repository.reviews.list({ bookId: book.id }).filter(row => !row.conflict));
     const timeLabel = readingTimeLabel(sessions);
     const reviewLabel = review?.oneLine ?? '아직 남긴 한줄평이 없어요.';
     // 타이머 화면은 후속 단계 소유이며 bookId 계약만 연결한다.
