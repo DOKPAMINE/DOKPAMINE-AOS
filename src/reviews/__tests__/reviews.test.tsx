@@ -47,9 +47,59 @@ test.each(['PRIVATE', 'PUBLIC'])('FR-07 FR-08 NFR-04 S-51 %s 감상은 같은 �
     await fireEvent.press(screen.getByRole('button', { name: '감상 저장' }));
     expect(await screen.findByText('내 안의 세계를 돌아봤어요.')).toBeOnTheScreen();
     expect(screen).toHavePathname(base);
-    expect(repository.reviews.list({ bookId })).toHaveLength(1);
-    expect(repository.reviews.list({ bookId })[0]).toMatchObject({ bookId, visibility, syncPending: true, deleted: false });
-    expect(screen.getByText('기기에 저장됨 · 동기화 대기')).toBeOnTheScreen();
+    const saved = repository.reviews.list({ bookId });
+    expect(saved).toHaveLength(2);
+    expect(saved.find(review => review.oneLine)).toMatchObject({ bookId, oneLine: '내 안의 세계를 돌아봤어요.', body: null, visibility, syncPending: true, deleted: false });
+    expect(saved.find(review => review.body)).toMatchObject({ bookId, oneLine: null, body: '나의 길을 찾는 이야기가 오래 남았어요.', visibility, syncPending: true, deleted: false });
+    expect(screen.getAllByText('기기에 저장됨 · 동기화 대기')).toHaveLength(2);
+});
+
+const writeAgain = async () => {
+    await fireEvent.press(await screen.findByRole('button', { name: '감상 쓰기' }));
+    return screen.findByLabelText('한줄평');
+};
+
+test('#75 S-51 다시 쓰면 한줄평 칸은 기존 한줄평으로 채워지고 고치면 하나만 바뀌며 독후감은 쌓여요', async () => {
+    await renderRouter(routes, { initialUrl: base });
+    await fireEvent.changeText(await writeAgain(), '처음 한줄평');
+    await fireEvent.changeText(screen.getByLabelText('독후감'), '첫 독후감');
+    await fireEvent.press(screen.getByRole('button', { name: '감상 저장' }));
+    await screen.findByText('처음 한줄평');
+    const first = repository.reviews.list({ bookId }).find(review => review.oneLine)!;
+
+    expect(await writeAgain()).toHaveDisplayValue('처음 한줄평');
+    expect(screen.getByLabelText('독후감')).toHaveDisplayValue('');
+    await fireEvent.changeText(screen.getByLabelText('한줄평'), '고친 한줄평');
+    await fireEvent.changeText(screen.getByLabelText('독후감'), '둘째 독후감');
+    await fireEvent.press(screen.getByRole('button', { name: '감상 저장' }));
+    await screen.findByText('고친 한줄평');
+
+    const saved = repository.reviews.list({ bookId });
+    expect(saved.filter(review => review.oneLine)).toEqual([expect.objectContaining({ id: first.id, oneLine: '고친 한줄평' })]);
+    expect(saved.filter(review => review.body).map(review => review.body).sort()).toEqual(['둘째 독후감', '첫 독후감']);
+});
+
+test('#75 S-51 한줄평을 그대로 두고 독후감만 쓰면 한줄평은 바뀌지 않고 공개 범위는 독후감에만 적용돼요', async () => {
+    const id = '00000000-0000-4000-8000-000000000004';
+    repository.reviews.save({ id, bookId, oneLine: '기존 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    const before = repository.reviews.get(id);
+    await renderRouter(routes, { initialUrl: base });
+    expect(await writeAgain()).toHaveDisplayValue('기존 한줄평');
+    await fireEvent.changeText(screen.getByLabelText('독후감'), '새 독후감');
+    await fireEvent.press(screen.getByRole('radio', { name: '공개' }));
+    await fireEvent.press(screen.getByRole('button', { name: '감상 저장' }));
+    await screen.findByText('새 독후감');
+    expect(repository.reviews.get(id)).toEqual(before);
+    expect(repository.reviews.list({ bookId }).find(review => review.body)).toMatchObject({ oneLine: null, body: '새 독후감', visibility: 'PUBLIC' });
+});
+
+test('#75 S-51 바뀐 내용 없이 저장하면 안내하고 아무것도 저장하지 않아요', async () => {
+    repository.reviews.save({ id: '00000000-0000-4000-8000-000000000005', bookId, oneLine: '기존 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    await renderRouter(routes, { initialUrl: `${base}/write` });
+    expect(await screen.findByLabelText('한줄평')).toHaveDisplayValue('기존 한줄평');
+    await fireEvent.press(screen.getByRole('button', { name: '감상 저장' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('새로 쓴 내용이 없어요. 한줄평을 고치거나 독후감을 입력해 주세요.');
+    expect(repository.reviews.list()).toHaveLength(1);
 });
 
 test('FR-07 S-51 길이 오류는 저장을 막고 수정 후 저장할 수 있어요', async () => {
