@@ -32,7 +32,8 @@ afterEach(() => { memory.connection.close(); jest.restoreAllMocks(); });
 
 test('FR-07 S-50 빈 감상과 문장 목록에서 각각 작성으로 진입할 수 있어요', async () => {
     await renderRouter(routes, { initialUrl: base });
-    expect(await screen.findByText('아직 감상이 없어요. 책을 읽고 느낀 점을 남겨 주세요.')).toBeOnTheScreen();
+    expect(await screen.findByText('아직 한줄평이 없어요. 이 책을 한마디로 남겨 주세요.')).toBeOnTheScreen();
+    expect(screen.getByText('아직 독후감이 없어요. 책을 읽고 느낀 점을 남겨 주세요.')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '문장 추가' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '감상 쓰기' }));
     expect(await screen.findByRole('radio', { name: '비공개 · 나만 보기' })).toBeChecked();
@@ -203,4 +204,21 @@ test('NFR-05·09 S-50 서버 비공개 감상과 공개 초안을 보고 비공�
     expect(screen.getByText('기기 초안')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '초안을 비공개로 저장' }));
     expect(repository.reviews.get(id)).toMatchObject({ visibility: 'PRIVATE', serverVersion: 3, conflict: null, syncPending: true });
+});
+
+test('#75 S-50 맨 위에 최신 한줄평 하나, 그 아래에 독후감을 최신 작성 순으로 보여 줘요', async () => {
+    let time = 100000;
+    const timed = createRecordRepository((await prepareRecordDatabase(memory.sqlite)).db, () => time);
+    const save = (id: string, oneLine: string | null, body: string | null) =>
+        timed.reviews.save({ id: `00000000-0000-4000-8000-00000000001${id}`, bookId, oneLine, body, visibility: 'PRIVATE', publishedAt: null });
+    save('1', '예전 한줄평', null);
+    time += 1; save('2', null, '첫 독후감');
+    time += 1; save('3', '최신 한줄평', null);
+    time += 1; save('4', null, '둘째 독후감');
+    await renderRouter(routes, { initialUrl: base });
+    expect(await screen.findByText('최신 한줄평')).toBeOnTheScreen();
+    expect(screen.queryByText('예전 한줄평')).toBeNull();
+    const order = ['한줄평', '최신 한줄평', '독후감', '둘째 독후감', '첫 독후감'];
+    const texts = screen.getAllByText(new RegExp(`^(${order.join('|')})$`)).map(node => node.props.children);
+    expect(texts).toEqual(order);
 });
