@@ -1,5 +1,4 @@
-import { clampHomePage, homePageBooks, homePageCount, homePageOf } from '../homeBooks';
-
+import { clampHomePage, homePageBooks, homePageCount, homePageOf, readingPercent } from '../homeBooks';
 test('S-10 읽는 중 책을 2권씩 나눠 페이지 수를 세요', () => {
     expect(homePageCount(0)).toBe(1);
     expect(homePageCount(2)).toBe(1);
@@ -25,4 +24,13 @@ test('S-10 선택된 책이 있는 페이지에서 시작하고 못 찾으면 �
     expect(homePageOf(3)).toBe(1);
     expect(homePageOf(4)).toBe(2);
     expect(homePageOf(-1)).toBe(0);
+});
+
+test('S-10 읽은 쪽 비율을 내림한 퍼센트로 보여 주고 0~100을 벗어나지 않아요', () => {
+    expect(readingPercent(142, 160)).toBe(88);
+    expect(readingPercent(84, 240)).toBe(35);
+    expect(readingPercent(239, 240)).toBe(99);
+    expect(readingPercent(240, 240)).toBe(100);
+    expect(readingPercent(0, 688)).toBe(0);
+    expect(readingPercent(10, 0)).toBe(0);
 });

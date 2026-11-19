@@ -21,3 +21,9 @@ export function homePageBooks<T>(books: readonly T[], page: number, perPage = HO
     const start = clampHomePage(page, books.length, perPage) * perPage;
     return books.slice(start, start + perPage);
 }
+
+/** S-10: 읽은 비율을 0~100 정수로 내림해 끝까지 읽기 전에는 100%가 되지 않게 한다. */
+export function readingPercent(currentPage: number, totalPages: number) {
+    if (!(totalPages > 0)) return 0;
+    return Math.min(100, Math.max(0, Math.floor((currentPage / totalPages) * 100)));
+}
