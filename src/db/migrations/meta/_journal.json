@@ -22,6 +22,13 @@
       "when": 1794371387927,
       "tag": "0002_dear_whiplash",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1795069597746,
+      "tag": "0003_bizarre_gateway",
+      "breakpoints": true
     }
   ]
 }

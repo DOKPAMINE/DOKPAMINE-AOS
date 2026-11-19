@@ -9,6 +9,8 @@ export const bookAddSchema = z.object({
     isbn: z.string().refine(value => !value.trim() || normalizeIsbn(value) !== null, '올바른 ISBN을 입력해 주세요.'),
     publisher: z.string().trim().max(100, '출판사는 100자 이내로 입력해 주세요.'),
     coverUrl: z.string(),
+    sideCoverUrl: z.string(),
+    yes24ProductUrl: z.string(),
 });
 export type BookAddValues = z.infer<typeof bookAddSchema>;
-export const emptyBookValues: BookAddValues = { title: '', author: '', totalPages: '', genre: '', isbn: '', publisher: '', coverUrl: '' };
+export const emptyBookValues: BookAddValues = { title: '', author: '', totalPages: '', genre: '', isbn: '', publisher: '', coverUrl: '', sideCoverUrl: '', yes24ProductUrl: '' };

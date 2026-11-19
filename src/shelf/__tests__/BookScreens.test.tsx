@@ -21,7 +21,7 @@ beforeEach(async () => {
     const prepared = await prepareRecordDatabase(memory.sqlite);
     repository = prepared.repository;
     jest.mocked(initializeDatabase).mockResolvedValue(prepared);
-    repository.books.save({ id, title: '데미안', author: '헤세', isbn: null, publisher: null, coverUrl: null,
+    repository.books.save({ id, title: '데미안', author: '헤세', isbn: null, publisher: null, coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null,
         genre: '소설', status: 'READING', totalPages: 240, currentPage: 84, completedCount: 0, completedAt: null });
 });
 afterEach(() => { memory.connection.close(); });

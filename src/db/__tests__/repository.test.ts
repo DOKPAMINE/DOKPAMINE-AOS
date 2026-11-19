@@ -17,7 +17,7 @@ const reviewId = '00000000-0000-4000-8000-000000000003';
 const quoteId = '00000000-0000-4000-8000-000000000004';
 const book: SaveInput<BookRecord> = {
     id: bookId, isbn: null, title: '데미안', author: '헤르만 헤세', publisher: null,
-    totalPages: 240, genre: '소설', coverUrl: null, status: 'READING', currentPage: 0,
+    totalPages: 240, genre: '소설', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, status: 'READING', currentPage: 0,
     completedCount: 0, completedAt: null,
 };
 const session: SaveInput<SessionRecord> = {
@@ -38,20 +38,30 @@ beforeEach(async () => {
 });
 afterEach(() => memory.connection.close());
 
-test('NFR-04 기존 DB를 업그레이드해도 책·세션과 삭제 기록을 보존해요', async () => {
+test('NFR-04 기존 DB를 업그레이드해도 책·세션과 삭제 기록을 보존하고 새 칸은 비워 둬요', async () => {
     const old = memorySQLite();
     try {
         const oldDb = drizzle(old.sqlite, { schema });
         await migrate(oldDb, { journal: { ...migrations.journal, entries: migrations.journal.entries.slice(0, 2) },
             migrations: { m0000: migrations.migrations.m0000, m0001: migrations.migrations.m0001 } });
-        const previous = createRecordRepository(oldDb, () => 100000);
-        previous.books.save(book);
-        previous.sessions.save(session);
-        previous.sessions.softDelete(sessionId);
-        const before = previous.sessions.get(sessionId, true);
+        // 이전 버전 DB에는 새 칸(side_cover_url 등)이 없으므로 현재 스키마의 저장소 대신 그 시점의 열만으로 기존 행을 만든다.
+        old.connection.prepare(`INSERT INTO books (id, created_at, sync_pending, local_version, deleted, isbn, title, author, publisher,
+            total_pages, genre, cover_url, status, current_page, completed_count, completed_at, updated_at)
+            VALUES (?, 100000, 1, 1, 0, NULL, '데미안', '헤르만 헤세', NULL, 240, '소설', NULL, 'READING', 0, 0, NULL, 100000)`).run(bookId);
+        old.connection.prepare(`INSERT INTO sessions (id, created_at, sync_pending, local_version, deleted, book_id,
+            started_at, ended_at, active_seconds, start_page, end_page, source)
+            VALUES (?, 100000, 1, 2, 1, ?, 1000, 61000, 60, 0, 84, 'TIMER')`).run(sessionId, bookId);
         const upgraded = (await prepareRecordDatabase(old.sqlite)).repository;
-        expect(upgraded.books.get(bookId)).toEqual(previous.books.get(bookId));
-        expect(upgraded.sessions.get(sessionId, true)).toEqual(before);
+        expect(upgraded.books.get(bookId)).toEqual({
+            id: bookId, createdAt: 100000, syncPending: true, localVersion: 1, deleted: false,
+            isbn: null, title: '데미안', author: '헤르만 헤세', publisher: null, totalPages: 240, genre: '소설',
+            coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, status: 'READING',
+            currentPage: 0, completedCount: 0, completedAt: null, updatedAt: 100000,
+        });
+        expect(upgraded.sessions.get(sessionId, true)).toEqual({
+            id: sessionId, createdAt: 100000, syncPending: true, localVersion: 2, deleted: true,
+            bookId, startedAt: 1000, endedAt: 61000, activeSeconds: 60, startPage: 0, endPage: 84, source: 'TIMER',
+        });
         expect(upgraded.syncRejections.list()).toEqual([]);
     } finally { old.connection.close(); }
 });

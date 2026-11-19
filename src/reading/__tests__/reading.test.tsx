@@ -34,7 +34,7 @@ jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), isLoaded: ()
 const id = '00000000-0000-4000-8000-000000000001';
 const sessionId = '00000000-0000-4000-8000-000000000002';
 const t0 = Date.parse('2026-11-02T01:00:00Z');
-const book: SaveInput<BookRecord> = { id, title: '데미안', author: '헤르만 헤세', isbn: null, publisher: null, totalPages: 240, currentPage: 84, genre: '소설', status: 'READING', coverUrl: null, completedCount: 0, completedAt: null };
+const book: SaveInput<BookRecord> = { id, title: '데미안', author: '헤르만 헤세', isbn: null, publisher: null, totalPages: 240, currentPage: 84, genre: '소설', status: 'READING', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, completedCount: 0, completedAt: null };
 let memory: ReturnType<typeof memorySQLite>;
 let prepared: Awaited<ReturnType<typeof prepareRecordDatabase>>;
 const routes = { 'reading-start': ReadingScreen, '(tabs)/index': () => <Text>홈</Text>, 'book/[id]/review/index': () => <Text>감상과 문장</Text> };

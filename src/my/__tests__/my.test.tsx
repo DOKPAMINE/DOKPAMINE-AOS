@@ -95,7 +95,7 @@ beforeEach(async () => {
     const { db } = await prepareRecordDatabase(memory.sqlite);
     repository = createRecordRepository(db);
     repository.books.save({ id: bookId, title: '데미안', author: '헤르만 헤세', isbn: null, publisher: null,
-        totalPages: 240, currentPage: 240, genre: '소설', status: 'DONE', coverUrl: null, completedCount: 1, completedAt: Date.now() });
+        totalPages: 240, currentPage: 240, genre: '소설', status: 'DONE', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, completedCount: 1, completedAt: Date.now() });
     repository.sessions.save({ id: sessionId, bookId, startedAt: Date.now(), endedAt: Date.now() + 5400000,
         activeSeconds: 5400, startPage: 0, endPage: 240, source: 'MANUAL' });
     jest.mocked(initializeDatabase).mockResolvedValue({ db, repository });

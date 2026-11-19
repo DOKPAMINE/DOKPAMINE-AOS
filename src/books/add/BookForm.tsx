@@ -42,7 +42,10 @@ export function BookForm({ initialValues, onSave }: {
                             autoCapitalize={name === 'isbn' ? 'characters' : 'sentences'}
                             maxLength={name === 'publisher' || name === 'author' ? 100 : name === 'title' ? 200 : undefined}
                             onChangeText={text => {
-                                if (name === 'isbn' && normalizeIsbn(text) !== normalizeIsbn(initialValues.isbn)) setValue('coverUrl', '');
+                                if (name === 'isbn' && normalizeIsbn(text) !== normalizeIsbn(initialValues.isbn)) {
+                                    // ISBN을 바꾸면 조회한 책의 표지·책등·상품 링크는 다른 책 것이므로 비운다.
+                                    setValue('coverUrl', ''); setValue('sideCoverUrl', ''); setValue('yes24ProductUrl', '');
+                                }
                                 onChange(text);
                             }} onBlur={onBlur} value={value} style={[styles.input, errors[name] && styles.invalid]} />
                     )} />

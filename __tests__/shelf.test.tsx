@@ -29,7 +29,7 @@ jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(), hideAs
 const id = '00000000-0000-4000-8000-000000000001';
 const sessionId = '00000000-0000-4000-8000-000000000002';
 const reviewId = '00000000-0000-4000-8000-000000000003';
-const book: SaveInput<BookRecord> = { id, title: '데미안', author: '헤르만 헤세', isbn: null, publisher: null, totalPages: 240, currentPage: 84, genre: '소설', status: 'READING', coverUrl: null, completedCount: 0, completedAt: null };
+const book: SaveInput<BookRecord> = { id, title: '데미안', author: '헤르만 헤세', isbn: null, publisher: null, totalPages: 240, currentPage: 84, genre: '소설', status: 'READING', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, completedCount: 0, completedAt: null };
 function ReadingStartTarget() {
     const { bookId } = useLocalSearchParams<{ bookId: string }>();
     return <Text>독서 시작 연결: {bookId}</Text>;
@@ -269,4 +269,15 @@ test('NFR-04 S-34 기기 쓰기가 실패하면 입력을 보존해 다시 저�
     save.mockRestore();
     await fireEvent.press(screen.getByRole('button', { name: '저장' }));
     expect(await screen.findByRole('header', { name: '바꾼 제목' })).toBeOnTheScreen();
+});
+
+test('FR-04 S-30 책등 이미지가 있으면 이미지로 보여 주고 불러오지 못하면 색 책등으로 바꿔요', async () => {
+    repository.books.save({ ...book, sideCoverUrl: 'https://image.yes24.com/goods/1/SIDE/L' });
+    await renderRouter(routes, { initialUrl: '/shelf' });
+    const image = await screen.findByTestId(`spine-image-${id}`);
+    expect(screen.queryByText('데\n미\n안')).toBeNull();
+    await fireEvent(image, 'error');
+    expect(screen.queryByTestId(`spine-image-${id}`)).toBeNull();
+    expect(screen.getByText('데\n미\n안')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: '데미안, 헤르만 헤세, 읽는 중, 책 상세 보기' })).toBeOnTheScreen();
 });
