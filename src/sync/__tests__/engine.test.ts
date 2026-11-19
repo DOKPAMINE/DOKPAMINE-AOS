@@ -471,3 +471,15 @@ test('NFR-05 S-81 로그아웃 뒤의 MANUAL 응답은 로컬 세션을 바꾸�
     await engine.sync();
     expect(records.sessions.get(session.id)).toMatchObject({ source: 'TIMER', syncPending: true });
 });
+
+test('NFR-05 오프라인에서 세션 삭제 후 책 쪽수를 줄이면 삭제부터 전송해요', async () => {
+    records.sessions.softDelete(session.id);
+    records.books.save({ ...book, totalPages: 40 });
+    const order: string[] = [];
+    transport.putSession.mockImplementation(async row => { expect(row.deleted).toBe(true); order.push('삭제'); });
+    transport.putBook.mockImplementation(async () => { order.push('책'); });
+    const engine = createSyncEngine(records, transport, online);
+    await engine.sync();
+    expect(order).toEqual(['삭제', '책']);
+    expect(engine.getState().status).toBe('idle');
+});
