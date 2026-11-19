@@ -67,6 +67,19 @@ export function createSyncEngine(repository: RecordRepository, transport: SyncTr
             }
         }
         for (const row of repository.books.list({ includeDeleted: true, syncPending: true })) {
+            // 쪽수 축소를 막는 이전 세션을 먼저 삭제하고 기존 400도 다시 평가한다.
+            if (!row.deleted) {
+                for (const session of repository.sessions.list({ bookId: row.id, includeDeleted: true, syncPending: true })) {
+                    if (!session.deleted || Math.max(session.startPage, session.endPage ?? 0) <= row.totalPages) continue;
+                    await attempt(`session:${session.id}`, async () => {
+                        checkStopped();
+                        const saved = await transport.putSession(sessionDto(session));
+                        if (stopped) return;
+                        repository.sessions.acknowledge(session, saved);
+                        repository.syncRejections.clear(`book:${row.id}`);
+                    });
+                }
+            }
             await attempt(`book:${row.id}`, () => sendBook(row.id), {
                 kind: 'book', recordId: row.id, bookId: row.id, localVersion: row.localVersion,
             });
