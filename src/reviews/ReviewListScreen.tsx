@@ -2,7 +2,7 @@ import { uuid } from 'expo';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Text, View } from 'react-native';
-import { Card, PrimaryButton, Screen, SecondaryButton, StateView } from '../components';
+import { Card, Screen, SecondaryButton, StateView } from '../components';
 import type { RecordRepository } from '../db/repository';
 import type { ReviewRecord } from '../db/schema';
 import { useReviewRecords } from './useReviewRecords';
@@ -17,11 +17,10 @@ export function ReviewListScreen() {
             <StateView kind="empty" message="책을 찾을 수 없어요. 삭제된 책인지 확인해 주세요." />
         ) : <>
             <Text style={styles.heading}>{records.book?.title ?? '삭제된 책'}</Text>
-            {records.book && <PrimaryButton label="감상 쓰기" onPress={() => router.push({ pathname: '/book/[id]/review/write', params: { id } })} />}
             {records.conflicts.length > 0 && <View style={styles.section}>
                 {records.conflicts.map(review => <ReviewConflictCard key={review.id} review={review} repository={records.repository} />)}
             </View>}
-            <ReviewSections reviews={records.reviews.filter(review => !review.conflict)} />
+            <ReviewSections bookId={id} canWrite={Boolean(records.book)} reviews={records.reviews.filter(review => !review.conflict)} />
             {records.book && <View style={styles.section}>
                 <Text accessibilityRole="header" style={styles.heading}>좋아하는 문장</Text>
                 <SecondaryButton label="문장 추가" onPress={() => router.push({ pathname: '/book/[id]/review/quote', params: { id } })} />
@@ -38,13 +37,15 @@ export function ReviewListScreen() {
     </Screen>;
 }
 
-/** S-50: 맨 위에 책의 한줄평 하나, 그 아래에 독서마다 쌓인 독후감을 보여 준다. */
-function ReviewSections({ reviews }: { reviews: ReviewRecord[] }) {
+/** S-50: 맨 위에 책의 한줄평 하나, 그 아래에 독서마다 쌓인 독후감을 보여 주고 각각 쓰기 화면으로 보낸다. */
+function ReviewSections({ bookId, canWrite, reviews }: { bookId: string; canWrite: boolean; reviews: ReviewRecord[] }) {
     const oneLine = bookOneLine(reviews);
     const reports = bookReports(reviews);
     return <>
         <View style={styles.section}>
             <Text accessibilityRole="header" style={styles.heading}>한줄평</Text>
+            {canWrite && <SecondaryButton label={oneLine ? '한줄평 수정' : '한줄평 쓰기'}
+                onPress={() => router.push({ pathname: '/book/[id]/review/one-line', params: { id: bookId } })} />}
             {oneLine ? <Card>
                 <Text style={styles.meta}>{visibilityText(oneLine.visibility)}</Text>
                 <Text style={styles.heading}>{oneLine.oneLine}</Text>
@@ -53,6 +54,7 @@ function ReviewSections({ reviews }: { reviews: ReviewRecord[] }) {
         </View>
         <View style={styles.section}>
             <Text accessibilityRole="header" style={styles.heading}>독후감</Text>
+            {canWrite && <SecondaryButton label="독후감 쓰기" onPress={() => router.push({ pathname: '/book/[id]/review/report', params: { id: bookId } })} />}
             {reports.length === 0 ? <StateView kind="empty" message="아직 독후감이 없어요. 책을 읽고 느낀 점을 남겨 주세요." /> : reports.map(report => <Card key={report.id}>
                 <Text style={styles.meta}>{visibilityText(report.visibility)}</Text>
                 <Text style={styles.body}>{report.body}</Text>
