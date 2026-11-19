@@ -1,4 +1,4 @@
-import { bookOneLine, bookReports, emptyQuoteFields, emptyReviewFields, planReviewSave, quoteSchema, reviewSchema } from '../reviewRules';
+import { bookOneLine, bookReports, emptyQuoteFields, emptyReviewFields, oneLineSchema, planOneLineSave, planReviewSave, quoteSchema, reviewSchema } from '../reviewRules';
 
 test.each([[100, true], [101, false]])('FR-07 S-51 한줄평 %i자 허용 여부는 %s예요', (count, success) => {
     expect(reviewSchema.safeParse({ ...emptyReviewFields, oneLine: '가'.repeat(count) }).success).toBe(success);
@@ -62,4 +62,28 @@ test('#75 S-51 한줄평 100자와 독후감 5,000자 제한은 그대로예요'
     expect(planReviewSave({ oneLine: '가'.repeat(101), body: '', visibility: 'PRIVATE' }, '기존')).toMatchObject({ kind: 'invalid' });
     expect(planReviewSave({ oneLine: '기존', body: '가'.repeat(5001), visibility: 'PRIVATE' }, '기존')).toMatchObject({ kind: 'invalid' });
     expect(planReviewSave({ oneLine: '가'.repeat(100), body: '가'.repeat(5000), visibility: 'PRIVATE' }, '기존')).toMatchObject({ kind: 'save' });
+});
+
+test.each([[100, true], [101, false]])('#75 FR-07 S-51 한줄평 화면은 %i자 허용 여부가 %s예요', (count, success) => {
+    expect(oneLineSchema.safeParse({ text: '가'.repeat(count) }).success).toBe(success);
+});
+test('#75 FR-08 S-51 한줄평은 공백만 입력하면 저장할 수 없고 공개 범위를 생략하면 비공개예요', () => {
+    expect(oneLineSchema.safeParse({ text: '  ' }).success).toBe(false);
+    expect(oneLineSchema.parse({ text: ' 한줄평 ' })).toEqual({ text: '한줄평', visibility: 'PRIVATE' });
+});
+test('#75 S-51 처음 쓰는 한줄평은 입력한 공개 범위로 저장해요', () => {
+    expect(planOneLineSave({ text: ' 첫 한줄평 ', visibility: 'PUBLIC' })).toEqual({ kind: 'save', text: '첫 한줄평', visibility: 'PUBLIC' });
+    expect(planOneLineSave({ text: '', visibility: 'PRIVATE' })).toEqual({ kind: 'invalid', message: '한줄평을 입력해 주세요.' });
+});
+test('#75 S-51 기존 한줄평은 내용이나 공개 범위를 고치면 저장해요', () => {
+    const current = { oneLine: '기존 한줄평', visibility: 'PRIVATE' as const };
+    expect(planOneLineSave({ text: '고친 한줄평', visibility: 'PRIVATE' }, current)).toEqual({ kind: 'save', text: '고친 한줄평', visibility: 'PRIVATE' });
+    expect(planOneLineSave({ text: '기존 한줄평', visibility: 'PUBLIC' }, current)).toEqual({ kind: 'save', text: '기존 한줄평', visibility: 'PUBLIC' });
+});
+test('#75 S-51 기존 한줄평을 비우거나 바꾸지 않으면 저장하지 않고 안내해요', () => {
+    const current = { oneLine: '기존 한줄평', visibility: 'PRIVATE' as const };
+    expect(planOneLineSave({ text: ' ', visibility: 'PRIVATE' }, current))
+        .toEqual({ kind: 'invalid', message: '한줄평은 비울 수 없어요. 남길 한줄평을 입력해 주세요.' });
+    expect(planOneLineSave({ text: ' 기존 한줄평 ', visibility: 'PRIVATE' }, current))
+        .toEqual({ kind: 'invalid', message: '바뀐 내용이 없어요. 한줄평이나 공개 범위를 고친 뒤 저장해 주세요.' });
 });

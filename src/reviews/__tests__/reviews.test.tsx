@@ -4,6 +4,7 @@ import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-librar
 import ReviewList from '../../../app/book/[id]/review';
 import ReviewWrite from '../../../app/book/[id]/review/write';
 import QuoteWrite from '../../../app/book/[id]/review/quote';
+import OneLineWrite from '../../../app/book/[id]/review/one-line';
 import { initializeDatabase, prepareRecordDatabase } from '../../db/client';
 import { createRecordRepository, type RecordRepository } from '../../db/repository';
 import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
@@ -17,6 +18,7 @@ const routes = {
     'book/[id]/review/index': ReviewList,
     'book/[id]/review/write': ReviewWrite,
     'book/[id]/review/quote': QuoteWrite,
+    'book/[id]/review/one-line': OneLineWrite,
 };
 let memory: ReturnType<typeof memorySQLite>;
 let repository: RecordRepository;
@@ -221,4 +223,42 @@ test('#75 S-50 맨 위에 최신 한줄평 하나, 그 아래에 독후감을 �
     const order = ['한줄평', '최신 한줄평', '독후감', '둘째 독후감', '첫 독후감'];
     const texts = screen.getAllByText(new RegExp(`^(${order.join('|')})$`)).map(node => node.props.children);
     expect(texts).toEqual(order);
+});
+
+test('#75 FR-08 S-51 한줄평 쓰기 화면은 한줄평 칸 하나만 두고 고른 공개 범위로 한줄평 하나를 만들어요', async () => {
+    await renderRouter(routes, { initialUrl: `${base}/one-line` });
+    expect(await screen.findByText('한줄평 쓰기')).toBeOnTheScreen();
+    expect(screen.queryByLabelText('독후감')).toBeNull();
+    await fireEvent.changeText(screen.getByLabelText('한줄평'), '처음 남기는 한줄평');
+    await fireEvent.press(screen.getByRole('radio', { name: '공개' }));
+    await fireEvent.press(screen.getByRole('button', { name: '한줄평 저장' }));
+    expect(await screen.findByText('처음 남기는 한줄평')).toBeOnTheScreen();
+    expect(repository.reviews.list({ bookId })).toEqual([
+        expect.objectContaining({ oneLine: '처음 남기는 한줄평', body: null, visibility: 'PUBLIC', syncPending: true })]);
+});
+
+test('#75 S-51 한줄평 수정은 기존 한줄평을 채워 열고 같은 감상을 고쳐요', async () => {
+    const id = '00000000-0000-4000-8000-000000000006';
+    repository.reviews.save({ id, bookId, oneLine: '기존 한줄평', body: null, visibility: 'PUBLIC', publishedAt: null });
+    await renderRouter(routes, { initialUrl: `${base}/one-line` });
+    expect(await screen.findByText('한줄평 수정')).toBeOnTheScreen();
+    expect(screen.getByLabelText('한줄평')).toHaveDisplayValue('기존 한줄평');
+    expect(screen.getByRole('radio', { name: '공개' })).toBeChecked();
+    await fireEvent.changeText(screen.getByLabelText('한줄평'), '고친 한줄평');
+    await fireEvent.press(screen.getByRole('button', { name: '한줄평 저장' }));
+    expect(await screen.findByText('고친 한줄평')).toBeOnTheScreen();
+    expect(repository.reviews.list({ bookId })).toEqual([expect.objectContaining({ id, oneLine: '고친 한줄평', visibility: 'PUBLIC' })]);
+});
+
+test.each([
+    ['', '한줄평은 비울 수 없어요. 남길 한줄평을 입력해 주세요.'],
+    ['기존 한줄평', '바뀐 내용이 없어요. 한줄평이나 공개 범위를 고친 뒤 저장해 주세요.'],
+])('#75 S-51 한줄평을 "%s"로 저장하면 막고 안내해요', async (text, message) => {
+    const id = '00000000-0000-4000-8000-000000000007';
+    const before = repository.reviews.save({ id, bookId, oneLine: '기존 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    await renderRouter(routes, { initialUrl: `${base}/one-line` });
+    await fireEvent.changeText(await screen.findByLabelText('한줄평'), text);
+    await fireEvent.press(screen.getByRole('button', { name: '한줄평 저장' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(message);
+    expect(repository.reviews.get(id)).toEqual(before);
 });
