@@ -226,6 +226,36 @@ test('#75 S-51 한줄평 수정은 기존 한줄평을 채워 열고 같은 감�
     expect(repository.reviews.list({ bookId })).toEqual([expect.objectContaining({ id, oneLine: '고친 한줄평', visibility: 'PUBLIC' })]);
 });
 
+test('#75 NFR-05 S-51 고치던 한줄평이 편집 중 충돌하면 다른 감상을 고치거나 새로 만들지 않아요', async () => {
+    const older = '00000000-0000-4000-8000-000000000010';
+    const id = '00000000-0000-4000-8000-000000000011';
+    let time = 100000;
+    const timed = createRecordRepository((await prepareRecordDatabase(memory.sqlite)).db, () => time);
+    timed.reviews.save({ id: older, bookId, oneLine: '예전 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    time += 1;
+    timed.reviews.save({ id, bookId, oneLine: '기존 한줄평', body: '함께 쓴 독후감', visibility: 'PRIVATE', publishedAt: null });
+    const olderBefore = repository.reviews.get(older);
+    await renderRouter(routes, { initialUrl: `${base}/one-line` });
+    expect(await screen.findByLabelText('한줄평')).toHaveDisplayValue('기존 한줄평');
+    await act(async () => repository.reviews.markConflict(id));
+    await fireEvent.changeText(screen.getByLabelText('한줄평'), '고친 한줄평');
+    await fireEvent.press(screen.getByRole('button', { name: '한줄평 저장' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/고치던 한줄평이 서버 기록과 달라졌거나 삭제됐어요\./);
+    expect(repository.reviews.list({ bookId })).toHaveLength(2);
+    expect(repository.reviews.get(older)).toEqual(olderBefore);
+    expect(repository.reviews.get(id)).toMatchObject({ oneLine: '기존 한줄평', body: '함께 쓴 독후감' });
+});
+
+test('#75 S-51 독후감과 함께 쓴 예전 감상의 한줄평을 고쳐도 독후감은 그대로예요', async () => {
+    const id = '00000000-0000-4000-8000-000000000012';
+    repository.reviews.save({ id, bookId, oneLine: '기존 한줄평', body: '함께 쓴 독후감', visibility: 'PRIVATE', publishedAt: null });
+    await renderRouter(routes, { initialUrl: `${base}/one-line` });
+    await fireEvent.changeText(await screen.findByLabelText('한줄평'), '고친 한줄평');
+    await fireEvent.press(screen.getByRole('button', { name: '한줄평 저장' }));
+    expect(await screen.findByText('고친 한줄평')).toBeOnTheScreen();
+    expect(repository.reviews.list({ bookId })).toEqual([expect.objectContaining({ id, oneLine: '고친 한줄평', body: '함께 쓴 독후감' })]);
+});
+
 test.each([
     ['', '한줄평은 비울 수 없어요. 남길 한줄평을 입력해 주세요.'],
     ['기존 한줄평', '바뀐 내용이 없어요. 한줄평이나 공개 범위를 고친 뒤 저장해 주세요.'],
