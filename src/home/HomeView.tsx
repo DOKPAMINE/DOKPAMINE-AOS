@@ -2,10 +2,11 @@ import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { PrimaryButton, ProgressBar, Screen, SecondaryButton, StateView } from '../components';
+import { PrimaryButton, Screen, SecondaryButton, StateView } from '../components';
 import { colors, radii, sizes, spacing, typography } from '../theme';
-import { clampHomePage, homePageBooks, homePageCount, homePageOf } from '../domain/homeBooks';
+import { clampHomePage, homePageBooks, homePageCount, homePageOf, readingPercent } from '../domain/homeBooks';
 import { formatWeekTime } from '../domain/homeTime';
+import { BookCover } from '../shelf/BookCover';
 import { useHomeRecords } from './useHomeRecords';
 
 export function HomeView() {
@@ -53,18 +54,33 @@ export function HomeView() {
                             <View accessibilityRole="radiogroup" accessibilityLabel="독서를 시작할 책 선택" style={styles.books}>
                                 {pageBooks.map(book => {
                                     const checked = book.id === selected?.id;
+                                    const percent = readingPercent(book.currentPage, book.totalPages);
                                     return (
                                         <View key={book.id} style={[styles.book, checked && styles.selectedBook]}>
-                                            <Pressable
-                                                accessibilityRole="radio"
-                                                accessibilityLabel={`${book.title}, ${book.author}`}
-                                                accessibilityState={{ checked }}
-                                                onPress={() => setSelectedId(book.id)}
-                                                style={({ pressed }) => [styles.bookChoice, pressed && styles.bookPressed]}                                            >
-                                                <Text style={styles.bookTitle}>{book.title}</Text>
-                                                <Text style={styles.label}>{book.author}</Text>
+                                            <View style={styles.bookInfo}>
+                                                <Pressable
+                                                    accessibilityRole="radio"
+                                                    accessibilityLabel={`${book.title}, ${book.author}`}
+                                                    accessibilityState={{ checked }}
+                                                    onPress={() => setSelectedId(book.id)}
+                                                    style={({ pressed }) => [styles.bookChoice, pressed && styles.bookPressed]}
+                                                >
+                                                    <Text numberOfLines={2} style={styles.bookTitle}>{book.title}</Text>
+                                                    <Text numberOfLines={1} style={styles.label}>{book.author}</Text>
+                                                </Pressable>
+                                                <View accessible accessibilityRole="progressbar" accessibilityLabel="독서 진행"
+                                                    accessibilityValue={{ min: 0, max: 100, now: percent, text: `${percent}%, ${book.currentPage} / ${book.totalPages}쪽` }}
+                                                    style={styles.progressRow}>
+                                                    <View style={styles.track}>
+                                                        <View style={[styles.fill, { width: `${percent}%` as const }]} />
+                                                    </View>
+                                                    <Text style={styles.percent}>{`${percent}%`}</Text>
+                                                </View>
+                                            </View>
+                                            <Pressable accessible={false} onPress={() => setSelectedId(book.id)}
+                                                style={({ pressed }) => pressed && styles.bookPressed}>
+                                                <BookCover key={book.coverUrl ?? 'none'} uri={book.coverUrl} genre={book.genre} width={sizes.minTouch * 1.5} />
                                             </Pressable>
-                                            <ProgressBar currentPage={book.currentPage} totalPages={book.totalPages} />
                                         </View>
                                     );
                                 })}
@@ -116,12 +132,17 @@ const styles = StyleSheet.create({
     label: { ...typography.bodySmall, color: colors.text.muted },
     value: { ...typography.titleLarge, color: colors.brand.espresso, fontVariant: ['tabular-nums'] },
     books: { gap: spacing.md },
-    book: { backgroundColor: colors.surface.card, borderRadius: radii.card, borderWidth: 1, borderColor: colors.line.border, padding: spacing.lg, gap: spacing.sm },
-    selectedBook: { borderColor: colors.brand.espresso, backgroundColor: colors.surface.sandSoft },    bookChoice: { minHeight: sizes.minTouch, minWidth: sizes.minTouch, gap: spacing.xs, paddingVertical: spacing.sm },
+    book: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: radii.card, borderWidth: 1, borderColor: colors.line.border, padding: spacing.lg, gap: spacing.lg },
+    bookInfo: { flex: 1, gap: spacing.sm },
+    selectedBook: { borderColor: colors.brand.espresso, backgroundColor: colors.surface.sandSoft },
+    bookChoice: { minHeight: sizes.minTouch, minWidth: sizes.minTouch, gap: spacing.xs, paddingVertical: spacing.sm },
     bookTitle: { ...typography.titleSmall, color: colors.brand.espresso },
     pressed: { backgroundColor: colors.surface.chip },
     bookPressed: { opacity: 0.6 },
-    pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
+    progressRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    track: { flex: 1, height: spacing.sm, borderRadius: radii.pill, backgroundColor: colors.brand.sand, overflow: 'hidden' },
+    fill: { height: '100%', borderRadius: radii.pill, backgroundColor: colors.text.muted },
+    percent: { ...typography.label, color: colors.brand.espresso, fontVariant: ['tabular-nums'] },    pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
     pageButton: { minWidth: sizes.minTouch, minHeight: sizes.minTouch, alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill, backgroundColor: colors.surface.chip },
     pageDisabled: { opacity: 0.4 },
     pageText: { ...typography.label, color: colors.brand.espresso, fontVariant: ['tabular-nums'] },

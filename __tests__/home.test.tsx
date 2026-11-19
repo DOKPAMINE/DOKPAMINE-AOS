@@ -91,8 +91,7 @@ test('FR-02 FR-04 S-10 읽는 중 책만 선택하고 같은 UUID로 독서 시�
     repository.books.list.mockReturnValue([first, second, book('want', '읽고 싶은 책', 'WANT'), book('done', '완독한 책', 'DONE')]);
     await renderRouter(routes, { initialUrl: '/' });
     expect(screen.getAllByRole('radio')).toHaveLength(2);
-    expect(screen.getAllByRole('progressbar')[0]).toHaveAccessibilityValue({ text: '84 / 240쪽' });
-    expect(screen.getByRole('radio', { name: '첫 번째 책, 지은이' })).toBeChecked();
+    expect(screen.getAllByRole('progressbar')[0]).toHaveAccessibilityValue({ text: '35%, 84 / 240쪽' });    expect(screen.getByRole('radio', { name: '첫 번째 책, 지은이' })).toBeChecked();
     await fireEvent.press(screen.getByRole('radio', { name: '두 번째 책, 지은이' }));
     expect(screen.getByRole('radio', { name: '두 번째 책, 지은이' })).toBeChecked();
     expect(screen.getByRole('radio', { name: '첫 번째 책, 지은이' })).not.toBeChecked();
@@ -179,4 +178,12 @@ test('FR-04 S-10 읽는 중 책이 3권 이상이면 2권씩 넘겨 보고 넘�
     await fireEvent.press(screen.getByRole('radio', { name: '책 3, 지은이' }));
     await fireEvent.press(screen.getByRole('button', { name: '책 3 독서 시작하기' }));
     expect(screen).toHavePathname('/reading-start');
+});
+test('FR-04 S-10 앞표지가 있으면 사진을, 불러오지 못하면 기본 표지를 보여 줘요', async () => {
+    repository.books.list.mockReturnValue([{ ...first, coverUrl: 'https://image.yes24.com/goods/1/L' }]);
+    await renderRouter(routes, { initialUrl: '/' });
+    const cover = screen.getByTestId('book-cover-image');
+    await fireEvent(cover, 'error');
+    expect(screen.queryByTestId('book-cover-image')).toBeNull();
+    expect(screen.getByTestId('book-cover-default')).toBeOnTheScreen();
 });

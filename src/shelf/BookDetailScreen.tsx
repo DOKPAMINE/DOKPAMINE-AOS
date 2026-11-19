@@ -1,12 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card, PrimaryButton, ProgressBar, Screen, SecondaryButton, StateView } from '../components';
 import { beginReading, completeReading, readingTimeLabel } from '../domain/shelfRules';
 import { bookOneLine } from '../domain/reviewRules';
 import type { BookRecord } from '../db/schema';
 import type { RecordRepository } from '../db/repository';
+import { BookCover } from './BookCover';
 import { BookStatus } from './BookStatus';
 import { useShelfRepository } from './useShelfRepository';
 import { shelfStyles as styles } from './styles';
@@ -23,7 +24,6 @@ export function BookDetailScreen() {
 
 function BookDetail({ book, repository }: { book: BookRecord; repository: RecordRepository }) {
     const [notice, setNotice] = useState<string | null>(null);
-    const [coverFailed, setCoverFailed] = useState(false);
     const sessions = repository.sessions.list({ bookId: book.id });
     const review = bookOneLine(repository.reviews.list({ bookId: book.id }).filter(row => !row.conflict));
     const timeLabel = readingTimeLabel(sessions);
@@ -60,11 +60,14 @@ function BookDetail({ book, repository }: { book: BookRecord; repository: Record
                     <Text style={styles.label}>편집</Text>
                 </Pressable>
             </View>
-            {book.coverUrl && !coverFailed ? <Image source={{ uri: book.coverUrl }} accessibilityLabel={`${book.title} 표지`} accessible
-                onError={() => setCoverFailed(true)} style={{ width: sizes.minTouch * 2, height: sizes.minTouch * 3 }} resizeMode="contain" /> :
-                <Text style={styles.muted}>기본 표지 · {book.genre}</Text>}
-            <Text style={styles.body}>{book.author}</Text>
-            <Text style={styles.muted}>{book.publisher ?? '출판사 정보가 없어요'} · {book.genre} · {book.totalPages}쪽</Text>
+            <View style={local.infoRow}>
+                <View style={local.infoText}>
+                    <Text style={styles.body}>{book.author}</Text>
+                    <Text style={styles.muted}>{book.publisher ?? '출판사 정보가 없어요'}</Text>
+                    <Text style={styles.muted}>{book.genre} · {book.totalPages}쪽</Text>
+                </View>
+                <BookCover key={book.coverUrl ?? 'none'} uri={book.coverUrl} genre={book.genre} width={sizes.minTouch * 2} />
+            </View>
         </Card>
         {book.status !== 'WANT' && <Card>
             <View style={local.cardHeader}>
@@ -106,6 +109,8 @@ const local = StyleSheet.create({
     cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
     editButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, minHeight: sizes.minTouch, minWidth: sizes.minTouch, paddingHorizontal: spacing.sm },
     checkButton: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: sizes.minTouch, paddingHorizontal: spacing.xs },
+    infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.lg },
+    infoText: { flex: 1, gap: spacing.sm },
     linkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: sizes.minTouch, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.line.border },
     linkText: { flex: 1, gap: spacing.xs },
     chevron: { ...typography.heading, color: colors.text.muted },
