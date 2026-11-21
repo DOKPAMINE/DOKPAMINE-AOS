@@ -1,6 +1,6 @@
 import type { BookDto, QuoteDto, ReviewDto, SessionDto, SyncSnapshot } from '../api/types';
 import type { BookRecord, QuoteRecord, ReviewRecord, SessionRecord } from '../db/schema';
-import { GENRES } from '../domain/pageRules';
+import { normalizeGenre } from '../domain/pageRules';
 import { validateBook } from '../domain/bookRules';
 
 const iso = (value: number) => new Date(value).toISOString();
@@ -57,7 +57,7 @@ export function snapshotRecords(snapshot: SyncSnapshot) {
             totalPages.set(row.id, row.totalPages);
             return { ...row, ...createdAt, isbn: row.isbn ?? null, publisher: row.publisher ?? null,
                 coverUrl: row.coverUrl ?? null, sideCoverUrl: row.sideCoverUrl ?? null, yes24ProductUrl: row.yes24ProductUrl ?? null,
-                genre: GENRES.find(genre => genre === row.genre) ?? '기타',                completedAt, updatedAt };
+                genre: normalizeGenre(row.genre) ?? '기타',                completedAt, updatedAt };
         }),
         sessions: convert(snapshot.sessions, (row): SessionRecord => {
             valid(uuid(row.bookId) && integer(row.activeSeconds) && integer(row.startPage) &&

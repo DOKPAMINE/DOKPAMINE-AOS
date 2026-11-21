@@ -1,8 +1,22 @@
 import type { ReadingSession } from './readingTypes';
 
 /** PRD D5: 자유 태그 대신 대표 장르 하나를 선택한다. */
-export const GENRES = ['소설', 'SF', '시/에세이', '인문', '역사', '사회/정치', '경제/경영', '자기계발', '과학', '예술', '만화', '기타'] as const;
+export const GENRES = ['소설/시', '에세이', '인문/사회', '경제/경영', '자기계발', '과학/IT', '예술', '만화', '기타'] as const;
 export type Genre = typeof GENRES[number];
+
+/** FR-01 / BE Flyway V4: 이전 열두 장르 이름을 새 아홉 장르로 바꾸는 규칙 */
+const LEGACY_GENRES: Readonly<Record<string, Genre>> = {
+    '소설': '소설/시', 'SF': '소설/시', '시/에세이': '에세이',
+    '인문': '인문/사회', '역사': '인문/사회', '사회/정치': '인문/사회', '과학': '과학/IT',
+};
+
+/** FR-01: 새 장르면 그대로, 이전 장르면 새 장르로 바꾸고, 모르는 값은 null을 돌려준다. */
+export function normalizeGenre(value: string | null | undefined): Genre | null {
+    if (typeof value !== 'string') return null;
+    const name = value.trim();
+    if ((GENRES as readonly string[]).includes(name)) return name as Genre;
+    return LEGACY_GENRES[name] ?? null;
+}
 
 export type EndPageInput =
     | { readonly kind: 'timeOnly' }
