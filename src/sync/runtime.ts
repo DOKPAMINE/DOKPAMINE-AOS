@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { AppState } from 'react-native';
 import { isOnline, isOnlineState } from '../api/connectivity';
 import { putBook, putQuote, putReview, putSession, syncSnapshot } from '../api/endpoints';
+import { refreshMissingCovers } from '../books/coverRefresh';
 import type { RecordRepository } from '../db/repository';
 import { createSyncEngine, type SyncEngine, type SyncState } from './engine';
 
@@ -37,17 +38,23 @@ export function startRecordSync(records: RecordRepository, accessToken: string):
         if (engine !== current) return;
         await current.sync();
     }
+    // FR-01 / S-30: 비어 있는 표지·책등은 앱 시작(복원 이후)·앱 활성화·연결 복구 때 다시 채운다.
+    function refreshCovers() {
+        if (engine !== current) return;
+        void refreshMissingCovers(records).catch(() => undefined);
+    }
     initialRestore = current.afterLogin();
+    void initialRestore.then(refreshCovers, refreshCovers);
     const unsubscribeState = current.subscribe(() => listeners.forEach(listener => listener()));
     const unsubscribeRecords = records.subscribe(() => { void trigger(); });
     let connected = false;
     const unsubscribeNetwork = NetInfo.addEventListener(state => {
         const next = isOnlineState(state);
-        if (next && !connected) void trigger();
+        if (next && !connected) { void trigger(); refreshCovers(); }
         connected = next;
     });
     const appSubscription = AppState.addEventListener('change', state => {
-        if (state === 'active') void trigger();
+        if (state === 'active') { void trigger(); refreshCovers(); }
     });
     cleanup = () => { controller.abort(); unsubscribeState(); unsubscribeRecords(); unsubscribeNetwork(); appSubscription.remove(); };
     return current;
