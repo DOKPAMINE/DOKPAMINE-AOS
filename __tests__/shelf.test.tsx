@@ -29,7 +29,7 @@ jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(), hideAs
 const id = '00000000-0000-4000-8000-000000000001';
 const sessionId = '00000000-0000-4000-8000-000000000002';
 const reviewId = '00000000-0000-4000-8000-000000000003';
-const book: SaveInput<BookRecord> = { id, title: '데미안', author: '헤르만 헤세', isbn: null, publisher: null, totalPages: 240, currentPage: 84, genre: '소설', status: 'READING', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, completedCount: 0, completedAt: null };
+const book: SaveInput<BookRecord> = { id, title: '데미안', author: '헤르만 헤세', isbn: null, publisher: null, totalPages: 240, currentPage: 84, genre: '소설/시', status: 'READING', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, completedCount: 0, completedAt: null };
 function ReadingStartTarget() {
     const { bookId } = useLocalSearchParams<{ bookId: string }>();
     return <Text>독서 시작 연결: {bookId}</Text>;
@@ -82,15 +82,15 @@ test('FR-04 S-30 빈 책장은 홈 등록 안내를 보여 줘요', async () => 
 });
 
 test('FR-04 S-30 여러 장르의 책등은 고정 장르 순서와 세 종류 상태 라벨을 보여 줘요', async () => {
-    repository.books.save({ ...book, genre: '과학', status: 'DONE' });
+    repository.books.save({ ...book, genre: '과학/IT', status: 'DONE' });
     repository.books.save({ ...book, id: sessionId, title: '읽고 싶은 소설', status: 'WANT' });
     repository.books.save({ ...book, id: reviewId, title: '읽는 소설' });
     await renderRouter(routes, { initialUrl: '/shelf' });
-    await screen.findByRole('header', { name: '소설 · 2권' });
+    await screen.findByRole('header', { name: '소설/시 · 2권' });
     const headings = screen.getAllByRole('header');
     expect(headings).toHaveLength(3);
-    expect(headings[1]).toHaveTextContent('소설 · 2권');
-    expect(headings[2]).toHaveTextContent('과학 · 1권');
+    expect(headings[1]).toHaveTextContent('소설/시 · 2권');
+    expect(headings[2]).toHaveTextContent('과학/IT · 1권');
     expect(screen.getByText('읽고 싶은 책')).toBeOnTheScreen();
     expect(screen.getByText('읽는 중')).toBeOnTheScreen();
     expect(screen.getByText('완독')).toBeOnTheScreen();
@@ -101,7 +101,7 @@ test('FR-04 S-30 장르별 책등에서 상세로 이동하고 쪽수·누적 �
     repository.sessions.save({ id: sessionId, bookId: id, startedAt: 0, endedAt: 61000, activeSeconds: 61, startPage: 0, endPage: 84, source: 'TIMER' });
     repository.reviews.save({ id: reviewId, bookId: id, oneLine: '나를 돌아봤어요.', body: null, visibility: 'PRIVATE', publishedAt: null });
     await renderRouter(routes, { initialUrl: '/shelf' });
-    expect(await screen.findByRole('header', { name: '소설 · 1권' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '소설/시 · 1권' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '데미안, 헤르만 헤세, 읽는 중, 책 상세 보기' }));
     expect(await screen.findByRole('progressbar', { name: '독서 진행' })).toHaveAccessibilityValue({ text: '84 / 240쪽' });
     expect(screen.getByText('누적 독서 시간 · 0시간 1분 1초')).toBeOnTheScreen();
@@ -158,10 +158,10 @@ test('FR-01 S-34 편집 검증 오류 후 제목·전체 쪽수·선택 장르�
     expect(repository.books.get(id)?.totalPages).toBe(240);
     await fireEvent.changeText(screen.getByLabelText('전체 쪽수'), '300');
     await fireEvent.changeText(screen.getByLabelText('제목'), '새 제목');
-    await fireEvent.press(screen.getByRole('radio', { name: '인문' }));
-    expect(screen.getByRole('radio', { name: '인문' })).toBeChecked();
+    await fireEvent.press(screen.getByRole('radio', { name: '인문/사회' }));
+    expect(screen.getByRole('radio', { name: '인문/사회' })).toBeChecked();
     await fireEvent.press(screen.getByRole('button', { name: '저장' }));
-    expect(repository.books.get(id)).toMatchObject({ id, title: '새 제목', totalPages: 300, genre: '인문', currentPage: 84, syncPending: true });
+    expect(repository.books.get(id)).toMatchObject({ id, title: '새 제목', totalPages: 300, genre: '인문/사회', currentPage: 84, syncPending: true });
     expect(await screen.findByRole('header', { name: '새 제목' })).toBeOnTheScreen();
 });
 

@@ -17,8 +17,8 @@ const validInput = (): ValidManualSession => {
     return result;
 };
 
-test('FR-01 D5 장르는 Kotlin의 대표 장르 12개를 유지해요', () => {
-    expect(GENRES).toEqual(['소설', 'SF', '시/에세이', '인문', '역사', '사회/정치', '경제/경영', '자기계발', '과학', '예술', '만화', '기타']);
+test('FR-01 D5 장르는 YES24 대분야에 맞춘 아홉 개예요', () => {
+    expect(GENRES).toEqual(['소설/시', '에세이', '인문/사회', '경제/경영', '자기계발', '과학/IT', '예술', '만화', '기타']);
 });
 
 test.each(['-1', '50.5', '1e2', '0xff', 'NaN', '2147483648'])('FR-03 S-43 0 이상 정수 범위가 아닌 끝 쪽 %s은 저장하지 않아요', input => {

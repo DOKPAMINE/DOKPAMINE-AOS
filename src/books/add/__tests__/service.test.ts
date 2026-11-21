@@ -10,7 +10,7 @@ jest.mock('../../../api/connectivity', () => ({ isOnline: jest.fn() }));
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
 jest.mock('../../../sync/runtime', () => ({ startRecordSync: jest.fn() }));
 
-const values = { ...emptyBookValues, title: '데미안', author: '헤르만 헤세', totalPages: '240', genre: '소설', isbn: '9780306406157' };
+const values = { ...emptyBookValues, title: '데미안', author: '헤르만 헤세', totalPages: '240', genre: '소설/시', isbn: '9780306406157' };
 const id1 = '00000000-0000-4000-8000-000000000001';
 const id2 = '00000000-0000-4000-8000-000000000002';
 beforeEach(() => jest.clearAllMocks());

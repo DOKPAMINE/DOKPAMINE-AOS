@@ -6,6 +6,7 @@ import type { EntityRepository } from '../../db/repository';
 import type { BookRecord } from '../../db/schema';
 import { isBookGenre, normalizeIsbn, parseTotalPages } from '../../domain/bookAddRules';
 import { bookAddSchema, emptyBookValues, type BookAddValues } from './validation';
+import { normalizeGenre } from '../../domain/pageRules';
 
 export async function lookupBook(isbn: string): Promise<BookAddValues> {
     const normalized = normalizeIsbn(isbn);
@@ -17,8 +18,7 @@ export async function lookupBook(isbn: string): Promise<BookAddValues> {
         publisher: result.publisher ?? '', coverUrl: result.coverUrl ?? '',
         sideCoverUrl: result.sideCoverUrl ?? '', yes24ProductUrl: result.yes24ProductUrl ?? '',
         totalPages: result.totalPages == null ? '' : String(result.totalPages),
-        genre: result.genre && isBookGenre(result.genre) ? result.genre : '',
-    };
+        genre: normalizeGenre(result.genre) ?? '',          };
 }
 
 export function findExistingBook(books: EntityRepository<BookRecord>, isbn: string): BookRecord | undefined {

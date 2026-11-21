@@ -29,7 +29,7 @@ test('FR-10 NFR-04·05 S-02 계정 A의 미전송 기록 네 종류는 B에 보�
     const a = (await initializeDatabase('account-a')).repository;
     const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
     a.books.save({ id: id(1), title: 'A의 책', author: '독자', isbn: null, publisher: null,
-        totalPages: 100, currentPage: 0, genre: '소설', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, status: 'READING', completedCount: 0, completedAt: null });
+        totalPages: 100, currentPage: 0, genre: '소설/시', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, status: 'READING', completedCount: 0, completedAt: null });
     a.sessions.save({ id: id(2), bookId: id(1), startedAt: 0, endedAt: 1000, activeSeconds: 1, startPage: 0, endPage: 1, source: 'TIMER' });
     a.reviews.save({ id: id(3), bookId: id(1), oneLine: 'A의 감상', body: null, visibility: 'PRIVATE', publishedAt: null });
     a.quotes.save({ id: id(4), bookId: id(1), text: 'A의 문장', page: 1, memo: null });

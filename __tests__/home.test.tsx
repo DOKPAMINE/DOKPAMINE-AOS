@@ -10,7 +10,7 @@ jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn() }));
 
 const now = new Date('2026-11-02T12:00:00+09:00').getTime();
 const book = (id: string, title: string, status: BookRecord['status'] = 'READING'): BookRecord => ({
-    id, title, status, author: '지은이', totalPages: 240, currentPage: 84, genre: '소설',
+    id, title, status, author: '지은이', totalPages: 240, currentPage: 84, genre: '소설/시',
     isbn: null, publisher: null, coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, completedCount: 0, completedAt: null,
     createdAt: now, updatedAt: now, deleted: false, syncPending: true, localVersion: 1,
 });

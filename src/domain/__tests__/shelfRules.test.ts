@@ -2,14 +2,14 @@ import { beginReading, BookEditError, completeReading, countShelfGenres, countSh
 import { monthlyStats } from '../calendarRules';
 import type { Genre } from '../pageRules';
 
-const book = { id: 'book', title: '데미안', genre: '소설' as const, deleted: false, status: 'DONE' as const, currentPage: 84, totalPages: 240, completedCount: 1, completedAt: 100 };
-const fields: BookEditFields = { title: ' 데미안 ', author: ' 헤르만 헤세 ', publisher: '', totalPages: '240', genre: '소설' };
+const book = { id: 'book', title: '데미안', genre: '소설/시' as const, deleted: false, status: 'DONE' as const, currentPage: 84, totalPages: 240, completedCount: 1, completedAt: 100 };
+const fields: BookEditFields = { title: ' 데미안 ', author: ' 헤르만 헤세 ', publisher: '', totalPages: '240', genre: '소설/시' };
 const editingBook = { ...book, status: 'READING' as const };
 
 test('FR-04 S-30 장르를 고정 순서로 묶고 빈 장르와 삭제된 책은 숨겨요', () => {
-    const science = { ...book, id: 'science', genre: '과학' as const };
+    const science = { ...book, id: 'science', genre: '과학/IT' as const };
     expect(groupShelfBooks([science, { ...book, id: 'deleted', deleted: true }, book])).toEqual([
-        { genre: '소설', books: [book] }, { genre: '과학', books: [science] },
+        { genre: '소설/시', books: [book] }, { genre: '과학/IT', books: [science] },
     ]);
     expect(groupShelfBooks([])).toEqual([]);
 });
@@ -50,7 +50,7 @@ test('FR-04 S-31 완독은 전체 쪽수와 완료 시각을 저장하고 중복
 });
 
 test('FR-01 S-34 필수 입력을 다듬고 출판사 빈칸은 선택 값으로 저장해요', () => {
-    expect(parseBookEdit(fields, editingBook)).toEqual({ title: '데미안', author: '헤르만 헤세', publisher: null, totalPages: 240, genre: '소설' });
+    expect(parseBookEdit(fields, editingBook)).toEqual({ title: '데미안', author: '헤르만 헤세', publisher: null, totalPages: 240, genre: '소설/시' });
     expect(parseBookEdit({ ...fields, totalPages: '84' }, editingBook).totalPages).toBe(84);
 });
 
@@ -104,13 +104,13 @@ test('S-30 선택된 필터를 다시 누르면 선택을 풀고 다른 필터�
 const genreBook = (id: string, genre: Genre, deleted = false) => ({ id, genre, deleted });
 
 test('FR-04 S-30 책이 있는 장르만 고정 순서로 권수를 세고 삭제된 책은 빼요', () => {
-    const books = [genreBook('a', 'SF'), genreBook('b', '소설'), genreBook('c', '소설'), genreBook('d', '과학', true)];
-    expect(countShelfGenres(books)).toEqual([{ genre: '소설', count: 2 }, { genre: 'SF', count: 1 }]);
+    const books = [genreBook('a', '과학/IT'), genreBook('b', '소설/시'), genreBook('c', '소설/시'), genreBook('d', '에세이', true)];
+    expect(countShelfGenres(books)).toEqual([{ genre: '소설/시', count: 2 }, { genre: '과학/IT', count: 1 }]);
     expect(countShelfGenres([])).toEqual([]);
 });
 
 test('FR-04 S-30 장르를 고르지 않으면 모든 책을, 고르면 그 장르 책만 보여요', () => {
-    const books = [genreBook('a', 'SF'), genreBook('b', '소설'), genreBook('c', 'SF')];
+    const books = [genreBook('a', '과학/IT'), genreBook('b', '소설/시'), genreBook('c', '과학/IT')];
     expect(filterShelfGenre(books, null)).toEqual(books);
-    expect(filterShelfGenre(books, 'SF').map(item => item.id)).toEqual(['a', 'c']);
+    expect(filterShelfGenre(books, '과학/IT').map(item => item.id)).toEqual(['a', 'c']);
 });

@@ -36,7 +36,7 @@ beforeEach(() => {
     save.mockImplementation(value => ({ ...value, syncPending: true }));
     jest.mocked(initializeDatabase).mockResolvedValue({ repository: { books: { list, save } } } as unknown as Awaited<ReturnType<typeof initializeDatabase>>);
     jest.mocked(isOnline).mockResolvedValue(true);
-    jest.mocked(catalogIsbn).mockResolvedValue({ isbn, title: '데미안', author: '헤르만 헤세', totalPages: 240, genre: '소설', source: 'nlk' });
+    jest.mocked(catalogIsbn).mockResolvedValue({ isbn, title: '데미안', author: '헤르만 헤세', totalPages: 240, genre: '소설/시', source: 'nlk' });
 });
 
 async function scan() {
@@ -48,7 +48,7 @@ async function fillManual() {
     await fireEvent.changeText(screen.getByLabelText('제목 (필수)'), '데미안');
     await fireEvent.changeText(screen.getByLabelText('저자 (필수)'), '헤르만 헤세');
     await fireEvent.changeText(screen.getByLabelText('전체 쪽수 (필수)'), '240');
-    await fireEvent.press(screen.getByRole('radio', { name: '소설' }));
+    await fireEvent.press(screen.getByRole('radio', { name: '소설/시' }));
 }
 
 test('NFR-07 · S-21/S-23 카메라 권한 거절 뒤에도 직접 입력으로 책을 등록해요', async () => {
@@ -57,9 +57,9 @@ test('NFR-07 · S-21/S-23 카메라 권한 거절 뒤에도 직접 입력으로 
     expect(requestPermission).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByRole('button', { name: '직접 입력하기' }));
     await fillManual();
-    expect(screen.getByRole('radio', { name: '소설', checked: true })).toBeOnTheScreen();
+    expect(screen.getByRole('radio', { name: '소설/시', checked: true })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '읽고 싶은 책에 담기' }));
-    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ title: '데미안', genre: '소설', status: 'WANT', isbn: null })));
+    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ title: '데미안', genre: '소설/시', status: 'WANT', isbn: null })));
     expect(router.replace).toHaveBeenCalledWith('/book/00000000-0000-4000-8000-000000000001');
     expect(catalogIsbn).not.toHaveBeenCalled();
 });

@@ -31,15 +31,15 @@ beforeEach(() => {
     jest.mocked(useCameraPermissions).mockReturnValue([{ status: 'granted', granted: true, canAskAgain: true, expires: 'never' }, requestPermission, jest.fn()] as ReturnType<typeof useCameraPermissions>);
     jest.mocked(initializeDatabase).mockResolvedValue({ repository: { books: { list: () => [], save } } } as unknown as Awaited<ReturnType<typeof initializeDatabase>>);
     jest.mocked(isOnline).mockResolvedValue(true);
-    jest.mocked(catalogIsbn).mockResolvedValue({ isbn, title: '데미안', author: '헤세', totalPages: 240, genre: '소설', source: 'nlk' });
+    jest.mocked(catalogIsbn).mockResolvedValue({ isbn, title: '데미안', author: '헤세', totalPages: 240, genre: '소설/시', source: 'nlk' });
 });
 
 test('FR-01 S-23 ISBN의 X를 입력할 수 있는 키보드와 장르 선택 그룹을 제공해요', async () => {
     const onSave = jest.fn().mockResolvedValue(undefined);
-    await render(<BookForm initialValues={{ ...emptyBookValues, title: '책', author: '저자', totalPages: '100', genre: '소설' }} onSave={onSave} />);
+    await render(<BookForm initialValues={{ ...emptyBookValues, title: '책', author: '저자', totalPages: '100', genre: '소설/시' }} onSave={onSave} />);
     expect(screen.getByLabelText('ISBN (선택)').props.keyboardType).toBe('default');
     expect(screen.getByLabelText('장르 선택').props.accessibilityRole).toBe('radiogroup');
-    expect(screen.getByRole('radio', { name: '소설', checked: true })).toBeOnTheScreen();
+    expect(screen.getByRole('radio', { name: '소설/시', checked: true })).toBeOnTheScreen();
     await fireEvent.changeText(screen.getByLabelText('ISBN (선택)'), '080442957X');
     await fireEvent.press(screen.getByRole('button', { name: '읽기 시작' }));
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ isbn: '080442957X' }), 'READING'));
@@ -47,7 +47,7 @@ test('FR-01 S-23 ISBN의 X를 입력할 수 있는 키보드와 장르 선택 �
 
 test('FR-01 S-23 ISBN을 변경하면 이전 ISBN 표지를 저장하지 않아요', async () => {
     const onSave = jest.fn().mockResolvedValue(undefined);
-    await render(<BookForm initialValues={{ ...emptyBookValues, title: '책', author: '저자', totalPages: '100', genre: '소설', isbn, coverUrl: 'https://example.com/old-cover.jpg' }} onSave={onSave} />);
+    await render(<BookForm initialValues={{ ...emptyBookValues, title: '책', author: '저자', totalPages: '100', genre: '소설/시', isbn, coverUrl: 'https://example.com/old-cover.jpg' }} onSave={onSave} />);
     await fireEvent.changeText(screen.getByLabelText('ISBN (선택)'), '080442957X');
     await fireEvent.press(screen.getByRole('button', { name: '읽기 시작' }));
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ coverUrl: '', isbn: '080442957X' }), 'READING'));
