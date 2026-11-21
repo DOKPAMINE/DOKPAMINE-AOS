@@ -10,7 +10,7 @@ jest.mock('../../db/client', () => ({ initializeDatabase: jest.fn() }));
 
 const now = Date.parse('2026-11-02T00:00:00+09:00');
 const book: BookRecord = {
-    id: 'book', title: '데미안', author: '헤르만 헤세', genre: '소설', totalPages: 240,
+    id: 'book', title: '데미안', author: '헤르만 헤세', genre: '소설/시', totalPages: 240,
     currentPage: 240, status: 'DONE', completedAt: Date.parse('2026-10-31T14:59:59Z'),
     isbn: null, publisher: null, coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, completedCount: 1,
     createdAt: now, updatedAt: now, deleted: false, syncPending: true, localVersion: 1,
@@ -77,8 +77,7 @@ test('FR-05 FR-06 S-60 S-61 S-62 지정 날짜를 열고 날짜 선택과 월 �
     expect(screen.getByText('50쪽')).toBeOnTheScreen();
     expect(screen.getByText('1권')).toBeOnTheScreen();
     expect(screen.getAllByText('30분 · 50쪽')).toHaveLength(2);
-    expect(screen.getByText('소설')).toBeOnTheScreen();
-    expect(screen.getByText('헤르만 헤세')).toBeOnTheScreen();
+    expect(screen.getByText('소설/시')).toBeOnTheScreen();    expect(screen.getByText('헤르만 헤세')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '10월 7일, 독서 기록 없음' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '10월 6일, 독서함' }));
     expect(screen.getByRole('header', { name: '10월 6일 기록' })).toBeOnTheScreen();

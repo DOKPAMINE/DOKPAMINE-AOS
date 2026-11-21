@@ -11,7 +11,7 @@ jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
 jest.mock('../runtime', () => ({ startRecordSync: jest.fn() }));
 const id = (last: number) => `00000000-0000-4000-8000-${String(last).padStart(12, '0')}`;
 const book: SaveInput<BookRecord> = { id: id(1), title: '데미안', author: '헤세', isbn: null, publisher: null,
-    totalPages: 240, currentPage: 0, genre: '소설', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, status: 'READING', completedCount: 0, completedAt: null };
+    totalPages: 240, currentPage: 0, genre: '소설/시', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, status: 'READING', completedCount: 0, completedAt: null };
 const session: SaveInput<SessionRecord> = { id: id(2), bookId: book.id, startedAt: 1000, endedAt: 61000,
     activeSeconds: 60, startPage: 0, endPage: 84, source: 'TIMER' };
 let memory: ReturnType<typeof memorySQLite>;

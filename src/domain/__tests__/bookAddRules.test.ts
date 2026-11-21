@@ -14,6 +14,7 @@ test.each(['', '0', '-1', '1.5', '1e3', '2147483648'])('FR-01 · S-23 전체 쪽
 test('FR-01 · S-23 전체 쪽수와 장르는 허용된 범위만 받아요', () => {
     expect(parseTotalPages('1')).toBe(1);
     expect(parseTotalPages('2147483647')).toBe(2147483647);
-    expect(isBookGenre('소설')).toBe(true);
+    expect(isBookGenre('소설/시')).toBe(true);
+    expect(isBookGenre('SF')).toBe(false);
     expect(isBookGenre('자유 장르')).toBe(false);
 });
