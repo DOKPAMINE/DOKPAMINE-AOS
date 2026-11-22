@@ -4,32 +4,41 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Text, View } from 'react-native';
 import { Card, Screen, SecondaryButton, StateView } from '../components';
 import type { RecordRepository } from '../db/repository';
-import type { ReviewRecord } from '../db/schema';
+import type { QuoteRecord, ReviewRecord } from '../db/schema';
 import { requestMixedVisibilityCheck } from './mixedVisibilityCheck';
 import { useReviewRecords } from './useReviewRecords';
 import { reviewStyles as styles } from './styles';
-import { bookOneLine, bookReports } from '../domain/reviewRules';
+import { bookOneLine, bookReports, conflictLockMessage, hasOneLineConflict } from '../domain/reviewRules';
+import { CardActions, confirmDelete } from './CardActions';
+
+const preview = (text: string) => text.length > 20 ? `${text.slice(0, 20)}…` : text;
 
 export function ReviewListScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const { records, retry } = useReviewRecords(id);
+    const [deleteError, setDeleteError] = useState(false);
+    // #91: 삭제는 저장소의 tombstone(softDelete)으로 남겨 동기화한다. 실패하면 목록을 그대로 두고 알린다.
+    const remove = (work: () => void) => confirmDelete(() => {
+        try { work(); setDeleteError(false); } catch { setDeleteError(true); }
+    });
     return <Screen title="감상과 문장">
         {records.kind !== 'ready' ? <StateView kind={records.kind} onRetry={records.kind === 'error' ? retry : undefined} /> : !records.book && records.conflicts.length === 0 ? (
             <StateView kind="empty" message="책을 찾을 수 없어요. 삭제된 책인지 확인해 주세요." />
         ) : <>
             <Text style={styles.heading}>{records.book?.title ?? '삭제된 책'}</Text>
+            {deleteError && <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.error}>
+                삭제하지 못했어요. 동기화 충돌이 있는지 확인하고 다시 시도해 주세요.
+            </Text>}
             {records.conflicts.length > 0 && <View style={styles.section}>
                 {records.conflicts.map(review => <ReviewConflictCard key={review.id} review={review} repository={records.repository} />)}
             </View>}
-            <ReviewSections bookId={id} canWrite={Boolean(records.book)} reviews={records.reviews.filter(review => !review.conflict)} />
+            <ReviewSections bookId={id} canWrite={Boolean(records.book)} reviews={records.reviews.filter(review => !review.conflict)}
+                oneLineLocked={hasOneLineConflict(records.conflicts)} repository={records.repository} remove={remove} />
             {records.book && <View style={styles.section}>
                 <Text accessibilityRole="header" style={styles.heading}>좋아하는 문장</Text>
                 <SecondaryButton label="문장 추가" onPress={() => router.push({ pathname: '/book/[id]/review/quote', params: { id } })} />
-                {records.quotes.length === 0 ? <StateView kind="empty" message="아직 남긴 문장이 없어요. 간직하고 싶은 문장을 적어 주세요." /> : records.quotes.map(quote => <Card key={quote.id}>
-                    <Text style={styles.body}>{quote.text}</Text>
-                    {quote.page !== null && <Text style={styles.meta}>{quote.page}쪽</Text>}
-                    {quote.syncPending && <Text style={styles.meta}>기기에 저장됨 · 동기화 대기</Text>}
-                </Card>)}
+                {records.quotes.length === 0 ? <StateView kind="empty" message="아직 남긴 문장이 없어요. 간직하고 싶은 문장을 적어 주세요." /> : records.quotes.map(quote =>
+                    <QuoteCard key={quote.id} bookId={id} quote={quote} onDelete={() => remove(() => records.repository.quotes.softDelete(quote.id))} />)}
             </View>}
         </>}
         {records.kind === 'ready' && !records.book
@@ -39,18 +48,23 @@ export function ReviewListScreen() {
 }
 
 /** S-50: 맨 위에 책의 한줄평 하나, 그 아래에 독서마다 쌓인 독후감을 보여 주고 각각 쓰기 화면으로 보낸다. */
-function ReviewSections({ bookId, canWrite, reviews }: { bookId: string; canWrite: boolean; reviews: ReviewRecord[] }) {
+function ReviewSections({ bookId, canWrite, reviews, oneLineLocked, repository, remove }: {
+    bookId: string; canWrite: boolean; reviews: ReviewRecord[]; oneLineLocked: boolean; repository: RecordRepository; remove: (work: () => void) => void;
+}) {
     const oneLine = bookOneLine(reviews);
     const reports = bookReports(reviews);
+    const editOneLine = () => router.push({ pathname: '/book/[id]/review/one-line', params: { id: bookId } });
     return <>
         <View style={styles.section}>
             <Text accessibilityRole="header" style={styles.heading}>한줄평</Text>
-            {canWrite && <SecondaryButton label={oneLine ? '한줄평 수정' : '한줄평 쓰기'}
-                onPress={() => router.push({ pathname: '/book/[id]/review/one-line', params: { id: bookId } })} />}
+            {canWrite && !oneLine && <SecondaryButton label="한줄평 쓰기" disabled={oneLineLocked} onPress={editOneLine} />}
+            {canWrite && !oneLine && oneLineLocked && <Text style={styles.meta}>동기화 충돌을 먼저 해결하면 한줄평을 쓸 수 있어요.</Text>}
             {oneLine ? <Card>
                 <Text style={styles.meta}>{visibilityText(oneLine.visibility)}</Text>
                 <Text style={styles.heading}>{oneLine.oneLine}</Text>
                 {oneLine.syncPending && <Text style={styles.meta}>기기에 저장됨 · 동기화 대기</Text>}
+                {canWrite && <CardActions subject="한줄평" lockedReason={oneLineLocked ? conflictLockMessage : undefined}
+                    onEdit={editOneLine} onDelete={() => remove(() => repository.reviews.deleteOneLine(bookId))} />}
             </Card> : <StateView kind="empty" message="아직 한줄평이 없어요. 이 책을 한마디로 남겨 주세요." />}
         </View>
         <View style={styles.section}>
@@ -60,9 +74,24 @@ function ReviewSections({ bookId, canWrite, reviews }: { bookId: string; canWrit
                 <Text style={styles.meta}>{visibilityText(report.visibility)}</Text>
                 <Text style={styles.body}>{report.body}</Text>
                 {report.syncPending && <Text style={styles.meta}>기기에 저장됨 · 동기화 대기</Text>}
+                {canWrite && <CardActions subject={`독후감 ${preview(report.body ?? '')}`}
+                    lockedReason={report.conflict ? conflictLockMessage : undefined}
+                    onEdit={() => router.push({ pathname: '/book/[id]/review/report', params: { id: bookId, reviewId: report.id } })}
+                    onDelete={() => remove(() => repository.reviews.deleteReport(report.id))} />}
             </Card>)}
         </View>
     </>;
+}
+
+/** #91 S-50·S-52: 문장 카드. 문장은 서버가 버전을 비교하지 않아 충돌 상태가 없으므로 늘 고치고 지울 수 있다. */
+function QuoteCard({ bookId, quote, onDelete }: { bookId: string; quote: QuoteRecord; onDelete: () => void }) {
+    return <Card>
+        <Text style={styles.body}>{quote.text}</Text>
+        {quote.page !== null && <Text style={styles.meta}>{quote.page}쪽</Text>}
+        {quote.syncPending && <Text style={styles.meta}>기기에 저장됨 · 동기화 대기</Text>}
+        <CardActions subject={`문장 ${preview(quote.text)}`} onDelete={onDelete}
+            onEdit={() => router.push({ pathname: '/book/[id]/review/quote', params: { id: bookId, quoteId: quote.id } })} />
+    </Card>;
 }
 
 const visibilityText = (visibility: ReviewRecord['visibility']) => visibility === 'PUBLIC' ? '공개' : '비공개 · 나만 보기';
@@ -97,6 +126,7 @@ function ReviewConflictCard({ review, repository }: { review: ReviewRecord; repo
                     <SecondaryButton label="초안을 공개로 저장" onPress={() => resolve('PUBLIC')} />
                 </>}
         </>}
+        <Text style={styles.meta}>충돌을 해결하면 이 감상을 수정·삭제할 수 있어요.</Text>
         {error && <Text accessibilityRole="alert" style={styles.error}>저장하지 못했어요. 최신 감상을 확인하고 다시 시도해 주세요.</Text>}
     </Card>;
 }

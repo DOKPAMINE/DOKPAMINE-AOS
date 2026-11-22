@@ -332,3 +332,138 @@ test('#89 FR-08 S-51 S-53 감상이 없는 책의 첫 감상은 기기에 저장
     expect(await screen.findByText('첫 한줄평')).toBeOnTheScreen();
     expect(repository.reviews.list({ bookId }).find(review => review.oneLine)).toMatchObject({ visibility: 'PRIVATE', syncPending: true });
 });
+
+describe('#91 감상·문장 수정과 삭제', () => {
+    const reportId = '00000000-0000-4000-8000-000000000031';
+    const quoteId = '00000000-0000-4000-8000-000000000032';
+    const oneLineId = '00000000-0000-4000-8000-000000000033';
+    const pressAlert = async (alert: jest.SpyInstance, text: string) => {
+        const buttons = alert.mock.calls.at(-1)?.[2] as { text: string; onPress?: () => void }[];
+        await act(async () => { buttons.find(item => item.text === text)?.onPress?.(); });
+    };
+
+    test('S-50 S-53 독후감 카드의 수정은 기존 본문을 채워 열고 저장하면 같은 독후감이 바뀌어 새로 생기지 않아요', async () => {
+        repository.reviews.save({ id: reportId, bookId, oneLine: null, body: '처음 독후감', visibility: 'PUBLIC', publishedAt: null });
+        await renderRouter(routes, { initialUrl: base });
+        await fireEvent.press(await screen.findByRole('button', { name: '독후감 처음 독후감 수정' }));
+        expect(await screen.findByText('독후감 수정')).toBeOnTheScreen();
+        expect(screen.getByLabelText('독후감')).toHaveDisplayValue('처음 독후감');
+        expect(screen.queryByRole('radio')).toBeNull();
+        expect(screen.getByText(/^이 독후감은 공개로 저장돼요\./)).toBeOnTheScreen();
+        await fireEvent.changeText(screen.getByLabelText('독후감'), '고친 독후감');
+        await fireEvent.press(screen.getByRole('button', { name: '독후감 저장' }));
+        expect(await screen.findByText('고친 독후감')).toBeOnTheScreen();
+        expect(screen).toHavePathname(base);
+        expect(repository.reviews.list({ bookId })).toEqual([expect.objectContaining({ id: reportId, body: '고친 독후감', visibility: 'PUBLIC', syncPending: true })]);
+    });
+
+    test('S-53 독후감 수정을 바꾸지 않고 저장하면 막고 안내해요', async () => {
+        const before = repository.reviews.save({ id: reportId, bookId, oneLine: null, body: '처음 독후감', visibility: 'PRIVATE', publishedAt: null });
+        await renderRouter(routes, { initialUrl: `${base}/report?reviewId=${reportId}` });
+        await screen.findByLabelText('독후감');
+        await fireEvent.press(screen.getByRole('button', { name: '독후감 저장' }));
+        expect(screen.getByRole('alert')).toHaveTextContent('바뀐 내용이 없어요. 독후감을 고친 뒤 저장해 주세요.');
+        expect(repository.reviews.get(reportId)).toEqual(before);
+    });
+
+    test('S-50 S-52 문장 카드의 수정은 문장·쪽수를 채워 열고 같은 문장을 고치며 예전 메모는 지우지 않아요', async () => {
+        repository.quotes.save({ id: quoteId, bookId, text: '예전 문장', page: 10, memo: '예전 메모' });
+        await renderRouter(routes, { initialUrl: base });
+        await fireEvent.press(await screen.findByRole('button', { name: '문장 예전 문장 수정' }));
+        expect(await screen.findByText('문장 수정')).toBeOnTheScreen();
+        expect(screen.getByLabelText('좋아하는 문장')).toHaveDisplayValue('예전 문장');
+        expect(screen.getByLabelText('쪽수 (선택)')).toHaveDisplayValue('10');
+        await fireEvent.changeText(screen.getByLabelText('좋아하는 문장'), '고친 문장');
+        await fireEvent.changeText(screen.getByLabelText('쪽수 (선택)'), '');
+        await fireEvent.press(screen.getByRole('button', { name: '문장 저장' }));
+        expect(await screen.findByText('고친 문장')).toBeOnTheScreen();
+        expect(repository.quotes.list({ bookId })).toEqual([expect.objectContaining({ id: quoteId, text: '고친 문장', page: null, memo: '예전 메모', syncPending: true })]);
+    });
+
+    test('S-52 문장 수정을 바꾸지 않고 저장하면 막고 안내해요', async () => {
+        repository.quotes.save({ id: quoteId, bookId, text: '예전 문장', page: null, memo: null });
+        await renderRouter(routes, { initialUrl: `${base}/quote?quoteId=${quoteId}` });
+        await screen.findByLabelText('좋아하는 문장');
+        await fireEvent.press(screen.getByRole('button', { name: '문장 저장' }));
+        expect(screen.getByRole('alert')).toHaveTextContent('바뀐 내용이 없어요. 문장을 고친 뒤 저장해 주세요.');
+    });
+
+    test.each([
+        ['한줄평 삭제', '지울 한줄평', () => repository.reviews.get(oneLineId, true)],
+        ['독후감 지울 독후감 삭제', '지울 독후감', () => repository.reviews.get(reportId, true)],
+        ['문장 지울 문장 삭제', '지울 문장', () => repository.quotes.get(quoteId, true)],
+    ] as const)('NFR-04 S-50 %s은 확인창에서 취소하면 그대로이고 삭제하면 목록에서 사라져 동기화 대기 tombstone이 돼요', async (button, text, row) => {
+        repository.reviews.save({ id: oneLineId, bookId, oneLine: '지울 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+        repository.reviews.save({ id: reportId, bookId, oneLine: null, body: '지울 독후감', visibility: 'PRIVATE', publishedAt: null });
+        repository.quotes.save({ id: quoteId, bookId, text: '지울 문장', page: null, memo: null });
+        const alert = jest.spyOn(Alert, 'alert');
+        await renderRouter(routes, { initialUrl: base });
+        await fireEvent.press(await screen.findByRole('button', { name: button }));
+        expect(alert).toHaveBeenLastCalledWith('삭제할까요?', '되돌릴 수 없어요.', expect.any(Array));
+        await pressAlert(alert, '취소');
+        expect(screen.getByText(text)).toBeOnTheScreen();
+        expect(row()).toMatchObject({ deleted: false });
+
+        await fireEvent.press(screen.getByRole('button', { name: button }));
+        await pressAlert(alert, '삭제');
+        expect(screen.queryByText(text)).toBeNull();
+        expect(row()).toMatchObject({ deleted: true, syncPending: true });
+    });
+
+    test('S-50 한줄평과 독후감이 함께 든 예전 감상에서 한줄평만 지우면 독후감은 남아요', async () => {
+        repository.reviews.save({ id: oneLineId, bookId, oneLine: '함께 쓴 한줄평', body: '함께 쓴 독후감', visibility: 'PRIVATE', publishedAt: null });
+        const alert = jest.spyOn(Alert, 'alert');
+        await renderRouter(routes, { initialUrl: base });
+        await fireEvent.press(await screen.findByRole('button', { name: '한줄평 삭제' }));
+        await pressAlert(alert, '삭제');
+        expect(screen.queryByText('함께 쓴 한줄평')).toBeNull();
+        expect(screen.getByText('함께 쓴 독후감')).toBeOnTheScreen();
+        expect(screen.getByRole('button', { name: '한줄평 쓰기' })).toBeOnTheScreen();
+        expect(repository.reviews.get(oneLineId)).toMatchObject({ oneLine: null, body: '함께 쓴 독후감', syncPending: true });
+    });
+
+    test('NFR-05 S-50 한줄평이 든 충돌 감상이 있으면 한줄평 수정·삭제를 막고 이유를 보여 줘요', async () => {
+        const conflictId = '00000000-0000-4000-8000-000000000034';
+        repository.reviews.save({ id: oneLineId, bookId, oneLine: '보이는 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+        repository.reviews.save({ id: conflictId, bookId, oneLine: '충돌한 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+        repository.reviews.markConflict(conflictId);
+        const alert = jest.spyOn(Alert, 'alert');
+        await renderRouter(routes, { initialUrl: base });
+        for (const name of ['한줄평 수정', '한줄평 삭제']) {
+            const button = await screen.findByRole('button', { name });
+            expect(button).toBeDisabled();
+            await fireEvent.press(button);
+        }
+        expect(alert).not.toHaveBeenCalled();
+        expect(screen).toHavePathname(base);
+        expect(screen.getByText('동기화 충돌을 먼저 해결하면 수정·삭제할 수 있어요.')).toBeOnTheScreen();
+        expect(screen.getByText('충돌을 해결하면 이 감상을 수정·삭제할 수 있어요.')).toBeOnTheScreen();
+    });
+
+    test('NFR-05 S-50 한줄평 충돌만 남은 책은 새 한줄평 쓰기도 막아 한줄평이 둘이 되지 않게 해요', async () => {
+        repository.reviews.save({ id: oneLineId, bookId, oneLine: '충돌한 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+        repository.reviews.markConflict(oneLineId);
+        await renderRouter(routes, { initialUrl: base });
+        expect(await screen.findByRole('button', { name: '한줄평 쓰기' })).toBeDisabled();
+        expect(screen.getByText('동기화 충돌을 먼저 해결하면 한줄평을 쓸 수 있어요.')).toBeOnTheScreen();
+    });
+
+    test('NFR-05 S-53 고치던 독후감이 편집 중 충돌하면 저장하지 않고 안내해요', async () => {
+        repository.reviews.save({ id: reportId, bookId, oneLine: null, body: '처음 독후감', visibility: 'PRIVATE', publishedAt: null });
+        await renderRouter(routes, { initialUrl: `${base}/report?reviewId=${reportId}` });
+        await fireEvent.changeText(await screen.findByLabelText('독후감'), '고친 독후감');
+        await act(async () => repository.reviews.markConflict(reportId));
+        await fireEvent.press(screen.getByRole('button', { name: '독후감 저장' }));
+        expect(screen.getByRole('alert')).toHaveTextContent(/고치던 독후감이 서버 기록과 달라졌거나 삭제됐어요\./);
+        expect(repository.reviews.get(reportId)).toMatchObject({ body: '처음 독후감' });
+        expect(repository.reviews.list({ bookId })).toHaveLength(1);
+    });
+
+    test('S-53 S-52 없는 독후감·문장을 고치려 하면 쓰기 화면 대신 안내해요', async () => {
+        await renderRouter(routes, { initialUrl: `${base}/report?reviewId=${reportId}` });
+        expect(await screen.findByText('고칠 독후감을 찾을 수 없어요. 삭제됐거나 동기화 충돌 중인지 감상 목록에서 확인해 주세요.')).toBeOnTheScreen();
+        await act(async () => router.push(`${base}/quote?quoteId=${quoteId}`));
+        expect(await screen.findByText('고칠 문장을 찾을 수 없어요. 삭제됐는지 감상 목록에서 확인해 주세요.')).toBeOnTheScreen();
+        expect(screen.queryByLabelText('좋아하는 문장')).toBeNull();
+    });
+});

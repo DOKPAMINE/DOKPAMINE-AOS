@@ -14,4 +14,7 @@ export const reviewStyles = StyleSheet.create({
         minHeight: sizes.minTouch, padding: spacing.md, textAlignVertical: 'top' },
     multiline: { minHeight: sizes.minTouch * 3 },
     pressed: { backgroundColor: colors.surface.sandSoft },
+    row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    action: { minHeight: sizes.minTouch, minWidth: sizes.minTouch, padding: spacing.sm, justifyContent: 'center', alignItems: 'center' },
+    dimmed: { opacity: 0.6 },
 });
