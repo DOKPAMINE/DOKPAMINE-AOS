@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import { ThemeProvider } from '@react-navigation/native';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { NotoSansKR_400Regular } from '@expo-google-fonts/noto-sans-kr/400Regular';
@@ -13,6 +13,7 @@ import { AuthProvider, useAuth } from '../src/auth/AuthProvider';
 import { connectAuthSyncLifecycle } from '../src/auth/syncLifecycle';
 import { syncAfterLogin, stopRecordSync } from '../src/sync';
 import { Screen, SecondaryButton, StateView } from '../src/components';
+import { MixedVisibilityPrompt } from '../src/reviews/MixedVisibilityPrompt';
 
 import { navigationTheme } from '../src/theme';
 import { connectQueryManagers, queryClient } from '../src/api/queryClient';
@@ -70,6 +71,7 @@ export default function RootLayout() {
 // S-01~03 · FR-10: 세션 확인이 끝나기 전과 미인증 상태에는 탭을 마운트하지 않는다.
 function AuthNavigator() {
     const { status, notice, retry, recoverSession } = useAuth();
+    const pathname = usePathname();
     if (status === 'loading' || status === 'error') {
         return (
             <Screen title="독파민">
@@ -78,7 +80,7 @@ function AuthNavigator() {
             </Screen>
         );
     }
-    return (
+    return (<>
         <Stack screenOptions={{ headerShown: false }}>
             <Stack.Protected guard={status !== 'signedIn'}>
                 <Stack.Screen name="(auth)" />
@@ -93,5 +95,8 @@ function AuthNavigator() {
                 <Stack.Screen name="settings" />
             </Stack.Protected>
         </Stack>
-    );
+        {/* FR-08 / S-31: 공개 범위가 섞인 책을 어느 화면에서든 고르게 한다. 로그인 전 화면에는 띄우지 않고,
+            S-46 90분 확인창 Modal과 겹치지 않도록 독서 타이머 화면에 있는 동안에는 미룬다. */}
+        {status === 'signedIn' && <MixedVisibilityPrompt paused={pathname === '/reading-start'} />}
+    </>);
 }

@@ -5,6 +5,7 @@ import { Text, View } from 'react-native';
 import { Card, Screen, SecondaryButton, StateView } from '../components';
 import type { RecordRepository } from '../db/repository';
 import type { ReviewRecord } from '../db/schema';
+import { requestMixedVisibilityCheck } from './mixedVisibilityCheck';
 import { useReviewRecords } from './useReviewRecords';
 import { reviewStyles as styles } from './styles';
 import { bookOneLine, bookReports } from '../domain/reviewRules';
@@ -72,7 +73,9 @@ function ReviewConflictCard({ review, repository }: { review: ReviewRecord; repo
     const visibilityLabel = (visibility: ReviewRecord['visibility']) => visibility === 'PUBLIC' ? '공개' : '비공개';
     const resolve = (visibility: ReviewRecord['visibility']) => {
         try { repository.reviews.resolveConflict(review.id, latest?.version ?? null, visibility, uuid.v4()); }
-        catch { setError(true); }
+        catch { setError(true); return; }
+        // 감상마다 공개 범위를 고르므로 책의 다른 감상과 섞였을 수 있다. 섞였으면 앱 전체 알림이 하나로 맞추게 한다.
+        requestMixedVisibilityCheck();
     };
     return <Card>
         <Text accessibilityRole="header" style={styles.heading}>감상 동기화 충돌</Text>

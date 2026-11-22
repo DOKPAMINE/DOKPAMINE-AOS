@@ -9,6 +9,7 @@ import type { BookRecord } from '../db/schema';
 import type { RecordRepository } from '../db/repository';
 import { BookCover } from './BookCover';
 import { BookStatus } from './BookStatus';
+import { ReviewVisibilityCard } from './ReviewVisibilityCard';
 import { useShelfRepository } from './useShelfRepository';
 import { shelfStyles as styles } from './styles';
 import { colors, sizes, spacing, typography } from '../theme';
@@ -95,6 +96,7 @@ function BookDetail({ book, repository }: { book: BookRecord; repository: Record
                 <Text accessible={false} style={local.chevron}>{'›'}</Text>
             </Pressable>
         </Card>}
+        <ReviewVisibilityCard bookId={book.id} title={book.title} repository={repository} />
         {notice && <Text accessibilityRole="alert" style={styles.error}>{notice}</Text>}
         {book.status === 'WANT' && <PrimaryButton label="읽기 시작" onPress={() => changeStatus(false)} />}
         {book.status === 'DONE' && <PrimaryButton label="다시 읽기" onPress={() => changeStatus(false)} />}

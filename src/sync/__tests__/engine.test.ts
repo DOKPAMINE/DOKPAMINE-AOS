@@ -483,3 +483,20 @@ test('NFR-05 오프라인에서 세션 삭제 후 책 쪽수를 줄이면 삭제
     expect(order).toEqual(['삭제', '책']);
     expect(engine.getState().status).toBe('idle');
 });
+
+test('#89 FR-08 NFR-05 S-31 책 공개 범위를 바꾼 감상은 서버 버전과 새 공개 범위로 다시 전송해요', async () => {
+    records.reviews.save({ id: id(3), bookId: book.id, oneLine: '한줄평', body: null, visibility: 'PUBLIC', publishedAt: null });
+    records.reviews.save({ id: id(4), bookId: book.id, oneLine: null, body: '독후감', visibility: 'PUBLIC', publishedAt: null });
+    transport.putReview.mockImplementation(async request => ({ ...request, version: (request.version ?? -1) + 1 }));
+    const engine = createSyncEngine(records, transport, online);
+    await engine.sync();
+    transport.putReview.mockClear();
+    expect(records.reviews.setBookVisibility(book.id, 'PRIVATE')).toBe(2);
+    await engine.sync();
+    expect(transport.putReview.mock.calls.map(([request]) => request).sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+        expect.objectContaining({ id: id(3), visibility: 'PRIVATE', version: 0, oneLine: '한줄평' }),
+        expect.objectContaining({ id: id(4), visibility: 'PRIVATE', version: 0, body: '독후감' })]);
+    // 공개 범위만 바꾼 PUT은 updatedAt이 그대로여도 visibility가 달라 서버가 저장하고 버전을 올린다(BE API.md).
+    expect(transport.putReview.mock.calls.every(([request]) => request.updatedAt === new Date(100000).toISOString())).toBe(true);
+    expect(records.reviews.list({ syncPending: true })).toEqual([]);
+});

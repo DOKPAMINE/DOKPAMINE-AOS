@@ -20,7 +20,7 @@ import { memorySQLite } from '../src/db/__tests__/sqliteAdapter';
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
 jest.mock('../src/db/client', () => ({ ...jest.requireActual('../src/db/client'), initializeDatabase: jest.fn() }));
 jest.mock('../src/sync/runtime', () => ({ startRecordSync: jest.fn() }));
-jest.mock('../src/sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn() }));
+jest.mock('../src/sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn(), getSyncState: jest.fn(() => ({ status: 'idle', failedCount: 0 })), subscribeSyncState: jest.fn(() => jest.fn()) }));
 jest.mock('../src/auth/AuthProvider', () => ({ AuthProvider: ({ children }: PropsWithChildren) => children, useAuth: jest.fn() }));
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { addEventListener: jest.fn(() => jest.fn()) } }));
 jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), isLoaded: () => true, loadAsync: jest.fn(), useFonts: () => [true, null] }));
@@ -43,7 +43,8 @@ function protectedRoutes() {
         '(tabs)/_layout': TabLayout, '(tabs)/index': () => <Text>인증된 홈</Text>, '(tabs)/shelf': ShelfScreen,
         '(tabs)/calendar': () => <Text>캘린더</Text>, '(tabs)/lounge': () => <Text>라운지</Text>, '(tabs)/my': () => <Text>마이</Text>,
         'book-add/index': () => <Text>책 등록</Text>,
-        'book/_layout': BookLayout, 'book/[id]/index': BookDetailScreen, 'book/[id]/edit': BookEditScreen };
+        'book/_layout': BookLayout, 'book/[id]/index': BookDetailScreen, 'book/[id]/edit': BookEditScreen,
+        'reading-start': () => <Text>독서 타이머</Text> };
 }
 let memory: ReturnType<typeof memorySQLite>;
 let repository: RecordRepository;
@@ -280,4 +281,41 @@ test('FR-04 S-30 책등 이미지가 있으면 이미지로 보여 주고 불러
     expect(screen.queryByTestId(`spine-image-${id}`)).toBeNull();
     expect(screen.getByText('데\n미\n안')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '데미안, 헤르만 헤세, 읽는 중, 책 상세 보기' })).toBeOnTheScreen();
+});
+
+const saveMixedReviews = () => {
+    repository.books.save(book);
+    repository.reviews.save({ id: reviewId, bookId: id, oneLine: '공개 한줄평', body: null, visibility: 'PUBLIC', publishedAt: null });
+    repository.reviews.save({ id: '00000000-0000-4000-8000-000000000004', bookId: id, oneLine: null, body: '비공개 독후감', visibility: 'PRIVATE', publishedAt: null });
+};
+const mixedMessage = '『데미안』의 감상 중 일부만 공개돼 있어요. 이 책의 감상을 어떻게 할까요?';
+
+test('#89 FR-08 S-31 로그인 상태면 지금 화면 위에 공개 범위가 섞인 책을 고르는 알림을 띄워요', async () => {
+    saveMixedReviews();
+    jest.mocked(useAuth).mockReturnValue({ ...useAuth(), status: 'signedIn' });
+    await renderRouter(protectedRoutes(), { initialUrl: '/shelf' });
+    expect(await screen.findByText(mixedMessage)).toBeOnTheScreen();
+    expect(screen).toHavePathname('/shelf');
+    await fireEvent.press(screen.getByRole('button', { name: '모두 비공개' }));
+    expect(screen.queryByText(mixedMessage)).toBeNull();
+    expect(repository.reviews.list({ bookId: id }).map(review => review.visibility)).toEqual(['PRIVATE', 'PRIVATE']);
+});
+
+test('#89 FR-08 S-31 로그인 전 화면에는 섞인 책 알림을 띄우지 않아요', async () => {
+    saveMixedReviews();
+    await renderRouter(protectedRoutes(), { initialUrl: '/' });
+    expect(await screen.findByText('로그인이 필요해요.')).toBeOnTheScreen();
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByText(mixedMessage)).toBeNull();
+});
+
+test('#89 FR-08 S-46 독서 타이머 화면에 있는 동안에는 섞인 책 알림을 미루고 나가면 띄워요', async () => {
+    saveMixedReviews();
+    jest.mocked(useAuth).mockReturnValue({ ...useAuth(), status: 'signedIn' });
+    await renderRouter(protectedRoutes(), { initialUrl: `/reading-start?bookId=${id}` });
+    expect(await screen.findByText('독서 타이머')).toBeOnTheScreen();
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByText(mixedMessage)).toBeNull();
+    await act(async () => router.replace('/shelf'));
+    expect(await screen.findByText(mixedMessage)).toBeOnTheScreen();
 });

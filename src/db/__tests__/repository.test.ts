@@ -6,6 +6,7 @@ import * as schema from '../schema';
 import { prepareRecordDatabase } from '../client';
 import { createRecordRepository, type EntityRepository, type RecordDatabase, type RecordRepository, type SaveInput } from '../repository';
 import { books, sessions, type BookRecord, type QuoteRecord, type ReviewRecord, type SessionRecord } from '../schema';
+import { bookOneLine } from '../../domain/reviewRules';
 import { memorySQLite } from './sqliteAdapter';
 
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
@@ -281,4 +282,74 @@ test('NFR-05 S-80 SQL 필터는 책과 삭제·대기 상태를 함께 제한해
     expect(repository.sessions.list({ syncPending: true })).toEqual([]);
     expect(repository.sessions.list({ includeDeleted: true, syncPending: true, bookId })).toHaveLength(1);
     expect(repository.sessions.list({ includeDeleted: true, bookId: quoteId })).toEqual([]);
+});
+
+test('#89 FR-08 S-31 책 공개 범위를 바꾸면 값이 다른 감상만 동기화 대기로 바꾸고 충돌·다른 책은 그대로예요', () => {
+    const ids = ['00000000-0000-4000-8000-000000000031', '00000000-0000-4000-8000-000000000032',
+        '00000000-0000-4000-8000-000000000033', '00000000-0000-4000-8000-000000000034'];
+    const otherBook = '00000000-0000-4000-8000-000000000035';
+    repository.books.save({ ...book, id: otherBook });
+    repository.reviews.save({ id: ids[0], bookId, oneLine: '한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.save({ id: ids[1], bookId, oneLine: null, body: '독후감', visibility: 'PUBLIC', publishedAt: null });
+    repository.reviews.save({ id: ids[2], bookId, oneLine: null, body: '충돌한 독후감', visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.save({ id: ids[3], bookId: otherBook, oneLine: '다른 책', body: null, visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.markConflict(ids[2]);
+    for (const id of ids) { const row = repository.reviews.get(id)!; repository.reviews.markSynced(id, row.localVersion); }
+    const unchanged = repository.reviews.get(ids[1]);
+    const listener = jest.fn();
+    repository.subscribe(listener);
+    now += 1000;
+
+    expect(repository.reviews.setBookVisibility(bookId, 'PUBLIC')).toBe(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(repository.reviews.get(ids[0])).toMatchObject({ visibility: 'PUBLIC', oneLine: '한줄평', syncPending: true, updatedAt: 100000 });
+    expect(repository.reviews.get(ids[1])).toEqual(unchanged);
+    expect(repository.reviews.get(ids[2])).toMatchObject({ visibility: 'PRIVATE', syncPending: false });
+    expect(repository.reviews.get(ids[3])).toMatchObject({ visibility: 'PRIVATE', syncPending: false });
+    expect(repository.reviews.setBookVisibility(bookId, 'PUBLIC')).toBe(0);
+    expect(listener).toHaveBeenCalledTimes(1);
+});
+
+test('#89 FR-08 S-31 공개 범위만 바꾸면 updatedAt을 두어 대표 한줄평이 바뀌지 않고 동기화 대기는 돼요', () => {
+    const older = '00000000-0000-4000-8000-000000000041';
+    const newer = '00000000-0000-4000-8000-000000000042';
+    repository.reviews.save({ id: older, bookId, oneLine: '예전 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    now += 1000;
+    repository.reviews.save({ id: newer, bookId, oneLine: '최근 한줄평', body: null, visibility: 'PUBLIC', publishedAt: null });
+    const before = repository.reviews.get(older)!;
+    repository.reviews.markSynced(older, before.localVersion);
+    expect(bookOneLine(repository.reviews.list({ bookId }))?.id).toBe(newer);
+    now += 1000;
+
+    expect(repository.reviews.setBookVisibility(bookId, 'PUBLIC')).toBe(1);
+    const after = repository.reviews.get(older)!;
+    expect(after).toMatchObject({ visibility: 'PUBLIC', updatedAt: before.updatedAt, syncPending: true });
+    expect(after.localVersion).toBeGreaterThan(before.localVersion);
+    expect(bookOneLine(repository.reviews.list({ bookId }))?.id).toBe(newer);
+});
+
+test('#89 FR-08 S-31 책 공개 범위를 바꿔도 삭제한 감상은 그대로예요', () => {
+    const kept = '00000000-0000-4000-8000-000000000051';
+    const deleted = '00000000-0000-4000-8000-000000000052';
+    repository.reviews.save({ id: kept, bookId, oneLine: '남은 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.save({ id: deleted, bookId, oneLine: null, body: '지운 독후감', visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.softDelete(deleted);
+    const tombstone = repository.reviews.get(deleted, true)!;
+    repository.reviews.markSynced(deleted, tombstone.localVersion);
+    const synced = repository.reviews.get(deleted, true);
+
+    expect(repository.reviews.setBookVisibility(bookId, 'PUBLIC')).toBe(1);
+    expect(repository.reviews.get(deleted, true)).toEqual(synced);
+    expect(repository.reviews.get(deleted, true)).toMatchObject({ deleted: true, visibility: 'PRIVATE', syncPending: false });
+    expect(repository.reviews.get(kept)).toMatchObject({ visibility: 'PUBLIC' });
+});
+
+test('#89 FR-08 S-31 섞인 책 찾기용 조회는 삭제·충돌 감상을 빼고 책 ID와 공개 범위만 돌려줘요', () => {
+    const ids = ['00000000-0000-4000-8000-000000000061', '00000000-0000-4000-8000-000000000062', '00000000-0000-4000-8000-000000000063'];
+    repository.reviews.save({ id: ids[0], bookId, oneLine: null, body: '긴 독후감', visibility: 'PUBLIC', publishedAt: null });
+    repository.reviews.save({ id: ids[1], bookId, oneLine: '충돌', body: null, visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.save({ id: ids[2], bookId, oneLine: '삭제', body: null, visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.markConflict(ids[1]);
+    repository.reviews.softDelete(ids[2]);
+    expect(repository.reviews.visibilities()).toEqual([{ bookId, visibility: 'PUBLIC' }]);
 });

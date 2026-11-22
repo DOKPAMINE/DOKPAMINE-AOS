@@ -1,4 +1,4 @@
-import { bookOneLine, bookReports, emptyQuoteFields, oneLineSchema, planOneLineSave, quoteSchema, reportSchema } from '../reviewRules';
+import { bookOneLine, bookReports, bookVisibility, emptyQuoteFields, mixedVisibilityBooks, needsPublishConfirm, oneLineSchema, planOneLineSave, quoteSchema, reportSchema } from '../reviewRules';
 
 test.each([[1000, true], [1001, false]])('FR-07 S-52 문장 %i자 허용 여부는 %s예요', (count, success) => {
     expect(quoteSchema.safeParse({ ...emptyQuoteFields, text: '가'.repeat(count) }).success).toBe(success);
@@ -46,12 +46,42 @@ test('#75 S-51 기존 한줄평을 비우거나 바꾸지 않으면 저장하지
     expect(planOneLineSave({ text: ' ', visibility: 'PRIVATE' }, current))
         .toEqual({ kind: 'invalid', message: '한줄평은 비울 수 없어요. 남길 한줄평을 입력해 주세요.' });
     expect(planOneLineSave({ text: ' 기존 한줄평 ', visibility: 'PRIVATE' }, current))
-        .toEqual({ kind: 'invalid', message: '바뀐 내용이 없어요. 한줄평이나 공개 범위를 고친 뒤 저장해 주세요.' });
+        .toEqual({ kind: 'invalid', message: '바뀐 내용이 없어요. 한줄평을 고친 뒤 저장해 주세요.' });
 });
-test.each([[5000, true], [5001, false]])('#75 FR-07 S-51 독후감 화면은 %i자 허용 여부가 %s예요', (count, success) => {
+test.each([[5000, true], [5001, false]])('#75 FR-07 S-53 독후감 화면은 %i자 허용 여부가 %s예요', (count, success) => {
     expect(reportSchema.safeParse({ text: '가'.repeat(count) }).success).toBe(success);
 });
-test('#75 FR-08 S-51 독후감은 공백만 입력하면 저장할 수 없고 공개 범위를 생략하면 비공개예요', () => {
+test('#75 FR-08 S-53 독후감은 공백만 입력하면 저장할 수 없고 공개 범위를 생략하면 비공개예요', () => {
     expect(reportSchema.safeParse({ text: '	 ' }).success).toBe(false);
     expect(reportSchema.parse({ text: ' 독후감 ' })).toEqual({ text: '독후감', visibility: 'PRIVATE' });
+});
+
+const visibilities = (...values: ('PRIVATE' | 'PUBLIC')[]) => values.map(visibility => ({ visibility }));
+
+test.each(['PRIVATE', 'PUBLIC'] as const)('#89 FR-08 S-31 S-81 감상이 없는 책은 기본 공개 범위 %s를 따라요', fallback => {
+    expect(bookVisibility([], fallback)).toBe(fallback);
+});
+test('#89 FR-08 S-31 감상이 있으면 모두 공개일 때만 공개이고 저장값보다 감상이 우선해요', () => {
+    expect(bookVisibility(visibilities('PUBLIC', 'PUBLIC'), 'PRIVATE')).toBe('PUBLIC');
+    expect(bookVisibility(visibilities('PRIVATE'), 'PUBLIC')).toBe('PRIVATE');
+    expect(bookVisibility(visibilities('PRIVATE', 'PUBLIC'), 'PUBLIC')).toBe('PRIVATE');
+});
+test('#89 FR-08 S-31 감상 공개 범위가 섞인 책만 제목 순으로 찾아요', () => {
+    const books = [{ id: 'c', title: '하얀 책' }, { id: 'a', title: '데미안' }, { id: 'b', title: '같은 책' }, { id: 'd', title: '감상 없는 책' }];
+    const reviews = [
+        { bookId: 'c', visibility: 'PUBLIC' }, { bookId: 'c', visibility: 'PRIVATE' },
+        { bookId: 'a', visibility: 'PRIVATE' }, { bookId: 'a', visibility: 'PUBLIC' }, { bookId: 'a', visibility: 'PUBLIC' },
+        { bookId: 'b', visibility: 'PUBLIC' }, { bookId: 'b', visibility: 'PUBLIC' },
+        { bookId: 'deleted-book', visibility: 'PUBLIC' }, { bookId: 'deleted-book', visibility: 'PRIVATE' },
+    ] as const;
+    expect(mixedVisibilityBooks(books, reviews).map(book => book.title)).toEqual(['데미안', '하얀 책']);
+    expect(mixedVisibilityBooks(books, [])).toEqual([]);
+});
+test('#89 FR-08 S-31 공개로 바꿀 때만 확인하고 비공개로 바꿀 때는 확인하지 않아요', () => {
+    expect(needsPublishConfirm('PRIVATE', 'PUBLIC', 1)).toBe(true);
+    expect(needsPublishConfirm('PUBLIC', 'PRIVATE', 1)).toBe(false);
+    expect(needsPublishConfirm('PUBLIC', 'PUBLIC', 2)).toBe(false);
+});
+test('#89 FR-08 S-31 감상이 없는 책은 공개로 바꿔도 공개될 감상이 없어 확인하지 않아요', () => {
+    expect(needsPublishConfirm('PRIVATE', 'PUBLIC', 0)).toBe(false);
 });

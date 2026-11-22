@@ -34,7 +34,7 @@ jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn(), request
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn(), addEventListener: jest.fn(() => jest.fn()) } }));
 jest.mock('../../api/endpoints', () => ({ me: jest.fn(), patchMe: jest.fn() }));
 jest.mock('../../db/client', () => ({ ...jest.requireActual('../../db/client'), initializeDatabase: jest.fn(), prepareRecordAccount: jest.fn(async () => {}) }));
-jest.mock('../../sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn(), subscribeSyncState: jest.fn(() => jest.fn()) }));
+jest.mock('../../sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn(), getSyncState: jest.fn(() => ({ status: 'idle', failedCount: 0 })), subscribeSyncState: jest.fn(() => jest.fn()) }));
 
 const bookId = '00000000-0000-4000-8000-000000000001';
 const sessionId = '00000000-0000-4000-8000-000000000002';
@@ -133,14 +133,14 @@ test('NFR-04 S-80 전송 완료 알림으로 대기 건수를 다시 읽고 새 
     expect(await screen.findByText('전송 대기 2건')).toBeOnTheScreen();
     await act(async () => {
         for (const entity of [repository.books, repository.sessions]) for (const row of entity.list()) entity.markSynced(row.id, row.localVersion);
-        jest.mocked(subscribeSyncState).mock.calls.at(-1)?.[0]();
+        jest.mocked(subscribeSyncState).mock.calls.forEach(([listener]) => listener());
     });
     expect(screen.getByText('전송 대기 0건')).toBeOnTheScreen();
     await act(async () => { repository.quotes.save({ id: quoteId, bookId, text: '추가 문장', page: null, memo: null }); });
     expect(screen.getByText('전송 대기 1건')).toBeOnTheScreen();
 });
 
-test('FR-08 S-81 S-51 기본 공개 범위가 재진입 후 유지되고 새 감상에 적용돼요', async () => {
+test('FR-08 S-81 S-51 S-53 기본 공개 범위가 재진입 후 유지되고 감상이 없는 책의 새 감상에 적용돼요', async () => {
     const first = await renderRouter(routes, { initialUrl: '/settings' });
     expect(await screen.findByRole('radio', { name: '기본 비공개 · 나만 보기' })).toBeChecked();
     await fireEvent.press(screen.getByRole('radio', { name: '기본 공개' }));
@@ -151,7 +151,7 @@ test('FR-08 S-81 S-51 기본 공개 범위가 재진입 후 유지되고 새 감
     expect(await screen.findByRole('radio', { name: '기본 공개' })).toBeChecked();
     for (const [route, label] of [['one-line', '한줄평'], ['report', '독후감']] as const) {
         await act(async () => router.push(`/book/${bookId}/review/${route}`));
-        expect(await screen.findByRole('radio', { name: '공개' })).toBeChecked();
+        expect(await screen.findByText(new RegExp(`^이 ${label}은 공개로 저장돼요\\.`))).toBeOnTheScreen();
         await fireEvent.changeText(screen.getByLabelText(label), '설정한 공개 범위로 저장해요.');
         await fireEvent.press(screen.getByRole('button', { name: `${label} 저장` }));
         await screen.findByText('감상 목록');

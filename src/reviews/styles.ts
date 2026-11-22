@@ -13,9 +13,5 @@ export const reviewStyles = StyleSheet.create({
         borderColor: colors.line.border, borderWidth: 1, borderRadius: radii.small,
         minHeight: sizes.minTouch, padding: spacing.md, textAlignVertical: 'top' },
     multiline: { minHeight: sizes.minTouch * 3 },
-    row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-    choice: { minHeight: sizes.minTouch, minWidth: sizes.minTouch, padding: spacing.md,
-        borderRadius: radii.small, backgroundColor: colors.surface.chip, justifyContent: 'center' },
-    selected: { borderWidth: 1, borderColor: colors.brand.espresso },
     pressed: { backgroundColor: colors.surface.sandSoft },
 });
