@@ -1,4 +1,4 @@
-import { bookOneLine, bookReports, emptyQuoteFields, oneLineSchema, planOneLineSave, quoteSchema, reportSchema } from '../reviewRules';
+import { bookOneLine, bookReports, bookVisibility, emptyQuoteFields, needsPublishConfirm, newReviewVisibility, oneLineSchema, planOneLineSave, quoteSchema, reportSchema } from '../reviewRules';
 
 test.each([[1000, true], [1001, false]])('FR-07 S-52 문장 %i자 허용 여부는 %s예요', (count, success) => {
     expect(quoteSchema.safeParse({ ...emptyQuoteFields, text: '가'.repeat(count) }).success).toBe(success);
@@ -54,4 +54,26 @@ test.each([[5000, true], [5001, false]])('#75 FR-07 S-53 독후감 화면은 %i�
 test('#75 FR-08 S-53 독후감은 공백만 입력하면 저장할 수 없고 공개 범위를 생략하면 비공개예요', () => {
     expect(reportSchema.safeParse({ text: '	 ' }).success).toBe(false);
     expect(reportSchema.parse({ text: ' 독후감 ' })).toEqual({ text: '독후감', visibility: 'PRIVATE' });
+});
+
+const visibilities = (...values: ('PRIVATE' | 'PUBLIC')[]) => values.map(visibility => ({ visibility }));
+
+test.each(['PRIVATE', 'PUBLIC'] as const)('#89 FR-08 S-31 S-81 감상이 없는 책은 기본 공개 범위 %s를 따라요', fallback => {
+    expect(bookVisibility([], fallback)).toBe(fallback);
+});
+test('#89 FR-08 S-31 감상이 모두 같으면 그 값이고 섞여 있으면 MIXED예요', () => {
+    expect(bookVisibility(visibilities('PUBLIC', 'PUBLIC'), 'PRIVATE')).toBe('PUBLIC');
+    expect(bookVisibility(visibilities('PRIVATE'), 'PUBLIC')).toBe('PRIVATE');
+    expect(bookVisibility(visibilities('PRIVATE', 'PUBLIC'), 'PUBLIC')).toBe('MIXED');
+});
+test('#89 FR-08 S-51 S-53 새 감상은 공개인 책에서만 공개로 저장하고 섞인 책은 비공개예요', () => {
+    expect(newReviewVisibility('PUBLIC')).toBe('PUBLIC');
+    expect(newReviewVisibility('PRIVATE')).toBe('PRIVATE');
+    expect(newReviewVisibility('MIXED')).toBe('PRIVATE');
+});
+test('#89 FR-08 S-31 공개로 바꿀 때만 확인하고 비공개로 바꿀 때는 확인하지 않아요', () => {
+    expect(needsPublishConfirm('PRIVATE', 'PUBLIC')).toBe(true);
+    expect(needsPublishConfirm('MIXED', 'PUBLIC')).toBe(true);
+    expect(needsPublishConfirm('PUBLIC', 'PRIVATE')).toBe(false);
+    expect(needsPublishConfirm('MIXED', 'PRIVATE')).toBe(false);
 });

@@ -282,3 +282,29 @@ test('NFR-05 S-80 SQL 필터는 책과 삭제·대기 상태를 함께 제한해
     expect(repository.sessions.list({ includeDeleted: true, syncPending: true, bookId })).toHaveLength(1);
     expect(repository.sessions.list({ includeDeleted: true, bookId: quoteId })).toEqual([]);
 });
+
+test('#89 FR-08 S-31 책 공개 범위를 바꾸면 값이 다른 감상만 동기화 대기로 바꾸고 충돌·다른 책은 그대로예요', () => {
+    const ids = ['00000000-0000-4000-8000-000000000031', '00000000-0000-4000-8000-000000000032',
+        '00000000-0000-4000-8000-000000000033', '00000000-0000-4000-8000-000000000034'];
+    const otherBook = '00000000-0000-4000-8000-000000000035';
+    repository.books.save({ ...book, id: otherBook });
+    repository.reviews.save({ id: ids[0], bookId, oneLine: '한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.save({ id: ids[1], bookId, oneLine: null, body: '독후감', visibility: 'PUBLIC', publishedAt: null });
+    repository.reviews.save({ id: ids[2], bookId, oneLine: null, body: '충돌한 독후감', visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.save({ id: ids[3], bookId: otherBook, oneLine: '다른 책', body: null, visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.markConflict(ids[2]);
+    for (const id of ids) { const row = repository.reviews.get(id)!; repository.reviews.markSynced(id, row.localVersion); }
+    const unchanged = repository.reviews.get(ids[1]);
+    const listener = jest.fn();
+    repository.subscribe(listener);
+    now += 1000;
+
+    expect(repository.reviews.setBookVisibility(bookId, 'PUBLIC')).toBe(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(repository.reviews.get(ids[0])).toMatchObject({ visibility: 'PUBLIC', oneLine: '한줄평', syncPending: true, updatedAt: now });
+    expect(repository.reviews.get(ids[1])).toEqual(unchanged);
+    expect(repository.reviews.get(ids[2])).toMatchObject({ visibility: 'PRIVATE', syncPending: false });
+    expect(repository.reviews.get(ids[3])).toMatchObject({ visibility: 'PRIVATE', syncPending: false });
+    expect(repository.reviews.setBookVisibility(bookId, 'PUBLIC')).toBe(0);
+    expect(listener).toHaveBeenCalledTimes(1);
+});

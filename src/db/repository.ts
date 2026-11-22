@@ -158,6 +158,21 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
                 serverVersion, syncPending: current.localVersion !== row.localVersion,
             }).where(eq(schema.reviews.id, row.id)).run();
         },
+        /**
+         * FR-08 / S-31: 책의 감상 공개 범위를 한 번에 맞춘다. 값이 다른 감상만 새 버전으로 저장해 동기화를 예약하고,
+         * 서버와 충돌한 감상은 S-50 충돌 해결에서 공개 범위를 고르므로 건드리지 않는다. 바꾼 감상 수를 돌려준다.
+         */
+        setBookVisibility(bookId: string, visibility: ReviewRecord['visibility']): number {
+            const changed = transaction(() => {
+                const targets = reviewEntity.list({ bookId }).filter(row => !row.conflict && row.visibility !== visibility);
+                for (const row of targets) {
+                    reviewEntity.save({ id: row.id, bookId: row.bookId, oneLine: row.oneLine, body: row.body, visibility, publishedAt: row.publishedAt });
+                }
+                return targets.length;
+            });
+            if (changed > 0) notify();
+            return changed;
+        },
         conflicts(bookId?: string) {
             return db.select().from(schema.reviews).where(and(
                 isNotNull(schema.reviews.conflict),
