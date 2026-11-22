@@ -14,7 +14,7 @@ export const reviewPreferences = {
     },
 };
 
-/** S-51: 계정의 기본값을 읽은 뒤 폼을 열어 작성 중인 선택을 덮어쓰지 않는다. */
+/** S-31·S-51·S-53: 계정의 기본값을 읽은 뒤 화면을 열어, 감상이 없는 책의 공개 범위로 쓴다. */
 export function useReviewVisibility() {
     const [visibility, setVisibility] = useState<ReviewVisibility>();
     useEffect(() => {

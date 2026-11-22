@@ -56,7 +56,7 @@ export function planOneLineSave(fields: OneLineFields, current?: { oneLine: stri
     if (!result.success) return { kind: 'invalid', message: result.error.issues[0].message };
     const { text, visibility } = result.data;
     if (current && text === current.oneLine?.trim() && visibility === current.visibility) {
-        return { kind: 'invalid', message: '바뀐 내용이 없어요. 한줄평이나 공개 범위를 고친 뒤 저장해 주세요.' };
+        return { kind: 'invalid', message: '바뀐 내용이 없어요. 한줄평을 고친 뒤 저장해 주세요.' };
     }
     return { kind: 'save', text, visibility };
 }

@@ -46,7 +46,7 @@ test('#75 S-51 기존 한줄평을 비우거나 바꾸지 않으면 저장하지
     expect(planOneLineSave({ text: ' ', visibility: 'PRIVATE' }, current))
         .toEqual({ kind: 'invalid', message: '한줄평은 비울 수 없어요. 남길 한줄평을 입력해 주세요.' });
     expect(planOneLineSave({ text: ' 기존 한줄평 ', visibility: 'PRIVATE' }, current))
-        .toEqual({ kind: 'invalid', message: '바뀐 내용이 없어요. 한줄평이나 공개 범위를 고친 뒤 저장해 주세요.' });
+        .toEqual({ kind: 'invalid', message: '바뀐 내용이 없어요. 한줄평을 고친 뒤 저장해 주세요.' });
 });
 test.each([[5000, true], [5001, false]])('#75 FR-07 S-53 독후감 화면은 %i자 허용 여부가 %s예요', (count, success) => {
     expect(reportSchema.safeParse({ text: '가'.repeat(count) }).success).toBe(success);

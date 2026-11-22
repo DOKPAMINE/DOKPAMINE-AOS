@@ -39,7 +39,7 @@ test('#75 FR-07 S-50 빈 목록에서 한줄평·독후감·문장 작성으로 
     expect(screen.getByRole('button', { name: '문장 추가' })).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: '한줄평 수정' })).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: '한줄평 쓰기' }));
-    expect(await screen.findByRole('radio', { name: '비공개 · 나만 보기' })).toBeChecked();
+    expect(await screen.findByText('이 한줄평은 비공개로 저장돼요. 공개 범위는 책 상세에서 바꿀 수 있어요.')).toBeOnTheScreen();
     await act(async () => router.back());
     await fireEvent.press(await screen.findByRole('button', { name: '독후감 쓰기' }));
     expect(await screen.findByLabelText('독후감')).toBeOnTheScreen();
@@ -201,16 +201,18 @@ test('#75 S-50 맨 위에 최신 한줄평 하나, 그 아래에 독후감을 �
     expect(texts).toEqual(order);
 });
 
-test('#75 FR-08 S-51 한줄평 쓰기 화면은 한줄평 칸 하나만 두고 고른 공개 범위로 한줄평 하나를 만들어요', async () => {
+test('#75 #89 FR-08 S-51 한줄평 쓰기 화면은 한줄평 칸 하나만 두고 공개 범위 선택 없이 책의 공개 범위로 만들어요', async () => {
+    repository.reviews.save({ id: '00000000-0000-4000-8000-000000000013', bookId, oneLine: null, body: '공개한 독후감', visibility: 'PUBLIC', publishedAt: null });
     await renderRouter(routes, { initialUrl: `${base}/one-line` });
     expect(await screen.findByText('한줄평 쓰기')).toBeOnTheScreen();
     expect(screen.queryByLabelText('독후감')).toBeNull();
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(screen.getByText('이 한줄평은 공개로 저장돼요. 동기화되면 다른 독자도 볼 수 있어요. 공개 범위는 책 상세에서 바꿀 수 있어요.')).toBeOnTheScreen();
     await fireEvent.changeText(screen.getByLabelText('한줄평'), '처음 남기는 한줄평');
-    await fireEvent.press(screen.getByRole('radio', { name: '공개' }));
     await fireEvent.press(screen.getByRole('button', { name: '한줄평 저장' }));
     expect(await screen.findByText('처음 남기는 한줄평')).toBeOnTheScreen();
-    expect(repository.reviews.list({ bookId })).toEqual([
-        expect.objectContaining({ oneLine: '처음 남기는 한줄평', body: null, visibility: 'PUBLIC', syncPending: true })]);
+    expect(repository.reviews.list({ bookId }).find(review => review.oneLine))
+        .toEqual(expect.objectContaining({ oneLine: '처음 남기는 한줄평', body: null, visibility: 'PUBLIC', syncPending: true }));
 });
 
 test('#75 S-51 한줄평 수정은 기존 한줄평을 채워 열고 같은 감상을 고쳐요', async () => {
@@ -219,7 +221,7 @@ test('#75 S-51 한줄평 수정은 기존 한줄평을 채워 열고 같은 감�
     await renderRouter(routes, { initialUrl: `${base}/one-line` });
     expect(await screen.findByText('한줄평 수정')).toBeOnTheScreen();
     expect(screen.getByLabelText('한줄평')).toHaveDisplayValue('기존 한줄평');
-    expect(screen.getByRole('radio', { name: '공개' })).toBeChecked();
+    expect(screen.getByText(/^이 한줄평은 공개로 저장돼요\./)).toBeOnTheScreen();
     await fireEvent.changeText(screen.getByLabelText('한줄평'), '고친 한줄평');
     await fireEvent.press(screen.getByRole('button', { name: '한줄평 저장' }));
     expect(await screen.findByText('고친 한줄평')).toBeOnTheScreen();
@@ -258,7 +260,7 @@ test('#75 S-51 독후감과 함께 쓴 예전 감상의 한줄평을 고쳐도 �
 
 test.each([
     ['', '한줄평은 비울 수 없어요. 남길 한줄평을 입력해 주세요.'],
-    ['기존 한줄평', '바뀐 내용이 없어요. 한줄평이나 공개 범위를 고친 뒤 저장해 주세요.'],
+    ['기존 한줄평', '바뀐 내용이 없어요. 한줄평을 고친 뒤 저장해 주세요.'],
 ])('#75 S-51 한줄평을 "%s"로 저장하면 막고 안내해요', async (text, message) => {
     const id = '00000000-0000-4000-8000-000000000007';
     const before = repository.reviews.save({ id, bookId, oneLine: '기존 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
@@ -273,16 +275,31 @@ test('#75 FR-08 S-53 독후감 쓰기 화면은 독후감 칸 하나만 두고 �
     const oneLineId = '00000000-0000-4000-8000-000000000008';
     const oneLine = repository.reviews.save({ id: oneLineId, bookId, oneLine: '기존 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
     await renderRouter(routes, { initialUrl: `${base}/report` });
-    for (const [body, visibility] of [['첫 독후감', 'PRIVATE'], ['둘째 독후감', 'PUBLIC']] as const) {
+    for (const body of ['첫 독후감', '둘째 독후감']) {
         if (body !== '첫 독후감') await act(async () => router.push(`${base}/report`));
         await fireEvent.changeText(await screen.findByLabelText('독후감'), body);
         expect(screen.queryByLabelText('한줄평')).toBeNull();
-        if (visibility === 'PUBLIC') await fireEvent.press(screen.getByRole('radio', { name: '공개' }));
+        expect(screen.queryByRole('radio')).toBeNull();
         await fireEvent.press(screen.getByRole('button', { name: '독후감 저장' }));
         expect(await screen.findByText(body)).toBeOnTheScreen();
     }
     expect(repository.reviews.get(oneLineId)).toEqual(oneLine);
     const reports = repository.reviews.list({ bookId }).filter(review => review.body);
     expect(reports.map(({ oneLine: line, body, visibility }) => ({ line, body, visibility })).sort((a, b) => a.body!.localeCompare(b.body!)))
-        .toEqual([{ line: null, body: '둘째 독후감', visibility: 'PUBLIC' }, { line: null, body: '첫 독후감', visibility: 'PRIVATE' }]);
+        .toEqual([{ line: null, body: '둘째 독후감', visibility: 'PRIVATE' }, { line: null, body: '첫 독후감', visibility: 'PRIVATE' }]);
+});
+
+test.each([
+    ['PUBLIC', ['PUBLIC'], 'PUBLIC'],
+    ['PRIVATE', ['PRIVATE'], 'PRIVATE'],
+    ['섞인', ['PUBLIC', 'PRIVATE'], 'PRIVATE'],
+] as const)('#89 FR-08 S-53 %s 책에 새로 쓴 독후감은 책의 공개 범위를 따라 저장해요', async (_name, existing, expected) => {
+    existing.forEach((visibility, index) => repository.reviews.save({ id: `00000000-0000-4000-8000-00000000002${index}`, bookId,
+        oneLine: index === 0 ? '기존 한줄평' : null, body: index === 0 ? null : '기존 독후감', visibility, publishedAt: null }));
+    await renderRouter(routes, { initialUrl: `${base}/report` });
+    expect(await screen.findByText(expected === 'PUBLIC' ? /^이 독후감은 공개로 저장돼요\./ : /^이 독후감은 비공개로 저장돼요\./)).toBeOnTheScreen();
+    await fireEvent.changeText(screen.getByLabelText('독후감'), '새 독후감');
+    await fireEvent.press(screen.getByRole('button', { name: '독후감 저장' }));
+    expect(await screen.findByText('새 독후감')).toBeOnTheScreen();
+    expect(repository.reviews.list({ bookId }).find(review => review.body === '새 독후감')).toMatchObject({ visibility: expected, syncPending: true });
 });
