@@ -267,16 +267,13 @@ test('#75 S-51 독후감과 함께 쓴 예전 감상의 한줄평을 고쳐도 �
     expect(repository.reviews.list({ bookId })).toEqual([expect.objectContaining({ id, oneLine: '고친 한줄평', body: '함께 쓴 독후감' })]);
 });
 
-test.each([
-    ['', '한줄평은 비울 수 없어요. 남길 한줄평을 입력해 주세요.'],
-    ['기존 한줄평', '바뀐 내용이 없어요. 한줄평을 고친 뒤 저장해 주세요.'],
-])('#75 S-51 한줄평을 "%s"로 저장하면 막고 안내해요', async (text, message) => {
+test('#75 S-51 한줄평을 비워 저장하면 막고 안내해요', async () => {
     const id = '00000000-0000-4000-8000-000000000007';
     const before = repository.reviews.save({ id, bookId, oneLine: '기존 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
     await renderRouter(routes, { initialUrl: `${base}/one-line` });
-    await fireEvent.changeText(await screen.findByLabelText('한줄평'), text);
+    await fireEvent.changeText(await screen.findByLabelText('한줄평'), '');
     await fireEvent.press(screen.getByRole('button', { name: '한줄평 저장' }));
-    expect(screen.getByRole('alert')).toHaveTextContent(message);
+    expect(screen.getByRole('alert')).toHaveTextContent('한줄평은 비울 수 없어요. 남길 한줄평을 입력해 주세요.');
     expect(repository.reviews.get(id)).toEqual(before);
 });
 
@@ -357,13 +354,34 @@ describe('#91 감상·문장 수정과 삭제', () => {
         expect(repository.reviews.list({ bookId })).toEqual([expect.objectContaining({ id: reportId, body: '고친 독후감', visibility: 'PUBLIC', syncPending: true })]);
     });
 
-    test('S-53 독후감 수정을 바꾸지 않고 저장하면 막고 안내해요', async () => {
-        const before = repository.reviews.save({ id: reportId, bookId, oneLine: null, body: '처음 독후감', visibility: 'PRIVATE', publishedAt: null });
-        await renderRouter(routes, { initialUrl: `${base}/report?reviewId=${reportId}` });
-        await screen.findByLabelText('독후감');
-        await fireEvent.press(screen.getByRole('button', { name: '독후감 저장' }));
-        expect(screen.getByRole('alert')).toHaveTextContent('바뀐 내용이 없어요. 독후감을 고친 뒤 저장해 주세요.');
-        expect(repository.reviews.get(reportId)).toEqual(before);
+    test.each([
+        ['한줄평', 'one-line', '한줄평', ' 기존 한줄평 '],
+        ['독후감', `report?reviewId=${reportId}`, '독후감', ' 처음 독후감 '],
+        ['문장', `quote?quoteId=${quoteId}`, '좋아하는 문장', ' 예전 문장 '],
+    ])('NFR-05 S-51 S-52 S-53 %s 수정을 바꾸지 않고 저장하면 DB에 다시 쓰지 않고 감상과 문장으로 돌아가요', async (kind, route, label, retyped) => {
+        const review = kind === '한줄평'
+            ? repository.reviews.save({ id: oneLineId, bookId, oneLine: '기존 한줄평', body: null, visibility: 'PUBLIC', publishedAt: null })
+            : repository.reviews.save({ id: reportId, bookId, oneLine: null, body: '처음 독후감', visibility: 'PUBLIC', publishedAt: null });
+        const quote = repository.quotes.save({ id: quoteId, bookId, text: '예전 문장', page: 10, memo: null });
+        // 동기화가 끝난 기록이라야 syncPending이 다시 켜지지 않는지 확인할 수 있다.
+        repository.reviews.markSynced(review.id, review.localVersion);
+        repository.quotes.markSynced(quote.id, quote.localVersion);
+        const before = { review: repository.reviews.get(review.id), quote: repository.quotes.get(quote.id) };
+        const alert = jest.spyOn(Alert, 'alert');
+        const notify = jest.fn();
+        repository.subscribe(notify);
+        await renderRouter(routes, { initialUrl: `${base}/${route}` });
+        // 앞뒤 공백만 다르게 다시 입력해도 바뀐 것이 없다.
+        await fireEvent.changeText(await screen.findByLabelText(label), retyped);
+        await fireEvent.press(screen.getByRole('button', { name: `${kind === '문장' ? '문장' : label} 저장` }));
+        expect(await screen.findByText('감상과 문장')).toBeOnTheScreen();
+        expect(screen).toHavePathname(base);
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(alert).not.toHaveBeenCalled();
+        expect(notify).not.toHaveBeenCalled();
+        expect({ review: repository.reviews.get(review.id), quote: repository.quotes.get(quote.id) }).toEqual(before);
+        expect(before.review).toMatchObject({ syncPending: false });
+        expect(before.quote).toMatchObject({ syncPending: false });
     });
 
     test('S-50 S-52 문장 카드의 수정은 문장·쪽수를 채워 열고 같은 문장을 고치며 예전 메모는 지우지 않아요', async () => {
@@ -378,14 +396,6 @@ describe('#91 감상·문장 수정과 삭제', () => {
         await fireEvent.press(screen.getByRole('button', { name: '문장 저장' }));
         expect(await screen.findByText('고친 문장')).toBeOnTheScreen();
         expect(repository.quotes.list({ bookId })).toEqual([expect.objectContaining({ id: quoteId, text: '고친 문장', page: null, memo: '예전 메모', syncPending: true })]);
-    });
-
-    test('S-52 문장 수정을 바꾸지 않고 저장하면 막고 안내해요', async () => {
-        repository.quotes.save({ id: quoteId, bookId, text: '예전 문장', page: null, memo: null });
-        await renderRouter(routes, { initialUrl: `${base}/quote?quoteId=${quoteId}` });
-        await screen.findByLabelText('좋아하는 문장');
-        await fireEvent.press(screen.getByRole('button', { name: '문장 저장' }));
-        expect(screen.getByRole('alert')).toHaveTextContent('바뀐 내용이 없어요. 문장을 고친 뒤 저장해 주세요.');
     });
 
     test.each([
@@ -457,6 +467,31 @@ describe('#91 감상·문장 수정과 삭제', () => {
         expect(screen.getByRole('alert')).toHaveTextContent(/고치던 독후감이 서버 기록과 달라졌거나 삭제됐어요\./);
         expect(repository.reviews.get(reportId)).toMatchObject({ body: '처음 독후감' });
         expect(repository.reviews.list({ bookId })).toHaveLength(1);
+    });
+
+    test.each([
+        ['한줄평', 'one-line', '한줄평 저장', /고치던 한줄평이 서버 기록과 달라졌거나 삭제됐어요\./],
+        ['독후감', `report?reviewId=${reportId}`, '독후감 저장', /고치던 독후감이 서버 기록과 달라졌거나 삭제됐어요\./],
+    ])('NFR-05 S-51 S-53 %s을 바꾸지 않았어도 편집 중 충돌했으면 닫지 않고 충돌을 안내해요', async (kind, route, button, message) => {
+        const id = kind === '한줄평' ? oneLineId : reportId;
+        repository.reviews.save({ id, bookId, oneLine: kind === '한줄평' ? '기존 한줄평' : null, body: kind === '한줄평' ? null : '처음 독후감',
+            visibility: 'PRIVATE', publishedAt: null });
+        await renderRouter(routes, { initialUrl: `${base}/${route}` });
+        await screen.findByRole('button', { name: button });
+        await act(async () => repository.reviews.markConflict(id));
+        await fireEvent.press(screen.getByRole('button', { name: button }));
+        expect(screen.getByRole('alert')).toHaveTextContent(message);
+        expect(screen).toHavePathname(`${base}/${route.split('?')[0]}`);
+    });
+
+    test('S-52 바꾸지 않은 문장 수정도 편집 중 삭제됐으면 닫지 않고 안내해요', async () => {
+        repository.quotes.save({ id: quoteId, bookId, text: '예전 문장', page: null, memo: null });
+        await renderRouter(routes, { initialUrl: `${base}/quote?quoteId=${quoteId}` });
+        await screen.findByLabelText('좋아하는 문장');
+        await act(async () => { repository.quotes.softDelete(quoteId); });
+        await fireEvent.press(screen.getByRole('button', { name: '문장 저장' }));
+        expect(screen.getByRole('alert')).toHaveTextContent('고치던 문장이 삭제됐어요. 닫고 감상 목록에서 확인해 주세요.');
+        expect(screen).toHavePathname(`${base}/quote`);
     });
 
     test('S-53 S-52 없는 독후감·문장을 고치려 하면 쓰기 화면 대신 안내해요', async () => {

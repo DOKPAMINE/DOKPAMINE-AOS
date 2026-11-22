@@ -60,6 +60,8 @@ function ReportForm({ bookId, title, repository, visibility, current }: {
         }
         const plan = planReportSave(text, target ?? undefined);
         if (plan.kind === 'invalid') { setError(plan.message); return; }
+        // #91: 바뀐 것이 없으면 DB에 다시 쓰지 않는다. updatedAt·localVersion·syncPending을 두어 대표 한줄평과 동기화에 영향이 없다.
+        if (plan.kind === 'unchanged') { setSaved(true); return; }
         try {
             if (target) repository.reviews.updateReport(target.id, plan.text);
             else repository.reviews.save({ id: newId, bookId, oneLine: null, body: plan.text, visibility, publishedAt: null });

@@ -47,6 +47,8 @@ function QuoteForm({ bookId, title, repository, current }: { bookId: string; tit
         if (targetId !== undefined && !target) { setError('고치던 문장이 삭제됐어요. 닫고 감상 목록에서 확인해 주세요.'); return; }
         const plan = planQuoteSave(fields, target ?? undefined);
         if (plan.kind === 'invalid') { setError(plan.message); return; }
+        // #91: 바뀐 것이 없으면 DB에 다시 쓰지 않는다. updatedAt·localVersion·syncPending을 두어 대표 한줄평과 동기화에 영향이 없다.
+        if (plan.kind === 'unchanged') { setSaved(true); return; }
         try {
             // #69: 새 문장은 메모 없이 저장한다. #91: 고칠 때는 입력칸이 없는 예전 메모를 지우지 않고 그대로 둔다.
             repository.quotes.save({ id: targetId ?? newId, bookId, text: plan.text, page: plan.page, memo: target?.memo ?? null });

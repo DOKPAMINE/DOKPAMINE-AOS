@@ -56,6 +56,8 @@ function OneLineForm({ bookId, title, repository, current, visibility }: {
         if (locked) { setError('동기화 충돌을 먼저 해결하면 한줄평을 저장할 수 있어요. 닫고 감상 목록에서 확인해 주세요.'); return; }
         const plan = planOneLineSave({ text, visibility: target?.visibility ?? visibility }, target ?? undefined);
         if (plan.kind === 'invalid') { setError(plan.message); return; }
+        // #91: 바뀐 것이 없으면 DB에 다시 쓰지 않는다. updatedAt·localVersion·syncPending을 두어 대표 한줄평과 동기화에 영향이 없다.
+        if (plan.kind === 'unchanged') { setSaved(true); return; }
         try {
             repository.reviews.save({ id: targetId ?? newId, bookId, oneLine: plan.text, body: target?.body ?? null,
                 visibility: plan.visibility, publishedAt: target?.publishedAt ?? null });

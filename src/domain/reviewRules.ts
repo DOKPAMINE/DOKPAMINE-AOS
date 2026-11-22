@@ -63,16 +63,17 @@ export const oneLineSchema = z.object({
 });
 export type OneLineFields = z.input<typeof oneLineSchema>;
 
-export type OneLineSavePlan = { kind: 'invalid'; message: string } | { kind: 'save'; text: string; visibility: Visibility };
+/** #91: unchanged는 고친 것이 없다는 뜻이다. 화면은 DB에 다시 쓰지 않고 저장한 것처럼 닫는다. */
+export type OneLineSavePlan = { kind: 'invalid'; message: string } | { kind: 'unchanged' } | { kind: 'save'; text: string; visibility: Visibility };
 
-/** S-51: 한줄평은 책당 하나라 기존 한줄평을 비울 수 없고, 내용·공개 범위가 그대로면 저장하지 않는다. */
+/** S-51: 한줄평은 책당 하나라 기존 한줄평을 비울 수 없다. 내용·공개 범위가 그대로면 다시 쓰지 않도록 unchanged를 돌려준다(#91). */
 export function planOneLineSave(fields: OneLineFields, current?: { oneLine: string | null; visibility: Visibility }): OneLineSavePlan {
     if (current && !fields.text.trim()) return { kind: 'invalid', message: '한줄평은 비울 수 없어요. 남길 한줄평을 입력해 주세요.' };
     const result = oneLineSchema.safeParse(fields);
     if (!result.success) return { kind: 'invalid', message: result.error.issues[0].message };
     const { text, visibility } = result.data;
     if (current && text === current.oneLine?.trim() && visibility === current.visibility) {
-        return { kind: 'invalid', message: '바뀐 내용이 없어요. 한줄평을 고친 뒤 저장해 주세요.' };
+        return { kind: 'unchanged' };
     }
     return { kind: 'save', text, visibility };
 }
@@ -93,14 +94,14 @@ export const quoteSchema = z.object({
 export type QuoteFields = z.input<typeof quoteSchema>;
 export const emptyQuoteFields: QuoteFields = { text: '', page: '' };
 
-export type ReportSavePlan = { kind: 'invalid'; message: string } | { kind: 'save'; text: string };
+export type ReportSavePlan = { kind: 'invalid'; message: string } | { kind: 'unchanged' } | { kind: 'save'; text: string };
 
-/** #91 S-53: 새 독후감은 입력만 확인하고, 독후감 수정은 비우거나 바뀐 것 없이 저장하지 못하게 한다. */
+/** #91 S-53: 새 독후감은 입력만 확인한다. 독후감 수정은 비울 수 없고, 바뀐 것이 없으면 unchanged를 돌려준다. */
 export function planReportSave(text: string, current?: { body: string | null }): ReportSavePlan {
     if (current && !text.trim()) return { kind: 'invalid', message: '독후감은 비울 수 없어요. 지우려면 감상 목록에서 삭제해 주세요.' };
     const result = reportSchema.shape.text.safeParse(text);
     if (!result.success) return { kind: 'invalid', message: result.error.issues[0].message };
-    if (current && result.data === current.body?.trim()) return { kind: 'invalid', message: '바뀐 내용이 없어요. 독후감을 고친 뒤 저장해 주세요.' };
+    if (current && result.data === current.body?.trim()) return { kind: 'unchanged' };
     return { kind: 'save', text: result.data };
 }
 
@@ -109,15 +110,15 @@ export function quoteFieldsOf(quote: { text: string; page: number | null }): Quo
     return { text: quote.text, page: quote.page === null ? '' : String(quote.page) };
 }
 
-export type QuoteSavePlan = { kind: 'invalid'; message: string } | { kind: 'save'; text: string; page: number | null };
+export type QuoteSavePlan = { kind: 'invalid'; message: string } | { kind: 'unchanged' } | { kind: 'save'; text: string; page: number | null };
 
-/** #91 S-52: 문장 수정은 바뀐 것 없이 저장하지 못하게 한다. 검증은 새 문장과 같다. */
+/** #91 S-52: 검증은 새 문장과 같다. 문장 수정에서 바뀐 것이 없으면 unchanged를 돌려준다. */
 export function planQuoteSave(fields: QuoteFields, current?: { text: string; page: number | null }): QuoteSavePlan {
     const result = quoteSchema.safeParse(fields);
     if (!result.success) return { kind: 'invalid', message: result.error.issues[0].message };
     const { text, page } = result.data;
     if (current && text === current.text.trim() && page === current.page) {
-        return { kind: 'invalid', message: '바뀐 내용이 없어요. 문장을 고친 뒤 저장해 주세요.' };
+        return { kind: 'unchanged' };
     }
     return { kind: 'save', text, page };
 }

@@ -41,12 +41,12 @@ test('#75 S-51 기존 한줄평은 내용이나 공개 범위를 고치면 저�
     expect(planOneLineSave({ text: '고친 한줄평', visibility: 'PRIVATE' }, current)).toEqual({ kind: 'save', text: '고친 한줄평', visibility: 'PRIVATE' });
     expect(planOneLineSave({ text: '기존 한줄평', visibility: 'PUBLIC' }, current)).toEqual({ kind: 'save', text: '기존 한줄평', visibility: 'PUBLIC' });
 });
-test('#75 S-51 기존 한줄평을 비우거나 바꾸지 않으면 저장하지 않고 안내해요', () => {
+test('#75 #91 S-51 기존 한줄평은 비우면 막고, 바꾸지 않으면 다시 쓰지 않도록 unchanged예요', () => {
     const current = { oneLine: '기존 한줄평', visibility: 'PRIVATE' as const };
     expect(planOneLineSave({ text: ' ', visibility: 'PRIVATE' }, current))
         .toEqual({ kind: 'invalid', message: '한줄평은 비울 수 없어요. 남길 한줄평을 입력해 주세요.' });
     expect(planOneLineSave({ text: ' 기존 한줄평 ', visibility: 'PRIVATE' }, current))
-        .toEqual({ kind: 'invalid', message: '바뀐 내용이 없어요. 한줄평을 고친 뒤 저장해 주세요.' });
+        .toEqual({ kind: 'unchanged' });
 });
 test.each([[5000, true], [5001, false]])('#75 FR-07 S-53 독후감 화면은 %i자 허용 여부가 %s예요', (count, success) => {
     expect(reportSchema.safeParse({ text: '가'.repeat(count) }).success).toBe(success);
@@ -87,10 +87,10 @@ test('#89 FR-08 S-31 감상이 없는 책은 공개로 바꿔도 공개될 감�
 });
 
 describe('#91 감상·문장 수정과 삭제 규칙', () => {
-    test('S-53 독후감 수정은 비우거나 바뀐 것 없이 저장하지 못하고 고친 내용은 앞뒤 공백을 빼고 저장해요', () => {
+    test('S-53 독후감 수정은 비우면 막고, 바뀐 것이 없으면 unchanged이며, 고친 내용은 앞뒤 공백을 빼고 저장해요', () => {
         const current = { body: '처음 독후감' };
         expect(planReportSave('  ', current)).toEqual({ kind: 'invalid', message: '독후감은 비울 수 없어요. 지우려면 감상 목록에서 삭제해 주세요.' });
-        expect(planReportSave(' 처음 독후감 ', current)).toEqual({ kind: 'invalid', message: '바뀐 내용이 없어요. 독후감을 고친 뒤 저장해 주세요.' });
+        expect(planReportSave(' 처음 독후감 ', current)).toEqual({ kind: 'unchanged' });
         expect(planReportSave(' 고친 독후감 ', current)).toEqual({ kind: 'save', text: '고친 독후감' });
         expect(planReportSave('가'.repeat(5001), current)).toEqual({ kind: 'invalid', message: '독후감은 5,000자 이내로 입력해 주세요.' });
     });
@@ -102,9 +102,9 @@ describe('#91 감상·문장 수정과 삭제 규칙', () => {
         expect(quoteFieldsOf({ text: '문장', page: 0 })).toEqual({ text: '문장', page: '0' });
         expect(quoteFieldsOf({ text: '문장', page: null })).toEqual({ text: '문장', page: '' });
     });
-    test('S-52 문장 수정은 문장이나 쪽수가 바뀌어야 저장해요', () => {
+    test('S-52 문장 수정은 문장이나 쪽수가 바뀌어야 저장하고, 그대로면 unchanged예요', () => {
         const current = { text: '새는 알에서 나온다.', page: 10 };
-        expect(planQuoteSave({ text: ' 새는 알에서 나온다. ', page: '10' }, current)).toEqual({ kind: 'invalid', message: '바뀐 내용이 없어요. 문장을 고친 뒤 저장해 주세요.' });
+        expect(planQuoteSave({ text: ' 새는 알에서 나온다. ', page: '10' }, current)).toEqual({ kind: 'unchanged' });
         expect(planQuoteSave({ text: '새는 알에서 나온다.', page: '' }, current)).toEqual({ kind: 'save', text: '새는 알에서 나온다.', page: null });
         expect(planQuoteSave({ text: '고친 문장', page: '10' }, current)).toEqual({ kind: 'save', text: '고친 문장', page: 10 });
         expect(planQuoteSave({ text: '', page: '10' }, current)).toEqual({ kind: 'invalid', message: '문장을 입력해 주세요.' });
