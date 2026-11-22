@@ -22,7 +22,7 @@ export function ReportWriteScreen() {
 
 function ReportForm({ bookId, title, repository, defaultVisibility }: { bookId: string; title: string; repository: RecordRepository; defaultVisibility: ReviewVisibility }) {
     const [fields, setFields] = useState<ReportFields>(() => ({ text: '', visibility: defaultVisibility }));
-    // S-51: 독후감은 독서마다 쌓이므로 늘 새 ID로 추가하고, 저장 재시도에는 같은 ID를 쓴다.
+    // S-53: 독후감은 독서마다 쌓이므로 늘 새 ID로 추가하고, 저장 재시도에는 같은 ID를 쓴다.
     const [id] = useState(() => uuid.v4());
     const [error, setError] = useState<string>();
     const [saved, setSaved] = useState(false);

@@ -38,7 +38,7 @@ export function planOneLineSave(fields: OneLineFields, current?: { oneLine: stri
     return { kind: 'save', text, visibility };
 }
 
-/** FR-07·FR-08 / S-51: 독후감 쓰기 화면은 5,000자 입력칸 하나와 공개 범위만 두고, 저장할 때마다 새로 추가한다. */
+/** FR-07·FR-08 / S-53: 독후감 쓰기 화면은 5,000자 입력칸 하나와 공개 범위만 두고, 저장할 때마다 새로 추가한다. */
 export const reportSchema = z.object({
     text: z.string().max(5000, '독후감은 5,000자 이내로 입력해 주세요.').trim().min(1, '독후감을 입력해 주세요.'),
     visibility: visibilitySchema,

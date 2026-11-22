@@ -67,7 +67,7 @@ test('#75 FR-07 NFR-04 S-50 한줄평을 저장하면 하나가 생기고 수정
 test.each([
     ['한줄평', '한줄평 쓰기', 100, '한줄평은 100자 이내로 입력해 주세요.'],
     ['독후감', '독후감 쓰기', 5000, '독후감은 5,000자 이내로 입력해 주세요.'],
-] as const)('FR-07 S-51 %s 길이 오류는 저장을 막고 수정 후 저장할 수 있어요', async (label, button, limit, message) => {
+] as const)('FR-07 S-51 S-53 %s 길이 오류는 저장을 막고 수정 후 저장할 수 있어요', async (label, button, limit, message) => {
     await renderRouter(routes, { initialUrl: base });
     await fireEvent.press(await screen.findByRole('button', { name: button }));
     await fireEvent.changeText(await screen.findByLabelText(label), '가'.repeat(limit + 1));
@@ -100,7 +100,7 @@ test('#69 FR-07 S-50 예전에 남긴 메모는 문장 목록에 보이지 않�
 
 test.each([
     ['한줄평 쓰기', '한줄평'], ['독후감 쓰기', '독후감'], ['문장 추가', '좋아하는 문장'],
-])('FR-07 D-03 S-51 S-52 %s 중 닫기를 취소하면 내용을 유지하고 확인하면 버려요', async (button, label) => {
+])('FR-07 D-03 S-51 S-52 S-53 %s 중 닫기를 취소하면 내용을 유지하고 확인하면 버려요', async (button, label) => {
     const alert = jest.spyOn(Alert, 'alert');
     await renderRouter(routes, { initialUrl: base });
     await fireEvent.press(await screen.findByRole('button', { name: button }));
@@ -126,7 +126,7 @@ test('#75 D-03 S-51 한줄평 수정을 바꾸지 않고 닫으면 확인 없이
     expect(screen).toHavePathname(base);
 });
 
-test('FR-07 D-03 S-51 Android 뒤로 이동도 작성 중 확인하고 빈 작성은 바로 닫혀요', async () => {
+test('FR-07 D-03 S-53 Android 뒤로 이동도 작성 중 확인하고 빈 작성은 바로 닫혀요', async () => {
     const alert = jest.spyOn(Alert, 'alert');
     await renderRouter(routes, { initialUrl: base });
     await fireEvent.press(await screen.findByRole('button', { name: '독후감 쓰기' }));
@@ -140,7 +140,7 @@ test('FR-07 D-03 S-51 Android 뒤로 이동도 작성 중 확인하고 빈 작�
     expect(screen.getByLabelText('독후감')).toHaveDisplayValue('뒤로 가도 지켜 주세요.');
 });
 
-test.each([['one-line', '한줄평'], ['report', '독후감']])('NFR-04 S-51 %s 저장 실패 시 내용을 보존하고 재시도해 한 번만 저장해요', async (route, label) => {
+test.each([['one-line', '한줄평'], ['report', '독후감']])('NFR-04 S-51 S-53 %s 저장 실패 시 내용을 보존하고 재시도해 한 번만 저장해요', async (route, label) => {
     await renderRouter(routes, { initialUrl: `${base}/${route}` });
     await fireEvent.changeText(await screen.findByLabelText(label), '보존할 감상');
     const save = jest.spyOn(repository.reviews, 'save').mockImplementationOnce(() => { throw new Error('SQLITE_FULL'); });
@@ -269,7 +269,7 @@ test.each([
     expect(repository.reviews.get(id)).toEqual(before);
 });
 
-test('#75 FR-08 S-51 독후감 쓰기 화면은 독후감 칸 하나만 두고 저장할 때마다 한줄평을 건드리지 않고 새로 쌓아요', async () => {
+test('#75 FR-08 S-53 독후감 쓰기 화면은 독후감 칸 하나만 두고 저장할 때마다 한줄평을 건드리지 않고 새로 쌓아요', async () => {
     const oneLineId = '00000000-0000-4000-8000-000000000008';
     const oneLine = repository.reviews.save({ id: oneLineId, bookId, oneLine: '기존 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
     await renderRouter(routes, { initialUrl: `${base}/report` });
