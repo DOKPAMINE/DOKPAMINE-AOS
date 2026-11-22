@@ -6,7 +6,7 @@ import { PrimaryButton, Screen, SecondaryButton, StateView } from '../components
 import { bookOneLine, bookVisibility, newReviewVisibility, planOneLineSave } from '../domain/reviewRules';
 import type { RecordRepository } from '../db/repository';
 import type { ReviewRecord } from '../db/schema';
-import { useReviewVisibility, type ReviewVisibility } from '../my/preferences';
+import { useBookReviewVisibility, type ReviewVisibility } from '../my/preferences';
 import { useReviewRecords } from './useReviewRecords';
 import { EditorField, useEditorExit, VisibilityNotice } from './Editor';
 import { reviewStyles as styles } from './styles';
@@ -14,13 +14,14 @@ import { reviewStyles as styles } from './styles';
 export function OneLineWriteScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const { records, retry } = useReviewRecords(id);
-    const defaultVisibility = useReviewVisibility();
+    // 감상이 없는 책은 책 상세에서 기기에 저장한 값(없으면 S-81 기본값)을 따른다.
+    const defaultVisibility = useBookReviewVisibility(id)?.visibility;
     if (defaultVisibility === undefined) return <Screen title="한줄평"><StateView kind="loading" /></Screen>;
     if (records.kind !== 'ready') return <Screen title="한줄평"><StateView kind={records.kind} onRetry={records.kind === 'error' ? retry : undefined} /></Screen>;
     if (!records.book) return <Screen title="한줄평"><StateView kind="empty" message="책을 찾을 수 없어요. 삭제된 책에는 한줄평을 남길 수 없어요." /></Screen>;
     const reviews = records.reviews.filter(review => !review.conflict);
     const current = bookOneLine(reviews);
-    // FR-08 / S-51: 새 한줄평은 책의 공개 범위(감상이 없으면 S-81 기본값)를 따르고, 수정은 기존 공개 범위를 유지한다.
+    // FR-08 / S-51: 새 한줄평은 책의 공개 범위(감상이 없으면 책별 저장값, 없으면 S-81 기본값)를 따르고, 수정은 기존 공개 범위를 유지한다.
     const visibility = current?.visibility ?? newReviewVisibility(bookVisibility(reviews, defaultVisibility));
     return <OneLineForm key={id} bookId={id} title={records.book.title} repository={records.repository} current={current} visibility={visibility} />;
 }

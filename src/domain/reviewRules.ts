@@ -35,9 +35,12 @@ export function newReviewVisibility(visibility: BookVisibility): Visibility {
     return visibility === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE';
 }
 
-/** FR-08 / S-31: 비공개 감상을 공개로 바꿀 때만 확인하고, 비공개로 바꾸는 것은 바로 적용한다. */
-export function needsPublishConfirm(current: BookVisibility, next: Visibility): boolean {
-    return next === 'PUBLIC' && current !== 'PUBLIC';
+/**
+ * FR-08 / S-31: 비공개 감상을 공개로 바꿀 때만 확인하고, 비공개로 바꾸는 것은 바로 적용한다.
+ * 감상이 없는 책은 공개될 감상이 없으므로 확인하지 않는다.
+ */
+export function needsPublishConfirm(current: BookVisibility, next: Visibility, reviewCount: number): boolean {
+    return reviewCount > 0 && next === 'PUBLIC' && current !== 'PUBLIC';
 }
 
 /** FR-07·FR-08 / S-51: 한줄평 쓰기 화면은 100자 입력칸 하나만 두고, 공개 범위는 화면이 책 단위 값으로 채운다. */

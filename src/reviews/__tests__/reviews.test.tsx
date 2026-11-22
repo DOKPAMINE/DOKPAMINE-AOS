@@ -8,8 +8,16 @@ import ReportWrite from '../../../app/book/[id]/review/report';
 import { initializeDatabase, prepareRecordDatabase } from '../../db/client';
 import { createRecordRepository, type RecordRepository } from '../../db/repository';
 import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
+import { tokenStorage } from '../../api/tokenStorage';
+import { bookVisibilityPreferences, reviewPreferences } from '../../my/preferences';
 
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
+jest.mock('expo-sqlite/kv-store', () => {
+    const store = new Map<string, string>();
+    return { __esModule: true, default: { store,
+        getItemSync: jest.fn((key: string) => store.get(key) ?? null), setItemSync: jest.fn((key: string, value: string) => { store.set(key, value); }) } };
+});
+jest.mock('../../api/tokenStorage', () => ({ tokenStorage: { getSession: jest.fn() } }));
 jest.mock('../../db/client', () => ({ ...jest.requireActual('../../db/client'), initializeDatabase: jest.fn() }));
 const bookId = '00000000-0000-4000-8000-000000000001';
 const base = `/book/${bookId}/review`;
@@ -29,6 +37,7 @@ beforeEach(async () => {
     repository.books.save({ id: bookId, title: '데미안', author: '헤르만 헤세', isbn: null, publisher: null,
         totalPages: 240, currentPage: 84, genre: '소설/시', status: 'READING', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, completedCount: 0, completedAt: null });
     jest.mocked(initializeDatabase).mockResolvedValue({ db, repository });
+    jest.mocked(tokenStorage.getSession).mockResolvedValue(null);
 });
 afterEach(() => { memory.connection.close(); jest.restoreAllMocks(); });
 
@@ -302,4 +311,25 @@ test.each([
     await fireEvent.press(screen.getByRole('button', { name: '독후감 저장' }));
     expect(await screen.findByText('새 독후감')).toBeOnTheScreen();
     expect(repository.reviews.list({ bookId }).find(review => review.body === '새 독후감')).toMatchObject({ visibility: expected, syncPending: true });
+});
+
+test('#89 FR-08 S-51 S-53 감상이 없는 책의 첫 감상은 기기에 저장한 책별 값을 따르고 다음부터는 감상들의 공개 범위를 따라요', async () => {
+    jest.mocked(tokenStorage.getSession).mockResolvedValue({ accessToken: 'token', expiresAt: '2099-01-01T00:00:00Z', userId: 'reader' });
+    reviewPreferences.save('reader', 'PRIVATE');
+    bookVisibilityPreferences.save('reader', bookId, 'PUBLIC');
+    await renderRouter(routes, { initialUrl: `${base}/report` });
+    expect(await screen.findByText(/^이 독후감은 공개로 저장돼요\./)).toBeOnTheScreen();
+    await fireEvent.changeText(screen.getByLabelText('독후감'), '첫 독후감');
+    await fireEvent.press(screen.getByRole('button', { name: '독후감 저장' }));
+    expect(await screen.findByText('첫 독후감')).toBeOnTheScreen();
+    expect(repository.reviews.list({ bookId })).toEqual([expect.objectContaining({ body: '첫 독후감', visibility: 'PUBLIC' })]);
+
+    // 감상이 생긴 뒤에는 책별 저장값이 아니라 감상들의 공개 범위로 판단한다.
+    repository.reviews.setBookVisibility(bookId, 'PRIVATE');
+    await act(async () => router.push(`${base}/one-line`));
+    expect(await screen.findByText(/^이 한줄평은 비공개로 저장돼요\./)).toBeOnTheScreen();
+    await fireEvent.changeText(screen.getByLabelText('한줄평'), '첫 한줄평');
+    await fireEvent.press(screen.getByRole('button', { name: '한줄평 저장' }));
+    expect(await screen.findByText('첫 한줄평')).toBeOnTheScreen();
+    expect(repository.reviews.list({ bookId }).find(review => review.oneLine)).toMatchObject({ visibility: 'PRIVATE', syncPending: true });
 });

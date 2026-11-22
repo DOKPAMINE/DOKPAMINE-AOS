@@ -5,12 +5,19 @@ import { BookEditScreen } from '../BookEditScreen';
 import { initializeDatabase, prepareRecordDatabase } from '../../db/client';
 import type { RecordRepository } from '../../db/repository';
 import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
-import { useReviewVisibility } from '../../my/preferences';
+import Storage from 'expo-sqlite/kv-store';
+import { tokenStorage } from '../../api/tokenStorage';
+import { bookVisibilityPreferences, reviewPreferences } from '../../my/preferences';
 
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
 jest.mock('../../db/client', () => ({ ...jest.requireActual('../../db/client'), initializeDatabase: jest.fn() }));
 jest.mock('../../sync/runtime', () => ({ startRecordSync: jest.fn() }));
-jest.mock('../../my/preferences', () => ({ useReviewVisibility: jest.fn() }));
+jest.mock('expo-sqlite/kv-store', () => {
+    const store = new Map<string, string>();
+    return { __esModule: true, default: { store,
+        getItemSync: jest.fn((key: string) => store.get(key) ?? null), setItemSync: jest.fn((key: string, value: string) => { store.set(key, value); }) } };
+});
+jest.mock('../../api/tokenStorage', () => ({ tokenStorage: { getSession: jest.fn() } }));
 jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), isLoaded: () => true, loadAsync: jest.fn() }));
 
 const id = '00000000-0000-4000-8000-000000000001';
@@ -23,7 +30,8 @@ beforeEach(async () => {
     const prepared = await prepareRecordDatabase(memory.sqlite);
     repository = prepared.repository;
     jest.mocked(initializeDatabase).mockResolvedValue(prepared);
-    jest.mocked(useReviewVisibility).mockReturnValue('PRIVATE');
+    (Storage as unknown as { store: Map<string, string> }).store.clear();
+    jest.mocked(tokenStorage.getSession).mockResolvedValue({ accessToken: 'token', expiresAt: '2099-01-01T00:00:00Z', userId: 'reader' });
     repository.books.save({ id, title: '데미안', author: '헤세', isbn: null, publisher: null, coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null,
         genre: '소설/시', status: 'READING', totalPages: 240, currentPage: 84, completedCount: 0, completedAt: null });
 });
@@ -80,11 +88,43 @@ const saveReviews = (oneLine: 'PRIVATE' | 'PUBLIC', report: 'PRIVATE' | 'PUBLIC'
 const visibilitySwitch = () => screen.getByRole('switch', { name: '감상 공개' });
 const alertButton = (alert: jest.SpyInstance, text: string) => alert.mock.calls.at(-1)?.[2]?.find((item: { text: string }) => item.text === text);
 
-test.each([['PRIVATE', '비공개'], ['PUBLIC', '공개']] as const)('#89 FR-08 S-31 S-81 감상이 없는 책은 기본 공개 범위 %s를 보여 주고 스위치를 잠가요', async (fallback, label) => {
-    jest.mocked(useReviewVisibility).mockReturnValue(fallback);
+test.each([['PRIVATE', '비공개'], ['PUBLIC', '공개']] as const)('#89 FR-08 S-31 S-81 감상이 없고 저장값도 없는 책은 기본 공개 범위 %s로 시작해요', async (fallback, label) => {
+    reviewPreferences.save('reader', fallback);
     await renderRouter(routes, { initialUrl: `/book/${id}` });
-    expect(await screen.findByText(`기본 공개 범위 · ${label}`)).toBeOnTheScreen();
-    expect(visibilitySwitch().props.accessibilityState).toEqual({ checked: fallback === 'PUBLIC', disabled: true });
+    expect(await screen.findByText(`첫 감상은 ${label}로 저장돼요`)).toBeOnTheScreen();
+    expect(visibilitySwitch().props.accessibilityState).toEqual({ checked: fallback === 'PUBLIC' });
+});
+
+test('#89 FR-08 S-31 감상이 없는 책은 확인 없이 스위치를 바꾸고 계정별 책 저장값으로 기기에 남겨요', async () => {
+    const alert = jest.spyOn(Alert, 'alert');
+    const first = await renderRouter(routes, { initialUrl: `/book/${id}` });
+    expect(await screen.findByText('첫 감상은 비공개로 저장돼요')).toBeOnTheScreen();
+    await fireEvent(visibilitySwitch(), 'valueChange', true);
+    expect(alert).not.toHaveBeenCalled();
+    expect(screen.getByText('첫 감상은 공개로 저장돼요')).toBeOnTheScreen();
+    expect(bookVisibilityPreferences.load('reader', id)).toBe('PUBLIC');
+    expect(bookVisibilityPreferences.load('other-reader', id)).toBeNull();
+    expect(reviewPreferences.load('reader')).toBe('PRIVATE');
+    expect(repository.reviews.list()).toEqual([]);
+    await first.unmount();
+    await renderRouter(routes, { initialUrl: `/book/${id}` });
+    expect(await screen.findByText('첫 감상은 공개로 저장돼요')).toBeOnTheScreen();
+    expect(visibilitySwitch().props.accessibilityState.checked).toBe(true);
+});
+
+test('#89 FR-08 S-31 감상이 없는 책의 저장값이 기본 공개 범위보다 우선해요', async () => {
+    reviewPreferences.save('reader', 'PUBLIC');
+    bookVisibilityPreferences.save('reader', id, 'PRIVATE');
+    await renderRouter(routes, { initialUrl: `/book/${id}` });
+    expect(await screen.findByText('첫 감상은 비공개로 저장돼요')).toBeOnTheScreen();
+});
+
+test('#89 FR-08 S-31 감상이 생기면 책 저장값 대신 감상들의 공개 범위로 판단해요', async () => {
+    bookVisibilityPreferences.save('reader', id, 'PUBLIC');
+    saveReviews('PRIVATE', 'PRIVATE');
+    await renderRouter(routes, { initialUrl: `/book/${id}` });
+    expect(await screen.findByText('나만 보고 있어요')).toBeOnTheScreen();
+    expect(visibilitySwitch().props.accessibilityState.checked).toBe(false);
 });
 
 test('#89 FR-08 S-31 비공개 책을 공개로 바꾸고 확인하면 한줄평과 독후감 전체가 공개·동기화 대기가 돼요', async () => {

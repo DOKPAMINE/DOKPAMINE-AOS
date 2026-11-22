@@ -5,7 +5,7 @@ import { KeyboardAvoidingView, Text } from 'react-native';
 import { PrimaryButton, Screen, SecondaryButton, StateView } from '../components';
 import { bookVisibility, newReviewVisibility, reportSchema } from '../domain/reviewRules';
 import type { RecordRepository } from '../db/repository';
-import { useReviewVisibility, type ReviewVisibility } from '../my/preferences';
+import { useBookReviewVisibility, type ReviewVisibility } from '../my/preferences';
 import { useReviewRecords } from './useReviewRecords';
 import { EditorField, useEditorExit, VisibilityNotice } from './Editor';
 import { reviewStyles as styles } from './styles';
@@ -13,11 +13,12 @@ import { reviewStyles as styles } from './styles';
 export function ReportWriteScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const { records, retry } = useReviewRecords(id);
-    const defaultVisibility = useReviewVisibility();
+    // 감상이 없는 책은 책 상세에서 기기에 저장한 값(없으면 S-81 기본값)을 따른다.
+    const defaultVisibility = useBookReviewVisibility(id)?.visibility;
     if (defaultVisibility === undefined) return <Screen title="독후감 쓰기"><StateView kind="loading" /></Screen>;
     if (records.kind !== 'ready') return <Screen title="독후감 쓰기"><StateView kind={records.kind} onRetry={records.kind === 'error' ? retry : undefined} /></Screen>;
     if (!records.book) return <Screen title="독후감 쓰기"><StateView kind="empty" message="책을 찾을 수 없어요. 삭제된 책에는 독후감을 남길 수 없어요." /></Screen>;
-    // FR-08 / S-53: 새 독후감은 책의 공개 범위(감상이 없으면 S-81 기본값)를 따른다.
+    // FR-08 / S-53: 새 독후감은 책의 공개 범위(감상이 없으면 책별 저장값, 없으면 S-81 기본값)를 따른다.
     const visibility = newReviewVisibility(bookVisibility(records.reviews.filter(review => !review.conflict), defaultVisibility));
     return <ReportForm key={id} bookId={id} title={records.book.title} repository={records.repository} visibility={visibility} />;
 }

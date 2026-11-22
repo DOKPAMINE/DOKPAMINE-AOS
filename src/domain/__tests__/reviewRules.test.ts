@@ -72,8 +72,11 @@ test('#89 FR-08 S-51 S-53 새 감상은 공개인 책에서만 공개로 저장�
     expect(newReviewVisibility('MIXED')).toBe('PRIVATE');
 });
 test('#89 FR-08 S-31 공개로 바꿀 때만 확인하고 비공개로 바꿀 때는 확인하지 않아요', () => {
-    expect(needsPublishConfirm('PRIVATE', 'PUBLIC')).toBe(true);
-    expect(needsPublishConfirm('MIXED', 'PUBLIC')).toBe(true);
-    expect(needsPublishConfirm('PUBLIC', 'PRIVATE')).toBe(false);
-    expect(needsPublishConfirm('MIXED', 'PRIVATE')).toBe(false);
+    expect(needsPublishConfirm('PRIVATE', 'PUBLIC', 1)).toBe(true);
+    expect(needsPublishConfirm('MIXED', 'PUBLIC', 2)).toBe(true);
+    expect(needsPublishConfirm('PUBLIC', 'PRIVATE', 1)).toBe(false);
+    expect(needsPublishConfirm('MIXED', 'PRIVATE', 2)).toBe(false);
+});
+test('#89 FR-08 S-31 감상이 없는 책은 공개로 바꿔도 공개될 감상이 없어 확인하지 않아요', () => {
+    expect(needsPublishConfirm('PRIVATE', 'PUBLIC', 0)).toBe(false);
 });
