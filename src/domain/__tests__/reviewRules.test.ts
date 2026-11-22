@@ -1,4 +1,4 @@
-import { bookOneLine, bookReports, bookVisibility, emptyQuoteFields, mixedVisibilityBooks, needsPublishConfirm, oneLineSchema, planOneLineSave, quoteSchema, reportSchema } from '../reviewRules';
+import { bookOneLine, bookReports, bookVisibility, emptyQuoteFields, hasOneLineConflict, mixedVisibilityBooks, needsPublishConfirm, oneLineSchema, planOneLineSave, planQuoteSave, planReportSave, planReviewPartDelete, quoteFieldsOf, quoteSchema, reportSchema } from '../reviewRules';
 
 test.each([[1000, true], [1001, false]])('FR-07 S-52 문장 %i자 허용 여부는 %s예요', (count, success) => {
     expect(quoteSchema.safeParse({ ...emptyQuoteFields, text: '가'.repeat(count) }).success).toBe(success);
@@ -84,4 +84,42 @@ test('#89 FR-08 S-31 공개로 바꿀 때만 확인하고 비공개로 바꿀 �
 });
 test('#89 FR-08 S-31 감상이 없는 책은 공개로 바꿔도 공개될 감상이 없어 확인하지 않아요', () => {
     expect(needsPublishConfirm('PRIVATE', 'PUBLIC', 0)).toBe(false);
+});
+
+describe('#91 감상·문장 수정과 삭제 규칙', () => {
+    test('S-53 독후감 수정은 비우거나 바뀐 것 없이 저장하지 못하고 고친 내용은 앞뒤 공백을 빼고 저장해요', () => {
+        const current = { body: '처음 독후감' };
+        expect(planReportSave('  ', current)).toEqual({ kind: 'invalid', message: '독후감은 비울 수 없어요. 지우려면 감상 목록에서 삭제해 주세요.' });
+        expect(planReportSave(' 처음 독후감 ', current)).toEqual({ kind: 'invalid', message: '바뀐 내용이 없어요. 독후감을 고친 뒤 저장해 주세요.' });
+        expect(planReportSave(' 고친 독후감 ', current)).toEqual({ kind: 'save', text: '고친 독후감' });
+        expect(planReportSave('가'.repeat(5001), current)).toEqual({ kind: 'invalid', message: '독후감은 5,000자 이내로 입력해 주세요.' });
+    });
+    test('S-53 새 독후감은 입력만 확인해요', () => {
+        expect(planReportSave('')).toEqual({ kind: 'invalid', message: '독후감을 입력해 주세요.' });
+        expect(planReportSave('새 독후감')).toEqual({ kind: 'save', text: '새 독후감' });
+    });
+    test('S-52 문장 수정은 기존 문장·쪽수를 채우고 쪽수가 없으면 빈 칸이에요', () => {
+        expect(quoteFieldsOf({ text: '문장', page: 0 })).toEqual({ text: '문장', page: '0' });
+        expect(quoteFieldsOf({ text: '문장', page: null })).toEqual({ text: '문장', page: '' });
+    });
+    test('S-52 문장 수정은 문장이나 쪽수가 바뀌어야 저장해요', () => {
+        const current = { text: '새는 알에서 나온다.', page: 10 };
+        expect(planQuoteSave({ text: ' 새는 알에서 나온다. ', page: '10' }, current)).toEqual({ kind: 'invalid', message: '바뀐 내용이 없어요. 문장을 고친 뒤 저장해 주세요.' });
+        expect(planQuoteSave({ text: '새는 알에서 나온다.', page: '' }, current)).toEqual({ kind: 'save', text: '새는 알에서 나온다.', page: null });
+        expect(planQuoteSave({ text: '고친 문장', page: '10' }, current)).toEqual({ kind: 'save', text: '고친 문장', page: 10 });
+        expect(planQuoteSave({ text: '', page: '10' }, current)).toEqual({ kind: 'invalid', message: '문장을 입력해 주세요.' });
+    });
+    test('S-50 한 감상에 한줄평과 독후감이 함께 있으면 지우는 쪽만 비우고, 남는 내용이 없으면 감상을 삭제해요', () => {
+        const both = { oneLine: '한줄평', body: '독후감' };
+        expect(planReviewPartDelete(both, 'oneLine')).toEqual({ kind: 'clear', oneLine: null, body: '독후감' });
+        expect(planReviewPartDelete(both, 'body')).toEqual({ kind: 'clear', oneLine: '한줄평', body: null });
+        expect(planReviewPartDelete({ oneLine: '한줄평', body: null }, 'oneLine')).toEqual({ kind: 'delete' });
+        expect(planReviewPartDelete({ oneLine: '  ', body: '독후감' }, 'body')).toEqual({ kind: 'delete' });
+    });
+    test('S-50 한줄평이 든 충돌 감상이 있을 때만 한줄평 수정·삭제를 막아요', () => {
+        expect(hasOneLineConflict([])).toBe(false);
+        expect(hasOneLineConflict([{ oneLine: null, conflict: { latest: { oneLine: null } } }])).toBe(false);
+        expect(hasOneLineConflict([{ oneLine: '기기 한줄평', conflict: {} }])).toBe(true);
+        expect(hasOneLineConflict([{ oneLine: null, conflict: { latest: { oneLine: '서버 한줄평' } } }])).toBe(true);
+    });
 });

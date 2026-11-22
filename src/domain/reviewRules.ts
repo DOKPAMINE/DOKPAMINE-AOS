@@ -92,3 +92,55 @@ export const quoteSchema = z.object({
 });
 export type QuoteFields = z.input<typeof quoteSchema>;
 export const emptyQuoteFields: QuoteFields = { text: '', page: '' };
+
+export type ReportSavePlan = { kind: 'invalid'; message: string } | { kind: 'save'; text: string };
+
+/** #91 S-53: 새 독후감은 입력만 확인하고, 독후감 수정은 비우거나 바뀐 것 없이 저장하지 못하게 한다. */
+export function planReportSave(text: string, current?: { body: string | null }): ReportSavePlan {
+    if (current && !text.trim()) return { kind: 'invalid', message: '독후감은 비울 수 없어요. 지우려면 감상 목록에서 삭제해 주세요.' };
+    const result = reportSchema.shape.text.safeParse(text);
+    if (!result.success) return { kind: 'invalid', message: result.error.issues[0].message };
+    if (current && result.data === current.body?.trim()) return { kind: 'invalid', message: '바뀐 내용이 없어요. 독후감을 고친 뒤 저장해 주세요.' };
+    return { kind: 'save', text: result.data };
+}
+
+/** #91 S-52: 문장 수정 화면은 기존 문장과 쪽수를 채워 연다. 쪽수가 없으면 빈 칸이다. */
+export function quoteFieldsOf(quote: { text: string; page: number | null }): QuoteFields {
+    return { text: quote.text, page: quote.page === null ? '' : String(quote.page) };
+}
+
+export type QuoteSavePlan = { kind: 'invalid'; message: string } | { kind: 'save'; text: string; page: number | null };
+
+/** #91 S-52: 문장 수정은 바뀐 것 없이 저장하지 못하게 한다. 검증은 새 문장과 같다. */
+export function planQuoteSave(fields: QuoteFields, current?: { text: string; page: number | null }): QuoteSavePlan {
+    const result = quoteSchema.safeParse(fields);
+    if (!result.success) return { kind: 'invalid', message: result.error.issues[0].message };
+    const { text, page } = result.data;
+    if (current && text === current.text.trim() && page === current.page) {
+        return { kind: 'invalid', message: '바뀐 내용이 없어요. 문장을 고친 뒤 저장해 주세요.' };
+    }
+    return { kind: 'save', text, page };
+}
+
+export type ReviewPart = 'oneLine' | 'body';
+export type ReviewPartDeletePlan = { kind: 'delete' } | { kind: 'clear'; oneLine: string | null; body: string | null };
+
+/**
+ * #91 S-50: 한줄평과 독후감은 따로 저장하지만(#76), 예전 데이터나 서버 기록에는 한 감상에 둘이 함께 들어 있을 수 있다.
+ * 지우는 쪽만 비우고 남은 쪽은 그대로 두며, 남는 내용이 없을 때만 감상 전체를 삭제(tombstone)한다.
+ */
+export function planReviewPartDelete(review: { oneLine: string | null; body: string | null }, part: ReviewPart): ReviewPartDeletePlan {
+    const rest = part === 'oneLine' ? review.body : review.oneLine;
+    if (!rest?.trim()) return { kind: 'delete' };
+    return part === 'oneLine' ? { kind: 'clear', oneLine: null, body: review.body } : { kind: 'clear', oneLine: review.oneLine, body: null };
+}
+
+/**
+ * #91 S-50: 해결하지 않은 충돌 감상에 한줄평이 들어 있으면 책의 한줄평을 고치거나 지우지 못하게 한다.
+ * 충돌한 감상은 목록에서 빠지므로, 막지 않으면 그 아래 예전 한줄평을 고치거나 새 한줄평이 생겨 한줄평이 둘이 된다.
+ */
+export function hasOneLineConflict(conflicts: readonly { oneLine: string | null; conflict: { latest?: { oneLine: string | null } | null } | null }[]): boolean {
+    return conflicts.some(review => Boolean(review.oneLine?.trim() || review.conflict?.latest?.oneLine?.trim()));
+}
+
+export const conflictLockMessage = '동기화 충돌을 먼저 해결하면 수정·삭제할 수 있어요.';

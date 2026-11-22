@@ -4,6 +4,7 @@ import { parseEndPage } from '../domain/pageRules';
 import { validateBook } from '../domain/bookRules';
 import { validateNewTimer, validateSessionPageRange } from '../domain/syncValidation';
 import { nextRecordVersion } from '../domain/recordVersion';
+import { hasOneLineConflict, planReviewPartDelete } from '../domain/reviewRules';
 import * as schema from './schema';
 import type { SessionDto } from '../api/types';
 import type { BookRecord, QuoteRecord, ReviewConflict, ReviewRecord, SessionRecord, SyncRejection } from './schema';
@@ -148,6 +149,22 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
         markSynced: (id, version) => { db.update(schema.reviews).set({ syncPending: false }).where(and(eq(schema.reviews.id, id), eq(schema.reviews.localVersion, version))).run(); },
         put: row => { db.insert(schema.reviews).values(row).onConflictDoUpdate({ target: schema.reviews.id, set: row }).run(); },
     }, true, (input, existing) => { parent(input, existing); });
+    function writeReport(id: string, body: string | null) {
+        const current = reviewEntity.get(id);
+        if (!current || current.conflict || !current.body?.trim()) throw new Error('고칠 독후감을 찾을 수 없어요.');
+        if (body === null) {
+            const plan = planReviewPartDelete(current, 'body');
+            if (plan.kind === 'delete') { reviewEntity.softDelete(id); return; }
+        }
+        if (body !== null && !body.trim()) throw new Error('독후감은 비울 수 없어요.');
+        if (!current.oneLine?.trim()) {
+            reviewEntity.save({ id, bookId: current.bookId, oneLine: current.oneLine, body, visibility: current.visibility, publishedAt: current.publishedAt });
+            return;
+        }
+        const timestamp = now();
+        db.update(schema.reviews).set({ body, syncPending: true, localVersion: nextRecordVersion(timestamp, current.localVersion) })
+            .where(eq(schema.reviews.id, id)).run();
+    }
     const reviews = {
         ...reviewEntity,
         acknowledge(row: ReviewRecord, serverVersion: number | null) {
@@ -189,6 +206,38 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
         visibilities(): { bookId: string; visibility: ReviewRecord['visibility'] }[] {
             return db.select({ bookId: schema.reviews.bookId, visibility: schema.reviews.visibility }).from(schema.reviews)
                 .where(and(eq(schema.reviews.deleted, false), isNull(schema.reviews.conflict))).all();
+        },
+        /**
+         * #91 S-53: 독후감 본문만 고친다. 같은 ID·공개 범위를 유지하고, 한 감상에 함께 든 한줄평도 그대로 둔다.
+         * 한줄평이 함께 든 예전 감상은 updatedAt을 두어, 독후감을 고친 것으로 대표 한줄평(가장 최근에 고친 한줄평)이 바뀌지 않게 한다.
+         */
+        updateReport(id: string, body: string) {
+            transaction(() => writeReport(id, body));
+            notify();
+        },
+        /** #91 S-50: 독후감을 지운다. 한줄평이 함께 든 감상은 독후감만 비우고, 아니면 감상 전체를 tombstone으로 지운다. */
+        deleteReport(id: string) {
+            transaction(() => writeReport(id, null));
+            notify();
+        },
+        /**
+         * #91 S-50: 책의 한줄평을 지운다. 대표 한줄평 하나만 지우면 예전 한줄평이 대신 나타나므로 그 책의 한줄평을 모두 지운다.
+         * 독후감이 함께 든 감상은 한줄평만 비운다. 한줄평이 든 충돌 감상이 있으면 해결 전까지 거절한다.
+         */
+        deleteOneLine(bookId: string): number {
+            const changed = transaction(() => {
+                if (hasOneLineConflict(reviews.conflicts(bookId))) throw new Error('동기화 충돌을 먼저 해결해 주세요.');
+                const targets = reviewEntity.list({ bookId }).filter(row => !row.conflict && row.oneLine?.trim());
+                for (const row of targets) {
+                    const plan = planReviewPartDelete(row, 'oneLine');
+                    if (plan.kind === 'delete') reviewEntity.softDelete(row.id);
+                    else reviewEntity.save({ id: row.id, bookId: row.bookId, oneLine: plan.oneLine, body: plan.body,
+                        visibility: row.visibility, publishedAt: row.publishedAt });
+                }
+                return targets.length;
+            });
+            notify();
+            return changed;
         },
         conflicts(bookId?: string) {
             return db.select().from(schema.reviews).where(and(
