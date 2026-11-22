@@ -6,6 +6,7 @@ import { parseEndPage, readingDisplayPage } from '../domain/pageRules';
 import { readingCheckDue, timerTimeLabel } from '../domain/timerFlow';
 import { elapsedMs } from '../domain/timerState';
 import { colors, radii, sizes, spacing, typography } from '../theme';
+import { ReadingCheckSignal } from './readingCheckDialog';
 import { useReadingTimer } from './useReadingTimer';
 
 export default function ReadingScreen() {
@@ -60,6 +61,7 @@ export default function ReadingScreen() {
         {!saved && confirmation === 'complete' && <><Text style={styles.body}>{book.status === 'DONE' ? '이미 완독한 책이에요. 완독 상태를 유지하고 기록을 저장해요.' : '이 책을 완독하셨나요? 마지막 쪽까지 읽지 않으셨어도 완독으로 저장할 수 있어요.'}</Text>{book.status === 'DONE' ? <PrimaryButton label="기록 저장" onPress={() => reading.save(true)} /> : <><PrimaryButton label="완독으로 저장" onPress={() => reading.save(true)} /><SecondaryButton label="기록 저장" onPress={() => reading.save(false)} /></>}<SecondaryButton label="쪽 다시 입력" onPress={() => setConfirmation(null)} /></>}
 
         {/* S-46 / NFR-08: 알림 권한과 독립된 앱 안 대화상자 */}
+        <ReadingCheckSignal open={checkDue} />
         <Modal visible={checkDue} animationType="none" onRequestClose={() => reading.confirmCheck(false)}>
             <Screen title="계속 읽고 계신가요?">
                 <Text style={styles.body}>90분 동안 읽으셨어요. 확인하시는 동안 타이머를 잠시 멈췄어요.</Text>

@@ -1,4 +1,4 @@
-import { bookOneLine, bookReports, bookVisibility, emptyQuoteFields, needsPublishConfirm, newReviewVisibility, oneLineSchema, planOneLineSave, quoteSchema, reportSchema } from '../reviewRules';
+import { bookOneLine, bookReports, bookVisibility, emptyQuoteFields, mixedVisibilityBooks, needsPublishConfirm, oneLineSchema, planOneLineSave, quoteSchema, reportSchema } from '../reviewRules';
 
 test.each([[1000, true], [1001, false]])('FR-07 S-52 문장 %i자 허용 여부는 %s예요', (count, success) => {
     expect(quoteSchema.safeParse({ ...emptyQuoteFields, text: '가'.repeat(count) }).success).toBe(success);
@@ -61,21 +61,26 @@ const visibilities = (...values: ('PRIVATE' | 'PUBLIC')[]) => values.map(visibil
 test.each(['PRIVATE', 'PUBLIC'] as const)('#89 FR-08 S-31 S-81 감상이 없는 책은 기본 공개 범위 %s를 따라요', fallback => {
     expect(bookVisibility([], fallback)).toBe(fallback);
 });
-test('#89 FR-08 S-31 감상이 모두 같으면 그 값이고 섞여 있으면 MIXED예요', () => {
+test('#89 FR-08 S-31 감상이 있으면 모두 공개일 때만 공개이고 저장값보다 감상이 우선해요', () => {
     expect(bookVisibility(visibilities('PUBLIC', 'PUBLIC'), 'PRIVATE')).toBe('PUBLIC');
     expect(bookVisibility(visibilities('PRIVATE'), 'PUBLIC')).toBe('PRIVATE');
-    expect(bookVisibility(visibilities('PRIVATE', 'PUBLIC'), 'PUBLIC')).toBe('MIXED');
+    expect(bookVisibility(visibilities('PRIVATE', 'PUBLIC'), 'PUBLIC')).toBe('PRIVATE');
 });
-test('#89 FR-08 S-51 S-53 새 감상은 공개인 책에서만 공개로 저장하고 섞인 책은 비공개예요', () => {
-    expect(newReviewVisibility('PUBLIC')).toBe('PUBLIC');
-    expect(newReviewVisibility('PRIVATE')).toBe('PRIVATE');
-    expect(newReviewVisibility('MIXED')).toBe('PRIVATE');
+test('#89 FR-08 S-31 감상 공개 범위가 섞인 책만 제목 순으로 찾아요', () => {
+    const books = [{ id: 'c', title: '하얀 책' }, { id: 'a', title: '데미안' }, { id: 'b', title: '같은 책' }, { id: 'd', title: '감상 없는 책' }];
+    const reviews = [
+        { bookId: 'c', visibility: 'PUBLIC' }, { bookId: 'c', visibility: 'PRIVATE' },
+        { bookId: 'a', visibility: 'PRIVATE' }, { bookId: 'a', visibility: 'PUBLIC' }, { bookId: 'a', visibility: 'PUBLIC' },
+        { bookId: 'b', visibility: 'PUBLIC' }, { bookId: 'b', visibility: 'PUBLIC' },
+        { bookId: 'deleted-book', visibility: 'PUBLIC' }, { bookId: 'deleted-book', visibility: 'PRIVATE' },
+    ] as const;
+    expect(mixedVisibilityBooks(books, reviews).map(book => book.title)).toEqual(['데미안', '하얀 책']);
+    expect(mixedVisibilityBooks(books, [])).toEqual([]);
 });
 test('#89 FR-08 S-31 공개로 바꿀 때만 확인하고 비공개로 바꿀 때는 확인하지 않아요', () => {
     expect(needsPublishConfirm('PRIVATE', 'PUBLIC', 1)).toBe(true);
-    expect(needsPublishConfirm('MIXED', 'PUBLIC', 2)).toBe(true);
     expect(needsPublishConfirm('PUBLIC', 'PRIVATE', 1)).toBe(false);
-    expect(needsPublishConfirm('MIXED', 'PRIVATE', 2)).toBe(false);
+    expect(needsPublishConfirm('PUBLIC', 'PUBLIC', 2)).toBe(false);
 });
 test('#89 FR-08 S-31 감상이 없는 책은 공개로 바꿔도 공개될 감상이 없어 확인하지 않아요', () => {
     expect(needsPublishConfirm('PRIVATE', 'PUBLIC', 0)).toBe(false);

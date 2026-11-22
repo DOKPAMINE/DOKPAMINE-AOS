@@ -17,29 +17,36 @@ export function bookReports<T extends ReviewEntry>(reviews: readonly T[]): T[] {
 const visibilitySchema = z.enum(['PRIVATE', 'PUBLIC']).default('PRIVATE');
 type Visibility = z.output<typeof visibilitySchema>;
 
-/** 책의 감상 공개 범위. 예전에 감상마다 따로 고른 기록이 섞여 있으면 MIXED다. */
-export type BookVisibility = Visibility | 'MIXED';
-
 /**
- * FR-08 / S-31: 공개 범위는 책 단위로 정한다. 감상이 모두 공개면 공개, 모두 비공개면 비공개이고,
- * 감상이 없으면 S-81 기본 공개 범위를 따른다.
+ * FR-08 / S-31: 공개 범위는 책 단위로 정한다. 감상이 있으면 모두 공개일 때만 공개이고,
+ * 감상이 없으면 fallback(기기에 저장한 책별 값, 없으면 S-81 기본값)을 따른다.
+ * 공개 범위가 섞인 책은 앱 전체 알림(mixedVisibilityBooks)으로 사용자가 하나로 맞추므로,
+ * 그 전의 짧은 순간에는 공개되지 않은 감상이 있다는 사실대로 비공개로 본다.
  */
-export function bookVisibility(reviews: readonly { visibility: Visibility }[], fallback: Visibility): BookVisibility {
+export function bookVisibility(reviews: readonly { visibility: Visibility }[], fallback: Visibility): Visibility {
     if (reviews.length === 0) return fallback;
-    const first = reviews[0].visibility;
-    return reviews.every(review => review.visibility === first) ? first : 'MIXED';
+    return reviews.every(review => review.visibility === 'PUBLIC') ? 'PUBLIC' : 'PRIVATE';
 }
 
-/** FR-08 / S-51·S-53: 새 감상은 책의 공개 범위를 따르고, 섞여 있으면 의도치 않은 공개를 막으려고 비공개로 둔다. */
-export function newReviewVisibility(visibility: BookVisibility): Visibility {
-    return visibility === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE';
+/**
+ * FR-08 / S-31: 감상(충돌·삭제 제외)의 공개 범위가 섞인 책을 제목 순으로 찾는다.
+ * 책 단위 공개 범위가 도입되기 전의 예전 데이터와, 감상마다 공개 범위를 고르는 S-50 충돌 해결로
+ * 다시 섞인 경우 모두 이 규칙으로 찾아 같은 알림에서 한 권씩 고르게 한다.
+ */
+export function mixedVisibilityBooks<B extends { id: string; title: string }>(
+    books: readonly B[], reviews: readonly { bookId: string; visibility: Visibility }[],
+): B[] {
+    const found = new Map<string, Set<Visibility>>();
+    for (const review of reviews) found.set(review.bookId, (found.get(review.bookId) ?? new Set()).add(review.visibility));
+    return books.filter(book => (found.get(book.id)?.size ?? 0) > 1)
+        .sort((a, b) => a.title.localeCompare(b.title, 'ko') || a.id.localeCompare(b.id));
 }
 
 /**
  * FR-08 / S-31: 비공개 감상을 공개로 바꿀 때만 확인하고, 비공개로 바꾸는 것은 바로 적용한다.
  * 감상이 없는 책은 공개될 감상이 없으므로 확인하지 않는다.
  */
-export function needsPublishConfirm(current: BookVisibility, next: Visibility, reviewCount: number): boolean {
+export function needsPublishConfirm(current: Visibility, next: Visibility, reviewCount: number): boolean {
     return reviewCount > 0 && next === 'PUBLIC' && current !== 'PUBLIC';
 }
 

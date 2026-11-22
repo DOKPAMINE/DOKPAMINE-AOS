@@ -34,7 +34,7 @@ jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn(), request
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn(), addEventListener: jest.fn(() => jest.fn()) } }));
 jest.mock('../../api/endpoints', () => ({ me: jest.fn(), patchMe: jest.fn() }));
 jest.mock('../../db/client', () => ({ ...jest.requireActual('../../db/client'), initializeDatabase: jest.fn(), prepareRecordAccount: jest.fn(async () => {}) }));
-jest.mock('../../sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn(), subscribeSyncState: jest.fn(() => jest.fn()) }));
+jest.mock('../../sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn(), getSyncState: jest.fn(() => ({ status: 'idle', failedCount: 0 })), subscribeSyncState: jest.fn(() => jest.fn()) }));
 
 const bookId = '00000000-0000-4000-8000-000000000001';
 const sessionId = '00000000-0000-4000-8000-000000000002';
@@ -133,7 +133,7 @@ test('NFR-04 S-80 전송 완료 알림으로 대기 건수를 다시 읽고 새 
     expect(await screen.findByText('전송 대기 2건')).toBeOnTheScreen();
     await act(async () => {
         for (const entity of [repository.books, repository.sessions]) for (const row of entity.list()) entity.markSynced(row.id, row.localVersion);
-        jest.mocked(subscribeSyncState).mock.calls.at(-1)?.[0]();
+        jest.mocked(subscribeSyncState).mock.calls.forEach(([listener]) => listener());
     });
     expect(screen.getByText('전송 대기 0건')).toBeOnTheScreen();
     await act(async () => { repository.quotes.save({ id: quoteId, bookId, text: '추가 문장', page: null, memo: null }); });

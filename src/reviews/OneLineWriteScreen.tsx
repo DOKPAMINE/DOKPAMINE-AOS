@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { KeyboardAvoidingView, Text } from 'react-native';
 import { PrimaryButton, Screen, SecondaryButton, StateView } from '../components';
-import { bookOneLine, bookVisibility, newReviewVisibility, planOneLineSave } from '../domain/reviewRules';
+import { bookOneLine, bookVisibility, planOneLineSave } from '../domain/reviewRules';
 import type { RecordRepository } from '../db/repository';
 import type { ReviewRecord } from '../db/schema';
 import { useBookReviewVisibility, type ReviewVisibility } from '../my/preferences';
@@ -22,7 +22,7 @@ export function OneLineWriteScreen() {
     const reviews = records.reviews.filter(review => !review.conflict);
     const current = bookOneLine(reviews);
     // FR-08 / S-51: 새 한줄평은 책의 공개 범위(감상이 없으면 책별 저장값, 없으면 S-81 기본값)를 따르고, 수정은 기존 공개 범위를 유지한다.
-    const visibility = current?.visibility ?? newReviewVisibility(bookVisibility(reviews, defaultVisibility));
+    const visibility = current?.visibility ?? bookVisibility(reviews, defaultVisibility);
     return <OneLineForm key={id} bookId={id} title={records.book.title} repository={records.repository} current={current} visibility={visibility} />;
 }
 

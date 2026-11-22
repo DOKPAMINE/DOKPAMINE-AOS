@@ -301,7 +301,6 @@ test('#75 FR-08 S-53 독후감 쓰기 화면은 독후감 칸 하나만 두고 �
 test.each([
     ['PUBLIC', ['PUBLIC'], 'PUBLIC'],
     ['PRIVATE', ['PRIVATE'], 'PRIVATE'],
-    ['섞인', ['PUBLIC', 'PRIVATE'], 'PRIVATE'],
 ] as const)('#89 FR-08 S-53 %s 책에 새로 쓴 독후감은 책의 공개 범위를 따라 저장해요', async (_name, existing, expected) => {
     existing.forEach((visibility, index) => repository.reviews.save({ id: `00000000-0000-4000-8000-00000000002${index}`, bookId,
         oneLine: index === 0 ? '기존 한줄평' : null, body: index === 0 ? null : '기존 독후감', visibility, publishedAt: null }));

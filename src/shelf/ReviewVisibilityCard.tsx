@@ -1,21 +1,19 @@
 import { useState } from 'react';
 import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
 import { Card } from '../components';
-import { bookVisibility, needsPublishConfirm, newReviewVisibility, type BookVisibility } from '../domain/reviewRules';
+import { bookVisibility, needsPublishConfirm } from '../domain/reviewRules';
 import type { RecordRepository } from '../db/repository';
 import { useBookReviewVisibility, type ReviewVisibility } from '../my/preferences';
 import { colors, sizes, spacing } from '../theme';
 import { shelfStyles as styles } from './styles';
 
-const stateLabels: Record<BookVisibility, string> = {
+const stateLabels: Record<ReviewVisibility, string> = {
     PUBLIC: '공개 중이에요',
     PRIVATE: '나만 보고 있어요',
-    MIXED: '일부 감상만 공개돼 있어요',
 };
-const stateHints: Record<BookVisibility, string> = {
+const stateHints: Record<ReviewVisibility, string> = {
     PUBLIC: '동기화되면 라운지에서 이 책의 한줄평과 독후감을 다른 독자도 볼 수 있어요. 새 감상도 공개로 저장돼요.',
     PRIVATE: '한줄평과 독후감은 나만 볼 수 있어요. 새 감상도 비공개로 저장돼요.',
-    MIXED: '예전에 감상마다 따로 고른 공개 범위가 남아 있어요. 새 감상은 비공개로 저장돼요.',
 };
 const visibilityName = (visibility: ReviewVisibility) => visibility === 'PUBLIC' ? '공개' : '비공개';
 
@@ -23,6 +21,7 @@ const visibilityName = (visibility: ReviewVisibility) => visibility === 'PUBLIC'
  * FR-08 / S-31: 감상 공개 범위는 책 단위로 정한다. 스위치를 바꾸면 이 책의 한줄평·독후감 전체를 같은 값으로
  * 기기에 먼저 저장하고 동기화를 예약한다. 비공개 → 공개만 확인을 거친다.
  * 감상이 없는 책은 고른 값을 기기에만 저장해 첫 감상에 적용한다(서버 동기화 없음, 재설치하면 S-81 기본값).
+ * 공개 범위가 섞인 책은 이 화면이 아니라 앱 전체 알림(MixedVisibilityPrompt)에서 하나로 맞춘다.
  */
 export function ReviewVisibilityCard({ bookId, title, repository }: { bookId: string; title: string; repository: RecordRepository }) {
     const stored = useBookReviewVisibility(bookId);
@@ -45,14 +44,6 @@ export function ReviewVisibilityCard({ bookId, title, repository }: { bookId: st
         setResult(count > 0 ? { kind: 'done', message: `감상 ${count}개를 ${visibilityName(next)}로 바꿨어요 · 동기화 대기` } : null);
     };
     const change = (on: boolean) => {
-        if (current === 'MIXED') {
-            Alert.alert('감상 공개 범위를 하나로 맞출까요?', `「${title}」의 한줄평과 독후감 전체에 같은 공개 범위를 적용해요. 공개하면 동기화 후 라운지에서 다른 독자가 볼 수 있어요.`, [
-                { text: '취소', style: 'cancel' },
-                { text: '모두 비공개', onPress: () => apply('PRIVATE') },
-                { text: '모두 공개', onPress: () => apply('PUBLIC') },
-            ]);
-            return;
-        }
         const next: ReviewVisibility = on ? 'PUBLIC' : 'PRIVATE';
         if (!needsPublishConfirm(current, next, reviews.length)) { apply(next); return; }
         Alert.alert('감상을 공개할까요?', `「${title}」의 한줄평과 독후감이 모두 공개돼요. 동기화되면 라운지에서 다른 독자가 볼 수 있어요.`, [
@@ -65,7 +56,7 @@ export function ReviewVisibilityCard({ bookId, title, repository }: { bookId: st
         <View style={local.header}>
             <View style={local.text}>
                 <Text accessibilityRole="header" style={styles.title}>감상 공개</Text>
-                <Text style={styles.body}>{empty ? `첫 감상은 ${visibilityName(newReviewVisibility(current))}로 저장돼요` : stateLabels[current]}</Text>
+                <Text style={styles.body}>{empty ? `첫 감상은 ${visibilityName(current)}로 저장돼요` : stateLabels[current]}</Text>
             </View>
             <Switch accessibilityRole="switch" accessibilityLabel="감상 공개" style={local.switch}
                 accessibilityState={{ checked: current === 'PUBLIC' }} value={current === 'PUBLIC'}

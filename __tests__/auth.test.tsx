@@ -26,7 +26,7 @@ jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(), hideAs
 jest.mock('expo-secure-store', () => ({ setItemAsync: jest.fn(), getItemAsync: jest.fn(), deleteItemAsync: jest.fn() }));
 jest.mock('../src/api/endpoints', () => ({ login: jest.fn(), signup: jest.fn() }));
 
-jest.mock('../src/sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn() }));
+jest.mock('../src/sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn(), getSyncState: jest.fn(() => ({ status: 'idle', failedCount: 0 })), subscribeSyncState: jest.fn(() => jest.fn()) }));
 jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn(async () => ({})), prepareRecordAccount: jest.fn(async () => {}) }));
 
 const stored = new Map<string, string>();
@@ -409,15 +409,21 @@ test('FR-10 NFR-05 · S-02 로그인 저장소 준비 중 401이 오면 새 세�
 test('FR-10 NFR-05 · S-80 로그아웃 뒤 끝난 저장소 초기화는 동기화를 다시 켜지 않아요', async () => {
     session();
     let finish!: (value: Awaited<ReturnType<typeof initializeDatabase>>) => void;
-    jest.mocked(initializeDatabase).mockResolvedValueOnce({} as Awaited<ReturnType<typeof initializeDatabase>>)
-        .mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
-    await renderRouter(routes, { initialUrl: '/' });
-    await screen.findByText('인증된 홈');
-    await waitFor(() => expect(initializeDatabase).toHaveBeenCalledTimes(2));
-    await fireEvent.press(screen.getByRole('button', { name: '로그아웃' }));
-    await screen.findByText('독파민 로그인');
-    await act(async () => { finish({} as Awaited<ReturnType<typeof initializeDatabase>>); });
-    expect(syncAfterLogin).not.toHaveBeenCalled();
+    // 계정 인자 없는 호출(루트·섞인 공개 범위 알림)은 바로 끝내고, 동기화가 여는 계정 저장소만 늦게 끝낸다.
+    jest.mocked(initializeDatabase).mockImplementation(userId => userId === undefined
+        ? Promise.resolve({} as Awaited<ReturnType<typeof initializeDatabase>>)
+        : new Promise(resolve => { finish = resolve; }));
+    try {
+        await renderRouter(routes, { initialUrl: '/' });
+        await screen.findByText('인증된 홈');
+        await waitFor(() => expect(initializeDatabase).toHaveBeenCalledWith(expect.any(String)));
+        await fireEvent.press(screen.getByRole('button', { name: '로그아웃' }));
+        await screen.findByText('독파민 로그인');
+        await act(async () => { finish({} as Awaited<ReturnType<typeof initializeDatabase>>); });
+        expect(syncAfterLogin).not.toHaveBeenCalled();
+    } finally {
+        jest.mocked(initializeDatabase).mockImplementation(async () => ({}) as Awaited<ReturnType<typeof initializeDatabase>>);
+    }
 });
 
 test('FR-10 NFR-05 · S-02 계정 전환 준비 중 로그아웃하면 늦은 로그인 완료가 탭을 다시 열지 않아요', async () => {

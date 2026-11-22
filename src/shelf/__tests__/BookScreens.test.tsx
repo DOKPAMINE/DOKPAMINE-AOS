@@ -166,17 +166,3 @@ test('#89 FR-08 S-31 공개 책을 비공개로 바꾸면 확인 없이 전체�
     expect(repository.reviews.list().map(row => [row.visibility, row.syncPending])).toEqual([['PRIVATE', true], ['PRIVATE', true]]);
     expect(screen.getByText('감상 2개를 비공개로 바꿨어요 · 동기화 대기')).toBeOnTheScreen();
 });
-
-test('#89 FR-08 S-31 공개 범위가 섞인 책은 스위치를 누르면 하나로 맞출 값을 물어봐요', async () => {
-    const alert = jest.spyOn(Alert, 'alert');
-    saveReviews('PUBLIC', 'PRIVATE');
-    await renderRouter(routes, { initialUrl: `/book/${id}` });
-    expect(await screen.findByText('일부 감상만 공개돼 있어요')).toBeOnTheScreen();
-    expect(visibilitySwitch().props.accessibilityState.checked).toBe(false);
-    await fireEvent(visibilitySwitch(), 'valueChange', true);
-    expect(alert.mock.calls[0][2]?.map(item => item.text)).toEqual(['취소', '모두 비공개', '모두 공개']);
-    await act(async () => alertButton(alert, '모두 비공개')?.onPress?.());
-    expect(repository.reviews.get(oneLineId)).toMatchObject({ visibility: 'PRIVATE', syncPending: true });
-    expect(repository.reviews.get(reportId)).toMatchObject({ visibility: 'PRIVATE', syncPending: false });
-    expect(screen.getByText('감상 1개를 비공개로 바꿨어요 · 동기화 대기')).toBeOnTheScreen();
-});

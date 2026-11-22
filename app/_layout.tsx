@@ -13,6 +13,7 @@ import { AuthProvider, useAuth } from '../src/auth/AuthProvider';
 import { connectAuthSyncLifecycle } from '../src/auth/syncLifecycle';
 import { syncAfterLogin, stopRecordSync } from '../src/sync';
 import { Screen, SecondaryButton, StateView } from '../src/components';
+import { MixedVisibilityPrompt } from '../src/reviews/MixedVisibilityPrompt';
 
 import { navigationTheme } from '../src/theme';
 import { connectQueryManagers, queryClient } from '../src/api/queryClient';
@@ -78,7 +79,7 @@ function AuthNavigator() {
             </Screen>
         );
     }
-    return (
+    return (<>
         <Stack screenOptions={{ headerShown: false }}>
             <Stack.Protected guard={status !== 'signedIn'}>
                 <Stack.Screen name="(auth)" />
@@ -93,5 +94,7 @@ function AuthNavigator() {
                 <Stack.Screen name="settings" />
             </Stack.Protected>
         </Stack>
-    );
+        {/* FR-08 / S-31: 공개 범위가 섞인 책을 어느 화면에서든 고르게 한다. 로그인 전 화면에는 띄우지 않는다. */}
+        {status === 'signedIn' && <MixedVisibilityPrompt />}
+    </>);
 }
