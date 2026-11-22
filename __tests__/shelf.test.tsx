@@ -43,7 +43,8 @@ function protectedRoutes() {
         '(tabs)/_layout': TabLayout, '(tabs)/index': () => <Text>인증된 홈</Text>, '(tabs)/shelf': ShelfScreen,
         '(tabs)/calendar': () => <Text>캘린더</Text>, '(tabs)/lounge': () => <Text>라운지</Text>, '(tabs)/my': () => <Text>마이</Text>,
         'book-add/index': () => <Text>책 등록</Text>,
-        'book/_layout': BookLayout, 'book/[id]/index': BookDetailScreen, 'book/[id]/edit': BookEditScreen };
+        'book/_layout': BookLayout, 'book/[id]/index': BookDetailScreen, 'book/[id]/edit': BookEditScreen,
+        'reading-start': () => <Text>독서 타이머</Text> };
 }
 let memory: ReturnType<typeof memorySQLite>;
 let repository: RecordRepository;
@@ -306,4 +307,15 @@ test('#89 FR-08 S-31 로그인 전 화면에는 섞인 책 알림을 띄우지 �
     expect(await screen.findByText('로그인이 필요해요.')).toBeOnTheScreen();
     await act(async () => { await Promise.resolve(); });
     expect(screen.queryByText(mixedMessage)).toBeNull();
+});
+
+test('#89 FR-08 S-46 독서 타이머 화면에 있는 동안에는 섞인 책 알림을 미루고 나가면 띄워요', async () => {
+    saveMixedReviews();
+    jest.mocked(useAuth).mockReturnValue({ ...useAuth(), status: 'signedIn' });
+    await renderRouter(protectedRoutes(), { initialUrl: `/reading-start?bookId=${id}` });
+    expect(await screen.findByText('독서 타이머')).toBeOnTheScreen();
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByText(mixedMessage)).toBeNull();
+    await act(async () => router.replace('/shelf'));
+    expect(await screen.findByText(mixedMessage)).toBeOnTheScreen();
 });

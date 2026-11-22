@@ -3,7 +3,7 @@ import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-librar
 import { BookDetailScreen } from '../BookDetailScreen';
 import { BookEditScreen } from '../BookEditScreen';
 import { initializeDatabase, prepareRecordDatabase } from '../../db/client';
-import type { RecordRepository } from '../../db/repository';
+import { createRecordRepository, type RecordRepository } from '../../db/repository';
 import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
 import Storage from 'expo-sqlite/kv-store';
 import { tokenStorage } from '../../api/tokenStorage';
@@ -165,4 +165,24 @@ test('#89 FR-08 S-31 공개 책을 비공개로 바꾸면 확인 없이 전체�
     expect(alert).not.toHaveBeenCalled();
     expect(repository.reviews.list().map(row => [row.visibility, row.syncPending])).toEqual([['PRIVATE', true], ['PRIVATE', true]]);
     expect(screen.getByText('감상 2개를 비공개로 바꿨어요 · 동기화 대기')).toBeOnTheScreen();
+});
+
+test('#89 FR-08 S-31 공개 범위를 바꿔도 책 상세의 대표 한줄평이 바뀌지 않아요', async () => {
+    let clock = 100000;
+    const prepared = await prepareRecordDatabase(memory.sqlite);
+    const timed = createRecordRepository(prepared.db, () => clock);
+    jest.mocked(initializeDatabase).mockResolvedValue({ db: prepared.db, repository: timed });
+    timed.reviews.save({ id: oneLineId, bookId: id, oneLine: '예전 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    clock += 1000;
+    timed.reviews.save({ id: reportId, bookId: id, oneLine: '최근 한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    clock += 1000;
+    const alert = jest.spyOn(Alert, 'alert');
+    await renderRouter(routes, { initialUrl: `/book/${id}` });
+    expect(await screen.findByText('최근 한줄평')).toBeOnTheScreen();
+
+    await fireEvent(visibilitySwitch(), 'valueChange', true);
+    await act(async () => alertButton(alert, '공개')?.onPress?.());
+    expect(timed.reviews.list({ bookId: id }).every(row => row.visibility === 'PUBLIC' && row.syncPending)).toBe(true);
+    expect(screen.getByText('최근 한줄평')).toBeOnTheScreen();
+    expect(screen.queryByText('예전 한줄평')).toBeNull();
 });

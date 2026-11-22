@@ -4,7 +4,6 @@ import { initializeDatabase, prepareRecordDatabase } from '../../db/client';
 import { createRecordRepository, type RecordRepository, type SaveInput } from '../../db/repository';
 import type { BookRecord } from '../../db/schema';
 import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
-import { useReadingCheckDialog } from '../../reading/readingCheckDialog';
 import { getSyncState, subscribeSyncState } from '../../sync';
 import { MixedVisibilityPrompt } from '../MixedVisibilityPrompt';
 import { requestMixedVisibilityCheck } from '../mixedVisibilityCheck';
@@ -25,9 +24,10 @@ let syncListener: (() => void) | undefined;
 const saveReview = (id: number, bookId: string, visibility: 'PRIVATE' | 'PUBLIC') =>
     repository.reviews.save({ id: uuid(id), bookId, oneLine: `감상 ${id}`, body: null, visibility, publishedAt: null });
 const markAllSynced = () => { for (const row of repository.reviews.list()) repository.reviews.markSynced(row.id, row.localVersion); };
-const renderPrompt = async () => {
-    await render(<MixedVisibilityPrompt />);
+const renderPrompt = async (paused = false) => {
+    const view = await render(<MixedVisibilityPrompt paused={paused} />);
     await act(async () => { await Promise.resolve(); });
+    return view;
 };
 
 beforeEach(async () => {
@@ -38,7 +38,6 @@ beforeEach(async () => {
     syncStatus = 'idle';
     jest.mocked(getSyncState).mockImplementation(() => ({ status: syncStatus, failedCount: 0 }));
     jest.mocked(subscribeSyncState).mockImplementation(listener => { syncListener = listener; return () => { syncListener = undefined; }; });
-    useReadingCheckDialog.setState({ open: false });
     repository.books.save(book(uuid(1), '하얀 책'));
     repository.books.save(book(uuid(2), '데미안'));
     repository.books.save(book(uuid(3), '모두 공개한 책'));
@@ -104,12 +103,11 @@ test('#89 FR-08 S-50 충돌을 해결하면 다시 확인해 다시 섞인 책�
     expect(screen.getByText(message('데미안'))).toBeOnTheScreen();
 });
 
-test('#89 FR-08 S-46 90분 확인창이 떠 있으면 닫힌 뒤에 섞인 책 알림을 보여 줘요', async () => {
-    useReadingCheckDialog.setState({ open: true });
+test('#89 FR-08 S-46 멈춘 동안(독서 타이머 화면)에는 띄우지 않고 풀리면 보여 줘요', async () => {
     saveReview(11, uuid(1), 'PUBLIC'); saveReview(12, uuid(1), 'PRIVATE');
-    await renderPrompt();
+    const view = await renderPrompt(true);
     expect(screen.queryByText(message('하얀 책'))).toBeNull();
-    await act(async () => useReadingCheckDialog.setState({ open: false }));
+    await view.rerender(<MixedVisibilityPrompt paused={false} />);
     expect(screen.getByText(message('하얀 책'))).toBeOnTheScreen();
 });
 

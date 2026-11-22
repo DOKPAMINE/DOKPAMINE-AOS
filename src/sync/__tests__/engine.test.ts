@@ -496,5 +496,7 @@ test('#89 FR-08 NFR-05 S-31 책 공개 범위를 바꾼 감상은 서버 버전�
     expect(transport.putReview.mock.calls.map(([request]) => request).sort((a, b) => a.id.localeCompare(b.id))).toEqual([
         expect.objectContaining({ id: id(3), visibility: 'PRIVATE', version: 0, oneLine: '한줄평' }),
         expect.objectContaining({ id: id(4), visibility: 'PRIVATE', version: 0, body: '독후감' })]);
+    // 공개 범위만 바꾼 PUT은 updatedAt이 그대로여도 visibility가 달라 서버가 저장하고 버전을 올린다(BE API.md).
+    expect(transport.putReview.mock.calls.every(([request]) => request.updatedAt === new Date(100000).toISOString())).toBe(true);
     expect(records.reviews.list({ syncPending: true })).toEqual([]);
 });

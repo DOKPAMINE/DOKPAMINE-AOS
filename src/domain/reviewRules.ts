@@ -36,10 +36,16 @@ export function bookVisibility(reviews: readonly { visibility: Visibility }[], f
 export function mixedVisibilityBooks<B extends { id: string; title: string }>(
     books: readonly B[], reviews: readonly { bookId: string; visibility: Visibility }[],
 ): B[] {
+    const mixed = mixedVisibilityBookIds(reviews);
+    return books.filter(book => mixed.has(book.id))
+        .sort((a, b) => a.title.localeCompare(b.title, 'ko') || a.id.localeCompare(b.id));
+}
+
+/** FR-08 / S-31: 공개 범위가 섞인 책 ID만 먼저 골라, 그 책들만 읽을 수 있게 한다. */
+export function mixedVisibilityBookIds(reviews: readonly { bookId: string; visibility: Visibility }[]): Set<string> {
     const found = new Map<string, Set<Visibility>>();
     for (const review of reviews) found.set(review.bookId, (found.get(review.bookId) ?? new Set()).add(review.visibility));
-    return books.filter(book => (found.get(book.id)?.size ?? 0) > 1)
-        .sort((a, b) => a.title.localeCompare(b.title, 'ko') || a.id.localeCompare(b.id));
+    return new Set([...found].filter(([, visibilities]) => visibilities.size > 1).map(([bookId]) => bookId));
 }
 
 /**

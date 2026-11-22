@@ -4,9 +4,8 @@ import { Card, PrimaryButton, SecondaryButton } from '../components';
 import { initializeDatabase } from '../db/client';
 import type { RecordRepository } from '../db/repository';
 import type { BookRecord } from '../db/schema';
-import { mixedVisibilityBooks } from '../domain/reviewRules';
+import { mixedVisibilityBookIds, mixedVisibilityBooks } from '../domain/reviewRules';
 import type { ReviewVisibility } from '../my/preferences';
-import { useReadingCheckDialog } from '../reading/readingCheckDialog';
 import { getSyncState, subscribeSyncState } from '../sync';
 import { colors, spacing, typography } from '../theme';
 import { subscribeMixedVisibilityCheck } from './mixedVisibilityCheck';
@@ -15,20 +14,20 @@ import { subscribeMixedVisibilityCheck } from './mixedVisibilityCheck';
  * FR-08 / S-31: 감상(충돌·삭제 제외)의 공개 범위가 섞인 책이 있으면 어느 화면에서든 한 권씩 하나로 맞추게 한다.
  * 책 단위 공개 범위 이전의 예전 데이터, 서버 snapshot 복원, S-50 충돌 해결로 다시 섞인 경우 모두 같은 규칙으로 처리한다.
  * 앱 시작(로그인 후 마운트), 동기화가 끝났을 때, 충돌을 해결했을 때 확인한다.
- * 루트 레이아웃에서 로그인한 동안에만 마운트하고, S-46 90분 확인창이 떠 있으면 닫힌 뒤에 보여 준다.
+ * 루트 레이아웃에서 로그인한 동안에만 마운트한다. paused인 동안(독서 타이머 화면)에는 띄우지 않고 화면을 나가면 띄운다.
+ * 타이머 화면의 S-46 90분 확인창도 Modal이라, iOS에서 두 Modal이 겹치면 둘 다 닫힐 수 있기 때문이다.
  * 뒤로 가기·바깥 누르기로 닫히지 않으며 두 버튼 중 하나를 골라야 닫힌다.
  */
-export function MixedVisibilityPrompt() {
+export function MixedVisibilityPrompt({ paused }: { paused: boolean }) {
     const [repository, setRepository] = useState<RecordRepository | null>(null);
     const [books, setBooks] = useState<BookRecord[]>([]);
     const [error, setError] = useState(false);
-    const readingCheckOpen = useReadingCheckDialog(state => state.open);
 
     const check = useCallback((records: RecordRepository) => {
         try {
-            const reviews = records.reviews.list().filter(review => !review.conflict);
-            // 감상이 있는 책만 읽는다. 삭제한 책은 get이 null을 돌려줘 제외된다.
-            const books = [...new Set(reviews.map(review => review.bookId))]
+            // 감상 본문 없이 책 ID와 공개 범위만 읽고, 섞인 책만 불러온다. 삭제한 책은 get이 null이라 빠진다.
+            const reviews = records.reviews.visibilities();
+            const books = [...mixedVisibilityBookIds(reviews)]
                 .map(bookId => records.books.get(bookId)).filter((book): book is BookRecord => book !== null);
             setBooks(mixedVisibilityBooks(books, reviews));
         } catch { /* 다음 확인 시점에 다시 찾는다. */ }
@@ -63,7 +62,7 @@ export function MixedVisibilityPrompt() {
         } catch { setError(true); }
     };
 
-    return <Modal testID="mixed-visibility-prompt" visible={Boolean(repository && book) && !readingCheckOpen} transparent animationType="none"
+    return <Modal testID="mixed-visibility-prompt" visible={Boolean(repository && book) && !paused} transparent animationType="none"
         onRequestClose={() => { /* 뒤로 가기로 닫지 않는다. */ }}>
         <View style={local.container} accessibilityViewIsModal>
             <View style={local.scrim} accessible={false} />

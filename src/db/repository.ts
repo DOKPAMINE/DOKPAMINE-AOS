@@ -1,4 +1,4 @@
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
 import { parseEndPage } from '../domain/pageRules';
 import { validateBook } from '../domain/bookRules';
@@ -160,18 +160,35 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
         },
         /**
          * FR-08 / S-31: 책의 감상 공개 범위를 한 번에 맞춘다. 값이 다른 감상만 새 버전으로 저장해 동기화를 예약하고,
-         * 서버와 충돌한 감상은 S-50 충돌 해결에서 공개 범위를 고르므로 건드리지 않는다. 바꾼 감상 수를 돌려준다.
+         * 서버와 충돌한 감상과 삭제한 감상은 건드리지 않는다. 바꾼 감상 수를 돌려준다.
+         *
+         * 공개 범위는 감상 내용의 수정이 아니므로 updatedAt을 그대로 둔다. 책의 대표 한줄평(bookOneLine)이
+         * updatedAt 순으로 고르기 때문에, 바꾸면 공개 범위만 바꿔도 대표 한줄평이 달라진다.
+         * 동기화는 localVersion·syncPending으로 대기를 관리하고, 서버는 감상 충돌을 version으로만 판단하며
+         * updatedAt을 순서 기준으로 쓰지 않는다(BE docs/API.md). visibility가 달라진 PUT은 updatedAt이 같아도
+         * 같은 요청으로 취급되지 않으므로 그대로 저장되고 서버 버전이 오른다.
          */
         setBookVisibility(bookId: string, visibility: ReviewRecord['visibility']): number {
             const changed = transaction(() => {
                 const targets = reviewEntity.list({ bookId }).filter(row => !row.conflict && row.visibility !== visibility);
+                const timestamp = now();
                 for (const row of targets) {
-                    reviewEntity.save({ id: row.id, bookId: row.bookId, oneLine: row.oneLine, body: row.body, visibility, publishedAt: row.publishedAt });
+                    db.update(schema.reviews).set({
+                        visibility, syncPending: true, localVersion: nextRecordVersion(timestamp, row.localVersion),
+                    }).where(eq(schema.reviews.id, row.id)).run();
                 }
                 return targets.length;
             });
             if (changed > 0) notify();
             return changed;
+        },
+        /**
+         * FR-08 / S-31: 공개 범위가 섞인 책을 찾을 때 쓴다. 본문 없이 책 ID와 공개 범위만 읽으며,
+         * 삭제한 감상과 서버와 충돌한 감상은 뺀다.
+         */
+        visibilities(): { bookId: string; visibility: ReviewRecord['visibility'] }[] {
+            return db.select({ bookId: schema.reviews.bookId, visibility: schema.reviews.visibility }).from(schema.reviews)
+                .where(and(eq(schema.reviews.deleted, false), isNull(schema.reviews.conflict))).all();
         },
         conflicts(bookId?: string) {
             return db.select().from(schema.reviews).where(and(
