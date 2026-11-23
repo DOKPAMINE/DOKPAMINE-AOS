@@ -1,0 +1,1 @@
+ALTER TABLE `books` ADD `catalog_pending` integer DEFAULT false NOT NULL;
