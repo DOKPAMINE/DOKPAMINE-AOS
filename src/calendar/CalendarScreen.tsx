@@ -99,7 +99,6 @@ function CalendarContent({ initialDate, records }: {
                     ))}
                 </View>
             </ScrollView>
-            <Text style={styles.muted}>날짜 아래에 그날 읽은 책 표지를 보여 주고, 테두리로 선택한 날짜를 표시해요.</Text>
             {days.size === 0 && <StateView kind="empty" message="이 달에는 독서 기록이 없어요." />}
 
             <View style={styles.section}>

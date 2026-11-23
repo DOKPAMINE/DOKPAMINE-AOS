@@ -187,7 +187,8 @@ test('FR-05 S-60 하루에 1권 읽은 날은 날짜 숫자 아래에 그 책의
     expect(StyleSheet.flatten(image.props.style)).toMatchObject({ flex: 1, height: '100%' });
     expect(image.props.resizeMode).toBe('cover');
     expect(screen.queryByText('●')).toBeNull();
-    expect(screen.getByText('날짜 아래에 그날 읽은 책 표지를 보여 주고, 테두리로 선택한 날짜를 표시해요.')).toBeOnTheScreen();
+    expect(screen.queryByText('날짜 아래에 그날 읽은 책 표지를 보여 주고, 테두리로 선택한 날짜를 표시해요.', hidden)).toBeNull();
+    expect(screen.queryByText(/테두리로 선택한 날짜/, hidden)).toBeNull();
 });
 
 test('FR-05 S-60 S-61 2권 읽은 날은 오래 읽은 책부터 두 표지를 좌우 반씩 보여 주고 누르면 테두리와 그날 기록이 나와요', async () => {
@@ -348,4 +349,17 @@ test('FR-05 S-60 기본 표지의 제목 글자는 보조 기술에서 건너뛰
     const title = cell.getByTestId('calendar-cover-title', hidden);
     expect(title.props).toMatchObject({ accessible: false, importantForAccessibility: 'no' });
     expect(cell.getByTestId('calendar-cover-default', hidden).props.importantForAccessibility).toBe('no-hide-descendants');
+});
+
+test('FR-05 S-60 안내 문구 없이도 선택한 날짜 칸만 accessibilityState.selected가 true예요', async () => {
+    repository.sessions.list.mockReturnValue([session('a', '2026-11-03', 600)]);
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    expect(screen.queryByText(/테두리로 선택한 날짜/, hidden)).toBeNull();
+    const today = screen.getByRole('button', { name: '11월 2일, 독서 기록 없음' });
+    const other = screen.getByRole('button', { name: '11월 3일, 1권 읽음: 데미안' });
+    expect(today.props.accessibilityState).toMatchObject({ selected: true });
+    expect(other.props.accessibilityState).toMatchObject({ selected: false });
+    await fireEvent.press(other);
+    expect(screen.getByRole('button', { name: '11월 3일, 1권 읽음: 데미안' }).props.accessibilityState).toMatchObject({ selected: true });
+    expect(screen.getByRole('button', { name: '11월 2일, 독서 기록 없음' }).props.accessibilityState).toMatchObject({ selected: false });
 });
