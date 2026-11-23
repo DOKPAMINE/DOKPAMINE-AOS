@@ -1,10 +1,10 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Screen, SecondaryButton, StateView } from '../components';
 import {
-    booksReadOn, calendarClock, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
+    booksReadByDate, calendarClock, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
     moveCalendarMonth, readingDays, sessionsOn, type GroupStat,
 } from '../domain/calendarRules';
 import { pagesRead } from '../domain/readingTypes';
@@ -52,6 +52,9 @@ function CalendarContent({ initialDate, records }: {
     const [selectedDate, setSelectedDate] = useState(() => calendarDate(initialDate, Date.now()));
 
     const month = selectedDate.slice(0, 7);
+    // 날짜를 눌러도 다시 계산하지 않고, 저장소 변경으로 기록 배열이 바뀌거나 달이 바뀔 때만 한 달 치를 묶는다.
+    const booksByDate = useMemo(() => booksReadByDate(records.sessions, records.books, month),
+        [records.sessions, records.books, month]);
     const monthLabel = `${Number(month.slice(0, 4))}년 ${Number(month.slice(5))}월`;
     const dateLabel = `${Number(month.slice(5))}월 ${Number(selectedDate.slice(8))}일`;
     const days = readingDays(records.sessions, month);
@@ -79,7 +82,7 @@ function CalendarContent({ initialDate, records }: {
                                 if (day === null) return <View key={weekday} style={styles.day} />;
                                 const value = `${month}-${String(day).padStart(2, '0')}`;
                                 const selected = value === selectedDate;
-                                const dayBooks = booksReadOn(records.sessions, records.books, value);
+                                const dayBooks = booksByDate.get(value) ?? [];
                                 const titles = dayBooks.map(item => bookById.get(item.bookId)?.title ?? '찾을 수 없는 책');
                                 const { shown, remaining } = dayCovers(dayBooks);
                                 return (
