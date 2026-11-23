@@ -10,6 +10,7 @@ import { createRecordRepository, type RecordRepository } from '../../db/reposito
 import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
 import { tokenStorage } from '../../api/tokenStorage';
 import { bookVisibilityPreferences, reviewPreferences } from '../../my/preferences';
+import { sizes } from '../../theme';
 
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
 jest.mock('expo-sqlite/kv-store', () => {
@@ -555,4 +556,16 @@ describe('#91 FR-08 마지막 감상을 지울 때 책 공개 범위 보존', ()
         await deleteBy('한줄평 삭제');
         await waitFor(() => expect(bookVisibilityPreferences.load('mixed', bookId)).toBe('PRIVATE'));
     });
+});
+
+test('#91 S-50 카드의 수정·삭제 버튼은 가로·세로 모두 44dp 이상이고 버튼 역할과 이름이 있어요', async () => {
+    repository.reviews.save({ id: '00000000-0000-4000-8000-000000000051', bookId, oneLine: '한줄평', body: null, visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.save({ id: '00000000-0000-4000-8000-000000000052', bookId, oneLine: null, body: '독후감', visibility: 'PRIVATE', publishedAt: null });
+    repository.quotes.save({ id: '00000000-0000-4000-8000-000000000053', bookId, text: '문장', page: null, memo: null });
+    await renderRouter(routes, { initialUrl: base });
+    const names = ['한줄평 수정', '한줄평 삭제', '독후감 독후감 수정', '독후감 독후감 삭제', '문장 문장 수정', '문장 문장 삭제'];
+    expect(sizes.minTouch).toBeGreaterThanOrEqual(44);
+    for (const name of names) {
+        expect(await screen.findByRole('button', { name })).toHaveStyle({ minHeight: sizes.minTouch, minWidth: sizes.minTouch });
+    }
 });

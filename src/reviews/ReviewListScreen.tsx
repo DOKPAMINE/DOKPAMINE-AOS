@@ -62,7 +62,9 @@ function ReviewSections({ bookId, canWrite, reviews, oneLineLocked, repository, 
         const before = active();
         work();
         const keep = visibilityToKeepAfterDelete(before, active());
-        if (keep) void saveBookVisibilityForCurrentUser(bookId, keep).catch(() => undefined);
+        // 감상 삭제는 이미 저장됐고, 이 값은 다음 감상의 공개 범위를 위한 기기 저장값일 뿐이라 실패해도 무시한다(#89의 책별 저장과 같다).
+        // 실패하면 그 책의 다음 감상은 S-81 기본값을 따른다.
+        if (keep) void saveBookVisibilityForCurrentUser(bookId, keep).catch(() => { /* 감상 삭제는 이미 저장됐다. */ });
     });
     return <>
         <View style={styles.section}>

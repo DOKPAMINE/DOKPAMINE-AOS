@@ -15,6 +15,7 @@ export const reviewStyles = StyleSheet.create({
     multiline: { minHeight: sizes.minTouch * 3 },
     pressed: { backgroundColor: colors.surface.sandSoft },
     row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    // AGENTS.md 7: 카드의 수정·삭제 버튼은 글자 길이와 상관없이 가로·세로 모두 44dp 이상 눌린다.
     action: { minHeight: sizes.minTouch, minWidth: sizes.minTouch, padding: spacing.sm, justifyContent: 'center', alignItems: 'center' },
     dimmed: { opacity: 0.6 },
 });
