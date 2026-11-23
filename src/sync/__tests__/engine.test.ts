@@ -500,3 +500,46 @@ test('#89 FR-08 NFR-05 S-31 책 공개 범위를 바꾼 감상은 서버 버전�
     expect(transport.putReview.mock.calls.every(([request]) => request.updatedAt === new Date(100000).toISOString())).toBe(true);
     expect(records.reviews.list({ syncPending: true })).toEqual([]);
 });
+
+describe('#91 감상 전송 알림', () => {
+    test('감상을 보낸 동기화가 끝나면 한 번만 알리고, 감상 없이 끝난 동기화는 알리지 않아요', async () => {
+        const engine = createSyncEngine(records, transport, online);
+        const listener = jest.fn();
+        engine.subscribeReviewUploads(listener);
+        await engine.sync();
+        expect(listener).not.toHaveBeenCalled();
+        records.reviews.save({ id: id(3), bookId: book.id, oneLine: '한줄평', body: null, visibility: 'PUBLIC', publishedAt: null });
+        records.reviews.save({ id: id(4), bookId: book.id, oneLine: null, body: '독후감', visibility: 'PUBLIC', publishedAt: null });
+        await engine.sync();
+        expect(transport.putReview).toHaveBeenCalledTimes(2);
+        expect(listener).toHaveBeenCalledTimes(1);
+        records.reviews.softDelete(id(3));
+        await engine.sync();
+        expect(listener).toHaveBeenCalledTimes(2);
+    });
+
+    test('감상 전송이 실패하면 알리지 않고, 일부를 보낸 뒤 연결이 끊겨도 보낸 만큼 알려요', async () => {
+        const engine = createSyncEngine(records, transport, online);
+        const listener = jest.fn();
+        engine.subscribeReviewUploads(listener);
+        records.reviews.save({ id: id(3), bookId: book.id, oneLine: '한줄평', body: null, visibility: 'PUBLIC', publishedAt: null });
+        records.reviews.save({ id: id(4), bookId: book.id, oneLine: null, body: '독후감', visibility: 'PUBLIC', publishedAt: null });
+        transport.putReview.mockRejectedValue(new ApiError('network', 'NETWORK_ERROR', '연결 끊김'));
+        await engine.sync();
+        expect(listener).not.toHaveBeenCalled();
+        transport.putReview.mockReset().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new ApiError('network', 'NETWORK_ERROR', '연결 끊김'));
+        await engine.sync();
+        expect(engine.getState().status).toBe('error');
+        expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    test('멈춘 엔진은 알리지 않아요', async () => {
+        const engine = createSyncEngine(records, transport, online);
+        const listener = jest.fn();
+        engine.subscribeReviewUploads(listener);
+        records.reviews.save({ id: id(3), bookId: book.id, oneLine: '한줄평', body: null, visibility: 'PUBLIC', publishedAt: null });
+        transport.putReview.mockImplementation(async () => { engine.stop(); });
+        await engine.sync();
+        expect(listener).not.toHaveBeenCalled();
+    });
+});

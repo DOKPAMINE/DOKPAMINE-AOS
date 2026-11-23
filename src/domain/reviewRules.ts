@@ -63,16 +63,17 @@ export const oneLineSchema = z.object({
 });
 export type OneLineFields = z.input<typeof oneLineSchema>;
 
-export type OneLineSavePlan = { kind: 'invalid'; message: string } | { kind: 'save'; text: string; visibility: Visibility };
+/** #91: unchanged는 고친 것이 없다는 뜻이다. 화면은 DB에 다시 쓰지 않고 저장한 것처럼 닫는다. */
+export type OneLineSavePlan = { kind: 'invalid'; message: string } | { kind: 'unchanged' } | { kind: 'save'; text: string; visibility: Visibility };
 
-/** S-51: 한줄평은 책당 하나라 기존 한줄평을 비울 수 없고, 내용·공개 범위가 그대로면 저장하지 않는다. */
+/** S-51: 한줄평은 책당 하나라 기존 한줄평을 비울 수 없다. 내용·공개 범위가 그대로면 다시 쓰지 않도록 unchanged를 돌려준다(#91). */
 export function planOneLineSave(fields: OneLineFields, current?: { oneLine: string | null; visibility: Visibility }): OneLineSavePlan {
     if (current && !fields.text.trim()) return { kind: 'invalid', message: '한줄평은 비울 수 없어요. 남길 한줄평을 입력해 주세요.' };
     const result = oneLineSchema.safeParse(fields);
     if (!result.success) return { kind: 'invalid', message: result.error.issues[0].message };
     const { text, visibility } = result.data;
     if (current && text === current.oneLine?.trim() && visibility === current.visibility) {
-        return { kind: 'invalid', message: '바뀐 내용이 없어요. 한줄평을 고친 뒤 저장해 주세요.' };
+        return { kind: 'unchanged' };
     }
     return { kind: 'save', text, visibility };
 }
@@ -92,3 +93,65 @@ export const quoteSchema = z.object({
 });
 export type QuoteFields = z.input<typeof quoteSchema>;
 export const emptyQuoteFields: QuoteFields = { text: '', page: '' };
+
+export type ReportSavePlan = { kind: 'invalid'; message: string } | { kind: 'unchanged' } | { kind: 'save'; text: string };
+
+/** #91 S-53: 새 독후감은 입력만 확인한다. 독후감 수정은 비울 수 없고, 바뀐 것이 없으면 unchanged를 돌려준다. */
+export function planReportSave(text: string, current?: { body: string | null }): ReportSavePlan {
+    if (current && !text.trim()) return { kind: 'invalid', message: '독후감은 비울 수 없어요. 지우려면 감상 목록에서 삭제해 주세요.' };
+    const result = reportSchema.shape.text.safeParse(text);
+    if (!result.success) return { kind: 'invalid', message: result.error.issues[0].message };
+    if (current && result.data === current.body?.trim()) return { kind: 'unchanged' };
+    return { kind: 'save', text: result.data };
+}
+
+/** #91 S-52: 문장 수정 화면은 기존 문장과 쪽수를 채워 연다. 쪽수가 없으면 빈 칸이다. */
+export function quoteFieldsOf(quote: { text: string; page: number | null }): QuoteFields {
+    return { text: quote.text, page: quote.page === null ? '' : String(quote.page) };
+}
+
+export type QuoteSavePlan = { kind: 'invalid'; message: string } | { kind: 'unchanged' } | { kind: 'save'; text: string; page: number | null };
+
+/** #91 S-52: 검증은 새 문장과 같다. 문장 수정에서 바뀐 것이 없으면 unchanged를 돌려준다. */
+export function planQuoteSave(fields: QuoteFields, current?: { text: string; page: number | null }): QuoteSavePlan {
+    const result = quoteSchema.safeParse(fields);
+    if (!result.success) return { kind: 'invalid', message: result.error.issues[0].message };
+    const { text, page } = result.data;
+    if (current && text === current.text.trim() && page === current.page) {
+        return { kind: 'unchanged' };
+    }
+    return { kind: 'save', text, page };
+}
+
+export type ReviewPart = 'oneLine' | 'body';
+export type ReviewPartDeletePlan = { kind: 'delete' } | { kind: 'clear'; oneLine: string | null; body: string | null };
+
+/**
+ * #91 S-50: 한줄평과 독후감은 따로 저장하지만(#76), 예전 데이터나 서버 기록에는 한 감상에 둘이 함께 들어 있을 수 있다.
+ * 지우는 쪽만 비우고 남은 쪽은 그대로 두며, 남는 내용이 없을 때만 감상 전체를 삭제(tombstone)한다.
+ */
+export function planReviewPartDelete(review: { oneLine: string | null; body: string | null }, part: ReviewPart): ReviewPartDeletePlan {
+    const rest = part === 'oneLine' ? review.body : review.oneLine;
+    if (!rest?.trim()) return { kind: 'delete' };
+    return part === 'oneLine' ? { kind: 'clear', oneLine: null, body: review.body } : { kind: 'clear', oneLine: review.oneLine, body: null };
+}
+
+/**
+ * #91 S-50: 해결하지 않은 충돌 감상에 한줄평이 들어 있으면 책의 한줄평을 고치거나 지우지 못하게 한다.
+ * 충돌한 감상은 목록에서 빠지므로, 막지 않으면 그 아래 예전 한줄평을 고치거나 새 한줄평이 생겨 한줄평이 둘이 된다.
+ */
+export function hasOneLineConflict(conflicts: readonly { oneLine: string | null; conflict: { latest?: { oneLine: string | null } | null } | null }[]): boolean {
+    return conflicts.some(review => Boolean(review.oneLine?.trim() || review.conflict?.latest?.oneLine?.trim()));
+}
+
+/**
+ * #91 FR-08 / S-50: 감상을 지워 책에 남은 감상(충돌·삭제 제외)이 0개가 되면, 지우기 직전의 책 공개 범위를 돌려준다.
+ * 화면은 이 값을 기기의 책별 저장값으로 남겨, 그 뒤 S-81 기본값이 바뀌어도 그 책의 다음 감상 공개 범위가 바뀌지 않게 한다.
+ * 감상이 남아 있거나 원래 없었으면 null이다(책 공개 범위는 남은 감상들이 정한다).
+ */
+export function visibilityToKeepAfterDelete(before: readonly { visibility: Visibility }[], after: readonly unknown[]): Visibility | null {
+    if (before.length === 0 || after.length > 0) return null;
+    return bookVisibility(before, 'PRIVATE');
+}
+
+export const conflictLockMessage = '동기화 충돌을 먼저 해결하면 수정·삭제할 수 있어요.';

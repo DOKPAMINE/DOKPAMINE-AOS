@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { KeyboardAvoidingView, Text } from 'react-native';
 import { PrimaryButton, Screen, SecondaryButton, StateView } from '../components';
-import { bookOneLine, bookVisibility, planOneLineSave } from '../domain/reviewRules';
+import { bookOneLine, bookVisibility, hasOneLineConflict, planOneLineSave } from '../domain/reviewRules';
 import type { RecordRepository } from '../db/repository';
 import type { ReviewRecord } from '../db/schema';
 import { useBookReviewVisibility, type ReviewVisibility } from '../my/preferences';
@@ -48,8 +48,16 @@ function OneLineForm({ bookId, title, repository, current, visibility }: {
         if (targetId !== undefined && (!target || target.conflict)) {
             setError('고치던 한줄평이 서버 기록과 달라졌거나 삭제됐어요. 닫고 감상 목록에서 확인해 주세요.'); return;
         }
+        // #91: 한줄평이 든 충돌 감상이 있으면 해결 전까지 새로 쓰거나 고치지 않는다. 막지 않으면 한줄평이 둘이 된다.
+        let locked: boolean;
+        try { locked = hasOneLineConflict(repository.reviews.conflicts(bookId)); } catch {
+            setError('저장하지 못했어요. 기기 저장 공간과 책 상태를 확인하고 다시 시도해 주세요.'); return;
+        }
+        if (locked) { setError('동기화 충돌을 먼저 해결하면 한줄평을 저장할 수 있어요. 닫고 감상 목록에서 확인해 주세요.'); return; }
         const plan = planOneLineSave({ text, visibility: target?.visibility ?? visibility }, target ?? undefined);
         if (plan.kind === 'invalid') { setError(plan.message); return; }
+        // #91: 바뀐 것이 없으면 DB에 다시 쓰지 않는다. updatedAt·localVersion·syncPending을 두어 대표 한줄평과 동기화에 영향이 없다.
+        if (plan.kind === 'unchanged') { setSaved(true); return; }
         try {
             repository.reviews.save({ id: targetId ?? newId, bookId, oneLine: plan.text, body: target?.body ?? null,
                 visibility: plan.visibility, publishedAt: target?.publishedAt ?? null });

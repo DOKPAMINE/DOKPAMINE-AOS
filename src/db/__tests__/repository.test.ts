@@ -353,3 +353,90 @@ test('#89 FR-08 S-31 섞인 책 찾기용 조회는 삭제·충돌 감상을 빼
     repository.reviews.softDelete(ids[2]);
     expect(repository.reviews.visibilities()).toEqual([{ bookId, visibility: 'PUBLIC' }]);
 });
+
+describe('#91 감상 수정·삭제', () => {
+    const id = (n: number) => `00000000-0000-4000-8000-0000000001${String(n).padStart(2, '0')}`;
+    const review = (n: number, oneLine: string | null, body: string | null, visibility: ReviewRecord['visibility'] = 'PRIVATE') =>
+        repository.reviews.save({ id: id(n), bookId, oneLine, body, visibility, publishedAt: null });
+
+    test('S-53 독후감을 고치면 같은 ID·공개 범위로 바뀌고 동기화 대기가 돼요', () => {
+        const before = review(1, null, '처음 독후감', 'PUBLIC');
+        repository.reviews.markSynced(before.id, before.localVersion);
+        now += 1000;
+        repository.reviews.updateReport(before.id, '고친 독후감');
+        expect(repository.reviews.list({ bookId })).toEqual([expect.objectContaining({
+            id: before.id, body: '고친 독후감', visibility: 'PUBLIC', syncPending: true, createdAt: before.createdAt, updatedAt: now })]);
+        expect(repository.reviews.get(before.id)!.localVersion).toBeGreaterThan(before.localVersion);
+    });
+
+    test('S-53 한줄평이 함께 든 예전 감상의 독후감을 고쳐도 한줄평과 대표 한줄평은 그대로예요', () => {
+        const combined = review(1, '예전 한줄평', '함께 쓴 독후감');
+        now += 1000;
+        const newer = review(2, '최신 한줄평', null);
+        now += 1000;
+        repository.reviews.updateReport(combined.id, '고친 독후감');
+        expect(repository.reviews.get(combined.id)).toMatchObject({ oneLine: '예전 한줄평', body: '고친 독후감', updatedAt: combined.updatedAt, syncPending: true });
+        expect(bookOneLine(repository.reviews.list({ bookId }))?.id).toBe(newer.id);
+    });
+
+    test('S-50 독후감만 든 감상을 지우면 tombstone으로 남아 동기화 대기가 돼요', () => {
+        const report = review(1, null, '지울 독후감');
+        repository.reviews.markSynced(report.id, report.localVersion);
+        repository.reviews.deleteReport(report.id);
+        expect(repository.reviews.list({ bookId })).toEqual([]);
+        expect(repository.reviews.get(report.id, true)).toMatchObject({ deleted: true, syncPending: true, body: '지울 독후감' });
+    });
+
+    test('S-50 한줄평과 독후감이 함께 든 감상은 지우는 쪽만 비워요', () => {
+        review(1, '한줄평', '독후감');
+        repository.reviews.deleteReport(id(1));
+        expect(repository.reviews.get(id(1))).toMatchObject({ oneLine: '한줄평', body: null, deleted: false, syncPending: true });
+
+        review(2, '둘째 한줄평', '둘째 독후감');
+        repository.reviews.deleteOneLine(bookId);
+        expect(repository.reviews.get(id(1), true)).toMatchObject({ deleted: true });
+        expect(repository.reviews.get(id(2))).toMatchObject({ oneLine: null, body: '둘째 독후감', deleted: false, syncPending: true });
+    });
+
+    test('S-50 한줄평을 지우면 예전 한줄평이 대신 나타나지 않게 그 책의 한줄평을 모두 지우고 독후감은 남겨요', () => {
+        review(1, '예전 한줄평', null);
+        now += 1000;
+        review(2, '최신 한줄평', null);
+        review(3, null, '독후감');
+        expect(repository.reviews.deleteOneLine(bookId)).toBe(2);
+        expect(bookOneLine(repository.reviews.list({ bookId }))).toBeUndefined();
+        expect(repository.reviews.list({ bookId }).map(row => row.id)).toEqual([id(3)]);
+    });
+
+    test('NFR-05 S-50 한줄평이 든 충돌 감상이 있으면 한줄평 삭제를 거절하고 아무것도 바꾸지 않아요', () => {
+        const shown = review(1, '보이는 한줄평', null);
+        review(2, '충돌한 한줄평', null);
+        repository.reviews.markConflict(id(2));
+        expect(() => repository.reviews.deleteOneLine(bookId)).toThrow('동기화 충돌을 먼저 해결해 주세요.');
+        expect(repository.reviews.get(id(1))).toEqual(shown);
+    });
+
+    test('NFR-05 S-50 충돌·삭제된 독후감이나 독후감이 없는 감상은 고치거나 지울 수 없어요', () => {
+        review(1, null, '충돌한 독후감');
+        repository.reviews.markConflict(id(1));
+        review(2, '한줄평만', null);
+        review(3, null, '지운 독후감');
+        repository.reviews.softDelete(id(3));
+        for (const target of [id(1), id(2), id(3)]) {
+            expect(() => repository.reviews.updateReport(target, '고친 독후감')).toThrow('고칠 독후감을 찾을 수 없어요.');
+            expect(() => repository.reviews.deleteReport(target)).toThrow('고칠 독후감을 찾을 수 없어요.');
+        }
+        review(4, null, '독후감');
+        expect(() => repository.reviews.updateReport(id(4), ' ')).toThrow('독후감은 비울 수 없어요.');
+    });
+});
+
+test('#91 S-50 지울 한줄평이 없으면 아무것도 바꾸지 않고 알리지도 않아요', () => {
+    repository.reviews.save({ id: reviewId, bookId, oneLine: null, body: '독후감', visibility: 'PRIVATE', publishedAt: null });
+    const before = repository.reviews.get(reviewId);
+    const listener = jest.fn();
+    repository.subscribe(listener);
+    expect(repository.reviews.deleteOneLine(bookId)).toBe(0);
+    expect(listener).not.toHaveBeenCalled();
+    expect(repository.reviews.get(reviewId)).toEqual(before);
+});

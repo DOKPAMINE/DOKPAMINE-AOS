@@ -1,20 +1,26 @@
+import { useEffect } from 'react';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Pressable, Text, View } from 'react-native';
 import { ApiError } from '../api/errors';
 import { Screen, SecondaryButton, StateView } from '../components';
-import { useFeedItem, useReviewLike } from './queries';
-import { QueryError } from './QueryState';
+import { invalidateLoungeLists, useFeedItem, useReviewLike } from './queries';
+import { QueryError, removedReviewMessage } from './QueryState';
 import { styles } from './styles';
 
 export function ReviewDetailScreen({ id }: { id: string }) {
     const result = useFeedItem(id);
     const like = useReviewLike(id);
     const item = result.data;
-    const unavailable = !id || (like.error instanceof ApiError && like.error.status === 404);
+    const removed = [result.error, like.error].some(error => error instanceof ApiError && error.status === 404);
+    const client = useQueryClient();
+    // #91: 지워진 감상이 목록·검색에 남아 있지 않게 다시 받는다.
+    useEffect(() => { if (removed) void invalidateLoungeLists(client); }, [removed, client]);
     return (
         <Screen title="감상 상세">
             <SecondaryButton label="목록으로 돌아가기" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/lounge')} />
-            {unavailable ? <StateView kind="empty" message="볼 수 없는 감상이에요" />
+            {!id ? <StateView kind="empty" message="볼 수 없는 감상이에요" />
+                : removed ? <StateView kind="empty" message={removedReviewMessage} />
                 : result.isError ? <QueryError error={result.error} retry={() => { void result.refetch(); }} />
                     : !item ? <StateView kind="loading" /> : (
                         <View style={styles.section}>
