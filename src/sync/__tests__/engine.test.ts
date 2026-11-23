@@ -427,6 +427,23 @@ test('NFR-05·09 S-50 서버에서 삭제한 감상은 초안을 다시 저장�
     expect(transport.putReview.mock.calls[1][0]).not.toHaveProperty('version');
 });
 
+test('#95 NFR-05 S-50 서버에서 삭제한 독후감을 새 ID로 다시 올릴 때 처음 쓴 시각을 createdAt으로 보내요', async () => {
+    let time = 100000;
+    const timed = createRecordRepository((await prepareRecordDatabase(memory.sqlite)).db, () => time);
+    const draft = timed.reviews.save({ id: id(3), bookId: book.id, oneLine: null, body: '로컬 독후감', visibility: 'PRIVATE', publishedAt: null });
+    transport.putReview.mockRejectedValueOnce(new ApiError('http', 'REVIEW_VERSION_CONFLICT', '버전 충돌', 409));
+    const engine = createSyncEngine(timed, transport, online);
+    await engine.sync();
+    expect(timed.reviews.get(draft.id)).toMatchObject({ conflict: { latest: null } });
+
+    time = 900000;
+    timed.reviews.resolveConflict(draft.id, null, 'PRIVATE', id(4));
+    await engine.sync();
+    expect(transport.putReview).toHaveBeenCalledTimes(2);
+    expect(transport.putReview.mock.calls[1][0]).toMatchObject({ id: id(4), body: '로컬 독후감',
+        createdAt: new Date(100000).toISOString(), updatedAt: new Date(900000).toISOString() });
+});
+
 test('NFR-05 FR-15 세션 PUT의 MANUAL 응답을 즉시 반영해요', async () => {
     const listener = jest.fn();
     records.subscribe(listener);
