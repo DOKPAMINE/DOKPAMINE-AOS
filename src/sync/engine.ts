@@ -19,6 +19,9 @@ export function createSyncEngine(repository: RecordRepository, transport: SyncTr
     const failedRows = new Set<string>();
     let invalidSnapshotCount = 0;
     const listeners = new Set<() => void>();
+    // 라운지처럼 서버의 공개 감상을 보여 주는 화면이 다시 받아 오도록, 감상을 보낸 실행이 끝나면 알린다.
+    const reviewListeners = new Set<() => void>();
+    let reviewsUploaded = false;
     const setState = (next: Omit<SyncState, 'failedCount'>) => {
         state = { ...next, failedCount: failedRows.size + invalidSnapshotCount + repository.reviews.conflicts().length };
         listeners.forEach(listener => listener());
@@ -124,7 +127,7 @@ export function createSyncEngine(repository: RecordRepository, transport: SyncTr
             await attempt(`review:${row.id}`, async () => {
                 try {
                     const saved = await sendWithParent(row.bookId, () => transport.putReview(reviewDto(row)));
-                    if (!stopped) repository.reviews.acknowledge(row, saved?.version ?? row.serverVersion);
+                    if (!stopped) { repository.reviews.acknowledge(row, saved?.version ?? row.serverVersion); reviewsUploaded = true; }
                 } catch (error) {
                     if (!(error instanceof ApiError) || error.status !== 409 || error.code !== 'REVIEW_VERSION_CONFLICT' || stopped) throw error;
                     repository.reviews.markConflict(row.id);
@@ -181,6 +184,9 @@ export function createSyncEngine(repository: RecordRepository, transport: SyncTr
             pending = false;
             loginRequired = error instanceof ApiError && (error.kind === 'unauthorized' || error.status === 401);
             setState({ status: loginRequired ? 'reauthentication-required' : error instanceof ApiError && error.kind === 'offline' ? 'offline' : 'error', error });
+        } finally {
+            // 중간에 멈춰도 이미 보낸 감상은 서버에 반영됐으므로 한 실행에 한 번 알린다.
+            if (reviewsUploaded && !stopped) { reviewsUploaded = false; reviewListeners.forEach(listener => listener()); }
         }
     }
     function request(afterLogin = false): Promise<void> {
@@ -203,7 +209,9 @@ export function createSyncEngine(repository: RecordRepository, transport: SyncTr
         sync: () => request(), afterLogin: () => request(true),
         getState: () => state,
         subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-        stop() { stopped = true; listeners.clear(); },
+        /** #91: 감상(수정·삭제·공개 범위 변경)을 서버에 보낸 동기화 실행이 끝날 때마다 알린다. */
+        subscribeReviewUploads(listener: () => void) { reviewListeners.add(listener); return () => { reviewListeners.delete(listener); }; },
+        stop() { stopped = true; listeners.clear(); reviewListeners.clear(); },
     };
 }
 export type SyncEngine = ReturnType<typeof createSyncEngine>;

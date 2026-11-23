@@ -19,7 +19,7 @@ import { memorySQLite } from '../src/db/__tests__/sqliteAdapter';
 
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
 jest.mock('../src/db/client', () => ({ ...jest.requireActual('../src/db/client'), initializeDatabase: jest.fn() }));
-jest.mock('../src/sync/runtime', () => ({ startRecordSync: jest.fn() }));
+jest.mock('../src/sync/runtime', () => ({ startRecordSync: jest.fn(), subscribeReviewsSynced: jest.fn(() => jest.fn()) }));
 jest.mock('../src/sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn(), getSyncState: jest.fn(() => ({ status: 'idle', failedCount: 0 })), subscribeSyncState: jest.fn(() => jest.fn()) }));
 jest.mock('../src/auth/AuthProvider', () => ({ AuthProvider: ({ children }: PropsWithChildren) => children, useAuth: jest.fn() }));
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { addEventListener: jest.fn(() => jest.fn()) } }));

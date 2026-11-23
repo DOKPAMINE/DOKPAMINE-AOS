@@ -1,5 +1,5 @@
-import { Slot } from 'expo-router';
-import { Text } from 'react-native';
+import { router, Slot, Tabs } from 'expo-router';
+import { RefreshControl, Text, type RefreshControlProps } from 'react-native';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
@@ -9,7 +9,7 @@ import Detail from '../../../app/lounge/[id]';
 import { feedItem, feedList, likeReview, searchBookReviews, unlikeReview } from '../../api/endpoints';
 import { ApiError } from '../../api/errors';
 import type { BookReviewSearchResponse, FeedItem, ReviewLikeResponse } from '../../api/types';
-import { loungeKeys, useFeed } from '../queries';
+import { connectLoungeSyncRefresh, loungeKeys, useFeed } from '../queries';
 
 jest.mock('../../api/endpoints', () => ({ feedItem: jest.fn(), feedList: jest.fn(), likeReview: jest.fn(), searchBookReviews: jest.fn(), unlikeReview: jest.fn() }));
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn() } }));
@@ -120,13 +120,14 @@ test('NFR-06 FR-09 S-72 상세를 읽던 중 오프라인이면 좋아요 요청
     expect(screen.getByText('좋아요 · 2개')).toBeOnTheScreen();
 });
 
-test.each(['detail', 'like'])('FR-08 S-72 %s 응답이 404면 감상과 좋아요를 숨겨요', async mode => {
+test.each(['detail', 'like'])('#91 FR-08 S-72 %s 응답이 404면 감상과 좋아요를 숨기고 삭제됐거나 비공개로 바뀐 감상이라고 알려요', async mode => {
     const missing = new ApiError('http', 'NOT_FOUND', '감상이 없어요.', 404);
     if (mode === 'detail') jest.mocked(feedItem).mockRejectedValue(missing);
     else jest.mocked(likeReview).mockRejectedValue(missing);
     await renderRouter(routes, { initialUrl: '/lounge/review-1' });
     if (mode === 'like') await fireEvent.press(await screen.findByRole('button', { name: '좋아요' }));
-    expect(await screen.findByText('볼 수 없는 감상이에요')).toBeOnTheScreen();
+    expect(await screen.findByText('삭제됐거나 비공개로 바뀐 감상이에요.')).toBeOnTheScreen();
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByText(item.body!)).toBeNull();
     expect(screen.queryByRole('button', { name: '좋아요' })).toBeNull();
 });
@@ -195,4 +196,67 @@ test('FR-08 FR-09 S-70 S-72 좋아요 전에 취소한 최초 목록 조회는 �
     expect(await screen.findByText('최근 목록 조회 완료')).toBeOnTheScreen();
     expect(feedList).toHaveBeenCalledTimes(2);
     expect(client.getQueryData(loungeKeys.feed)).toEqual([expect.objectContaining({ likeCount: 3, likedByMe: true })]);
+});
+
+describe('#91 라운지 새로고침', () => {
+    const removed = { ...item, id: 'review-removed', nickname: '지운 독자' };
+    const removedRow = { name: '데미안 · 지운 독자님의 감상 보기' };
+    const tabRoutes = {
+        '(tabs)/_layout': () => <QueryClientProvider client={client}><Tabs>
+            <Tabs.Screen name="lounge" /><Tabs.Screen name="shelf" />
+        </Tabs></QueryClientProvider>,
+        '(tabs)/lounge': Lounge,
+        '(tabs)/shelf': () => <Text>책장</Text>,
+        'lounge/[id]': Detail,
+    };
+
+    test('S-70 라운지 탭으로 돌아올 때마다 최근 공개 감상을 다시 받아 지운 감상이 사라져요', async () => {
+        jest.mocked(feedList).mockResolvedValueOnce([item, removed]).mockResolvedValue([item]);
+        await renderRouter(tabRoutes, { initialUrl: '/lounge' });
+        expect(await screen.findByRole('button', removedRow)).toBeOnTheScreen();
+        // 처음 열 때 탭 포커스와 목록 조회가 겹쳐도 한 번만 요청한다.
+        expect(feedList).toHaveBeenCalledTimes(1);
+        await act(async () => router.navigate('/shelf'));
+        await act(async () => router.navigate('/lounge'));
+        await waitFor(() => expect(screen.queryByRole('button', removedRow)).toBeNull());
+        expect(feedList).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole('button', { name: '데미안 · 독자님의 감상 보기' })).toBeOnTheScreen();
+    });
+
+    test('S-70 목록을 아래로 당기면 서버에서 다시 받아요', async () => {
+        jest.mocked(feedList).mockResolvedValueOnce([item, removed]).mockResolvedValue([item]);
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        expect(await screen.findByRole('button', removedRow)).toBeOnTheScreen();
+        // jest의 RefreshControl 대체 구현은 속성을 화면 트리에 넘기지 않아, 마지막으로 그린 컨트롤의 속성으로 당김을 흉내 낸다.
+        const pull = () => (RefreshControl as unknown as { latestRef: { props: RefreshControlProps } }).latestRef.props;
+        expect(pull()).toMatchObject({ refreshing: false, accessibilityLabel: '라운지 새로고침' });
+        await act(async () => pull().onRefresh?.());
+        await waitFor(() => expect(screen.queryByRole('button', removedRow)).toBeNull());
+        expect(feedList).toHaveBeenCalledTimes(2);
+        expect(pull().refreshing).toBe(false);
+    });
+
+    test('S-70 S-72 내 감상을 보낸 동기화가 끝나면 라운지 목록을 다시 받고, 구독을 끊으면 받지 않아요', async () => {
+        let synced!: () => void;
+        const unsubscribe = jest.fn();
+        const disconnect = connectLoungeSyncRefresh(client, listener => { synced = listener; return unsubscribe; });
+        jest.mocked(feedList).mockResolvedValueOnce([item, removed]).mockResolvedValue([item]);
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        expect(await screen.findByRole('button', removedRow)).toBeOnTheScreen();
+        await act(async () => synced());
+        await waitFor(() => expect(screen.queryByRole('button', removedRow)).toBeNull());
+        expect(feedList).toHaveBeenCalledTimes(2);
+        disconnect();
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    test('S-72 상세가 404면 목록·검색 캐시를 무효로 해 지운 감상이 남지 않게 해요', async () => {
+        jest.mocked(feedItem).mockRejectedValue(new ApiError('http', 'NOT_FOUND', '감상이 없어요.', 404));
+        client.setQueryData(loungeKeys.feed, [item, removed]);
+        client.setQueryData(loungeKeys.books('데미안'), groups);
+        await renderRouter(routes, { initialUrl: '/lounge/review-removed' });
+        expect(await screen.findByText('삭제됐거나 비공개로 바뀐 감상이에요.')).toBeOnTheScreen();
+        await waitFor(() => expect(client.getQueryState(loungeKeys.feed)?.isInvalidated).toBe(true));
+        expect(client.getQueryState(loungeKeys.books('데미안'))?.isInvalidated).toBe(true);
+    });
 });

@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { router } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Text, TextInput, View } from 'react-native';
 import { PrimaryButton, Screen, SecondaryButton, StateView } from '../components';
 import { colors } from '../theme';
-import { useFeed } from './queries';
+import { refetchFeed, useFeed } from './queries';
 import { QueryError } from './QueryState';
 import { ReviewRow } from './ReviewRow';
 import { styles } from './styles';
@@ -11,11 +12,20 @@ import { styles } from './styles';
 export function LoungeScreen() {
     const [query, setQuery] = useState('');
     const feed = useFeed();
+    const client = useQueryClient();
+    const [refreshing, setRefreshing] = useState(false);
+    // #91: 탭으로 돌아올 때마다 최근 공개 감상을 서버에서 다시 받는다. 처음 열 때의 조회와는 겹치지 않는다.
+    useFocusEffect(useCallback(() => { void refetchFeed(client); }, [client]));
+    // #91: 아래로 당기면 새로고침한다. 조회가 끝날 때까지 표시를 유지하고, 실패는 목록 자리에 안내한다.
+    const refresh = () => {
+        setRefreshing(true);
+        void feed.refetch().finally(() => setRefreshing(false));
+    };
     const search = () => {
         if (query.trim()) router.push({ pathname: '/lounge/search', params: { query: query.trim() } });
     };
     return (
-        <Screen title="라운지">
+        <Screen title="라운지" refreshing={refreshing} onRefresh={refresh}>
             <View style={styles.section}>
                 <Text style={styles.body}>같은 책을 읽은 사람들의 감상을 찾아보세요.</Text>
                 <TextInput accessibilityRole="search" accessibilityLabel="책 이름" placeholder="책 이름을 입력해 주세요" placeholderTextColor={colors.text.muted}

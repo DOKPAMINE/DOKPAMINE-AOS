@@ -17,6 +17,7 @@ import { MixedVisibilityPrompt } from '../src/reviews/MixedVisibilityPrompt';
 
 import { navigationTheme } from '../src/theme';
 import { connectQueryManagers, queryClient } from '../src/api/queryClient';
+import { connectLoungeSyncRefresh } from '../src/lounge/queries';
 import { initializeDatabase, prepareRecordAccount } from '../src/db/client';
 
 void SplashScreen.preventAutoHideAsync();
@@ -37,6 +38,8 @@ export default function RootLayout() {
     const ready = (loaded || error != null) && databaseReady;
 
     useEffect(() => connectQueryManagers(), []);
+    // #91: 내 감상을 서버에 보낸 동기화가 끝나면 라운지 목록·검색·상세를 다시 받는다.
+    useEffect(() => connectLoungeSyncRefresh(queryClient), []);
     useEffect(() => {
         let generation = 0;
         const disconnect = connectAuthSyncLifecycle({

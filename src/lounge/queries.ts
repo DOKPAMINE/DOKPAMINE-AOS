@@ -1,6 +1,7 @@
 import { useRef } from 'react';
-import { useIsMutating, useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { feedItem, feedList, likeReview, searchBookReviews, unlikeReview } from '../api/endpoints';
+import { subscribeReviewsSynced } from '../sync/runtime';
 import { isOnline } from '../api/connectivity';
 import { ApiError, offlineError } from '../api/errors';
 import type { BookReviewSearchResponse, FeedItem, FeedListResponse, ReviewLikeResponse } from '../api/types';
@@ -22,6 +23,27 @@ const options = { networkMode: 'always' as const, retry: false, staleTime: 0 };
 export function useFeed() {
     return useQuery({ ...options, queryKey: loungeKeys.feed, queryFn: ({ signal }) => connected(() => feedList(signal)) });
 }
+/**
+ * #91 S-70: 라운지 탭은 화면이 남아 있어 다시 열어도 조회하지 않는다. 탭에 돌아올 때마다 서버에서 다시 받는다.
+ * 처음 열 때의 조회와 겹치면 새로 시작하지 않고 그 조회를 기다린다.
+ */
+export function refetchFeed(client: QueryClient) {
+    return client.refetchQueries({ queryKey: loungeKeys.feed, exact: true }, { cancelRefetch: false });
+}
+
+/**
+ * #91 S-70~72: 내 감상을 고치거나 지우거나 공개 범위를 바꿔 서버에 보낸 동기화가 끝나면 라운지 조회를 모두 무효로 한다.
+ * 화면에 있는 목록·검색·상세는 바로 다시 받고, 나머지는 다음에 열 때 받는다. 루트 레이아웃에서 한 번 연결한다.
+ */
+export function connectLoungeSyncRefresh(client: QueryClient, subscribe: (listener: () => void) => () => void = subscribeReviewsSynced) {
+    return subscribe(() => { void client.invalidateQueries({ queryKey: loungeKeys.all }); });
+}
+
+/** #91 S-72: 상세가 404면 지워졌거나 비공개로 바뀐 감상이다. 목록·검색에 남은 그 감상을 지우도록 다시 받게 한다. */
+export function invalidateLoungeLists(client: QueryClient) {
+    return client.invalidateQueries({ queryKey: loungeKeys.all, predicate: query => query.queryKey[1] !== 'item' });
+}
+
 export function useBookReviews(query: string) {
     return useQuery({ ...options, queryKey: loungeKeys.books(query), enabled: query.trim().length > 0,
         queryFn: () => connected(() => searchBookReviews(query)) });

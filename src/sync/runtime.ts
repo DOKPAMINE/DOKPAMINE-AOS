@@ -18,6 +18,12 @@ export function subscribeSyncState(listener: () => void) {
     listeners.add(listener);
     return () => { listeners.delete(listener); };
 }
+const reviewListeners = new Set<() => void>();
+/** #91: 감상을 서버에 보낸 동기화가 끝나면 알린다. 계정이 바뀌어 엔진을 새로 만들어도 구독은 유지된다. */
+export function subscribeReviewsSynced(listener: () => void) {
+    reviewListeners.add(listener);
+    return () => { reviewListeners.delete(listener); };
+}
 
 /** DB 준비 후 한 번 연결한다. 개인 기록 변경·앱 활성화·연결 복구에 전송을 예약한다. */
 export function startRecordSync(records: RecordRepository, accessToken: string): SyncEngine {
@@ -46,6 +52,7 @@ export function startRecordSync(records: RecordRepository, accessToken: string):
     initialRestore = current.afterLogin();
     void initialRestore.then(refreshCovers, refreshCovers);
     const unsubscribeState = current.subscribe(() => listeners.forEach(listener => listener()));
+    const unsubscribeReviews = current.subscribeReviewUploads(() => reviewListeners.forEach(listener => listener()));
     const unsubscribeRecords = records.subscribe(() => { void trigger(); });
     let connected = false;
     const unsubscribeNetwork = NetInfo.addEventListener(state => {
@@ -56,7 +63,7 @@ export function startRecordSync(records: RecordRepository, accessToken: string):
     const appSubscription = AppState.addEventListener('change', state => {
         if (state === 'active') { void trigger(); refreshCovers(); }
     });
-    cleanup = () => { controller.abort(); unsubscribeState(); unsubscribeRecords(); unsubscribeNetwork(); appSubscription.remove(); };
+    cleanup = () => { controller.abort(); unsubscribeState(); unsubscribeReviews(); unsubscribeRecords(); unsubscribeNetwork(); appSubscription.remove(); };
     return current;
 }
 
