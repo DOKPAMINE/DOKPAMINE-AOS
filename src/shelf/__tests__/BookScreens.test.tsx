@@ -32,7 +32,7 @@ beforeEach(async () => {
     jest.mocked(initializeDatabase).mockResolvedValue(prepared);
     (Storage as unknown as { store: Map<string, string> }).store.clear();
     jest.mocked(tokenStorage.getSession).mockResolvedValue({ accessToken: 'token', expiresAt: '2099-01-01T00:00:00Z', userId: 'reader' });
-    repository.books.save({ id, title: '데미안', author: '헤세', isbn: null, publisher: null, coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null,
+    repository.books.save({ id, title: '데미안', author: '헤세', isbn: null, publisher: null, coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, catalogPending: false,
         genre: '소설/시', status: 'READING', totalPages: 240, currentPage: 84, completedCount: 0, completedAt: null });
 });
 afterEach(() => { memory.connection.close(); jest.restoreAllMocks(); });

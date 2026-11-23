@@ -44,8 +44,8 @@ function BookEditForm({ book, repository }: { book: BookRecord; repository: Reco
             return;
         }
         try {
-            repository.books.save({ ...latest, ...changes });
-            detail();
+            repository.books.save({ ...latest, ...changes, catalogPending: false });
+                        detail();
         } catch { setError('저장하지 못했어요. 기기 저장 공간을 확인하고 다시 시도해 주세요.'); }
     };
     // S-34: 책 삭제는 편집 화면 맨 아래에 두고, 함께 지워지는 기록을 확인한 뒤에만 삭제한다.

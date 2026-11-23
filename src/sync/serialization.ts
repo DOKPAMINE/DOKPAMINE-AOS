@@ -15,7 +15,7 @@ const local = (row: { createdAt: string; deleted: boolean }) => ({
 });
 
 export function bookDto(row: BookRecord): BookDto {
-    const { syncPending, localVersion, ...record } = row;
+    const { syncPending, localVersion, catalogPending, ...record } = row;
     return { ...record, createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt), completedAt: row.completedAt === null ? null : iso(row.completedAt) };
 }
 export function sessionDto(row: SessionRecord): SessionDto {
@@ -56,7 +56,7 @@ export function snapshotRecords(snapshot: SyncSnapshot) {
             const completedAt = row.completedAt == null ? null : timestamp(row.completedAt);
             totalPages.set(row.id, row.totalPages);
             return { ...row, ...createdAt, isbn: row.isbn ?? null, publisher: row.publisher ?? null,
-                coverUrl: row.coverUrl ?? null, sideCoverUrl: row.sideCoverUrl ?? null, yes24ProductUrl: row.yes24ProductUrl ?? null,
+                coverUrl: row.coverUrl ?? null, sideCoverUrl: row.sideCoverUrl ?? null, yes24ProductUrl: row.yes24ProductUrl ?? null, catalogPending: false,
                 genre: normalizeGenre(row.genre) ?? '기타',                completedAt, updatedAt };
         }),
         sessions: convert(snapshot.sessions, (row): SessionRecord => {

@@ -1,8 +1,8 @@
 import NetInfo from '@react-native-community/netinfo';
-import { AppState } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import { isOnline, isOnlineState } from '../api/connectivity';
 import { putBook, putQuote, putReview, putSession, syncSnapshot } from '../api/endpoints';
-import { refreshMissingCovers } from '../books/coverRefresh';
+import { refreshFromCatalog  } from '../books/coverRefresh';
 import type { RecordRepository } from '../db/repository';
 import { createSyncEngine, type SyncEngine, type SyncState } from './engine';
 
@@ -44,11 +44,16 @@ export function startRecordSync(records: RecordRepository, accessToken: string):
         if (engine !== current) return;
         await current.sync();
     }
-    // FR-01 / S-30: 비어 있는 표지·책등은 앱 시작(복원 이후)·앱 활성화·연결 복구 때 다시 채운다.
-    function refreshCovers() {
-        if (engine !== current) return;
-        void refreshMissingCovers(records).catch(() => undefined);
-    }
+        // FR-01 / S-30: 앱 시작(복원 이후)·앱 활성화·연결 복구 때 빈 표지·책등을 채우고,
+        // 오프라인에서 직접 입력한 책은 ISBN 조회 결과로 책 정보를 바꾼 뒤 안내한다.
+        function refreshCovers() {
+            if (engine !== current) return;
+            void refreshFromCatalog(records).then(({ updatedTitles }) => {
+                if (engine !== current || updatedTitles.length === 0) return;
+                Alert.alert('책 정보를 ISBN으로 채웠어요',
+                    `오프라인에서 직접 입력한 책의 정보를 ISBN 조회 결과로 바꿨어요.\n\n${updatedTitles.map(title => `· ${title}`).join('\n')}`);
+            }).catch(() => undefined);
+        }
     initialRestore = current.afterLogin();
     void initialRestore.then(refreshCovers, refreshCovers);
     const unsubscribeState = current.subscribe(() => listeners.forEach(listener => listener()));

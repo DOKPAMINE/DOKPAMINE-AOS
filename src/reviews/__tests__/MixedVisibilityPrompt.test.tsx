@@ -14,7 +14,7 @@ jest.mock('../../sync', () => ({ getSyncState: jest.fn(), subscribeSyncState: je
 
 const uuid = (last: number) => `00000000-0000-4000-8000-${String(last).padStart(12, '0')}`;
 const book = (id: string, title: string): SaveInput<BookRecord> => ({ id, title, author: '지은이', isbn: null, publisher: null, totalPages: 200, currentPage: 0,
-    genre: '소설/시', status: 'READING', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, completedCount: 0, completedAt: null });
+    genre: '소설/시', status: 'READING', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, catalogPending: false, completedCount: 0, completedAt: null });
 const message = (title: string) => `『${title}』의 감상 중 일부만 공개돼 있어요. 이 책의 감상을 어떻게 할까요?`;
 let memory: ReturnType<typeof memorySQLite>;
 let repository: RecordRepository;
