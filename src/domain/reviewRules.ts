@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { kstDate } from './kstDate';
 
 type ReviewEntry = { id: string; oneLine: string | null; body: string | null; createdAt: number; updatedAt: number };
 
@@ -26,12 +27,11 @@ export function numberedBookReports<T extends ReviewEntry>(reviews: readonly T[]
 }
 
 /**
- * #95 S-50: 독후감 카드 위쪽 문구. 날짜는 처음 쓴 날(createdAt)을 기기 시간대로 보여 주고(개인 날짜 경계의 KST 고정과 다르다),
- * 스크린리더는 "독후감 1, 2026년 11월 15일"처럼 읽는다.
+ * #95 S-50: 독후감 카드 위쪽 문구. 날짜는 처음 쓴 날(createdAt)을 앱의 다른 날짜처럼 KST(kstDate) 기준으로 보여 주고
+ * 기기 시간대에 영향을 받지 않는다. 스크린리더는 "독후감 1, 2026년 11월 15일"처럼 읽는다.
  */
 export function reportHeading(number: number, createdAt: number): { text: string; label: string } {
-    const date = new Date(createdAt);
-    const [year, month, day] = [date.getFullYear(), date.getMonth() + 1, date.getDate()];
+    const [year, month, day] = kstDate(createdAt).split('-').map(Number);
     return { text: `독후감 ${number} · ${year}. ${month}. ${day}.`, label: `독후감 ${number}, ${year}년 ${month}월 ${day}일` };
 }
 

@@ -1,4 +1,5 @@
 import { bookOneLine, bookReports, bookVisibility, numberedBookReports, reportHeading, emptyQuoteFields, hasOneLineConflict, mixedVisibilityBooks, needsPublishConfirm, oneLineSchema, planOneLineSave, planQuoteSave, planReportSave, planReviewPartDelete, quoteFieldsOf, quoteSchema, reportSchema, visibilityToKeepAfterDelete } from '../reviewRules';
+import { KST_OFFSET_MS } from '../kstDate';
 
 test.each([[1000, true], [1001, false]])('FR-07 S-52 문장 %i자 허용 여부는 %s예요', (count, success) => {
     expect(quoteSchema.safeParse({ ...emptyQuoteFields, text: '가'.repeat(count) }).success).toBe(success);
@@ -135,6 +136,9 @@ test('#91 FR-08 S-50 감상을 지워 0개가 될 때만 지우기 직전의 책
 });
 
 describe('#95 S-50 독후감 번호와 날짜', () => {
+    // KST 벽시계 시각을 타임스탬프로 바꾼다. 테스트를 돌리는 기기의 시간대와 무관하다.
+    const kst = (year: number, month: number, day: number, hour = 0, minute = 0, second = 0, ms = 0) =>
+        Date.UTC(year, month, day, hour, minute, second, ms) - KST_OFFSET_MS;
     test('먼저 쓴 독후감이 1번이고 화면에는 최신 작성 순으로 놓이며 한줄평만 든 감상은 세지 않아요', () => {
         const numbered = numberedBookReports([entry('a', '한줄평', null, 5), entry('b', null, '둘째', 20), entry('c', null, '첫째', 10), entry('d', null, '셋째', 30)]);
         expect(numbered.map(({ report, number }) => [report.id, number])).toEqual([['d', 3], ['b', 2], ['c', 1]]);
@@ -153,11 +157,11 @@ describe('#95 S-50 독후감 번호와 날짜', () => {
         expect(bookReports([entry('b', null, '독후감', 10), entry('a', null, '독후감', 10)]).map(report => report.id)).toEqual(['b', 'a']);
     });
     test('카드 문구는 "독후감 1 · 2026. 11. 15." 형식이고 스크린리더는 "독후감 1, 2026년 11월 15일"로 읽어요', () => {
-        expect(reportHeading(1, new Date(2026, 10, 15, 9, 30).getTime())).toEqual({ text: '독후감 1 · 2026. 11. 15.', label: '독후감 1, 2026년 11월 15일' });
-        expect(reportHeading(12, new Date(2026, 0, 5).getTime())).toEqual({ text: '독후감 12 · 2026. 1. 5.', label: '독후감 12, 2026년 1월 5일' });
+        expect(reportHeading(1, kst(2026, 10, 15, 9, 30))).toEqual({ text: '독후감 1 · 2026. 11. 15.', label: '독후감 1, 2026년 11월 15일' });
+        expect(reportHeading(12, kst(2026, 0, 5))).toEqual({ text: '독후감 12 · 2026. 1. 5.', label: '독후감 12, 2026년 1월 5일' });
     });
-    test('날짜는 기기 시간대의 자정을 경계로 바뀌어요', () => {
-        expect(reportHeading(1, new Date(2026, 10, 15, 23, 59, 59, 999).getTime()).text).toBe('독후감 1 · 2026. 11. 15.');
-        expect(reportHeading(1, new Date(2026, 10, 16, 0, 0).getTime()).text).toBe('독후감 1 · 2026. 11. 16.');
+    test('날짜는 기기 시간대와 상관없이 KST 자정을 경계로 바뀌어요', () => {
+        expect(reportHeading(1, kst(2026, 10, 15, 23, 59, 59, 999)).text).toBe('독후감 1 · 2026. 11. 15.');
+        expect(reportHeading(1, kst(2026, 10, 16, 0, 0)).text).toBe('독후감 1 · 2026. 11. 16.');
     });
 });
