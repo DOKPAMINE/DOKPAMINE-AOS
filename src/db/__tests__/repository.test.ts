@@ -440,3 +440,13 @@ test('#91 S-50 지울 한줄평이 없으면 아무것도 바꾸지 않고 알�
     expect(listener).not.toHaveBeenCalled();
     expect(repository.reviews.get(reviewId)).toEqual(before);
 });
+
+test('#95 NFR-05 S-50 서버에서 지워진 독후감과의 충돌을 초안 저장으로 해결해도 처음 쓴 시각을 이어받아요', () => {
+    repository.reviews.save({ id: reviewId, bookId, oneLine: null, body: '초안 독후감', visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.markConflict(reviewId);
+    repository.reviews.setConflictLatest(reviewId, null);
+    now = 900000;
+    const newId = '00000000-0000-4000-8000-000000000005';
+    repository.reviews.resolveConflict(reviewId, null, 'PRIVATE', newId);
+    expect(repository.reviews.get(newId)).toMatchObject({ body: '초안 독후감', createdAt: 100000, updatedAt: 900000, syncPending: true });
+});
