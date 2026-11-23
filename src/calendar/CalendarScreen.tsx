@@ -67,7 +67,7 @@ function CalendarContent({ initialDate, records }: {
                 <SecondaryButton label="›" accessibilityLabel="다음 달" onPress={() => setSelectedDate(value => moveCalendarMonth(value, 1))}
                     disabled={month === '9999-12'} />
             </View>
-            <ScrollView horizontal accessibilityLabel={`${monthLabel} 독서 달력`}>
+            <ScrollView horizontal accessibilityLabel={`${monthLabel} 독서 달력`} contentContainerStyle={styles.calendarScroll}>
                 <View style={styles.calendar}>
                     <View style={styles.week}>
                         {weekdays.map(day => <Text key={day} style={styles.weekday}>{day}</Text>)}
@@ -133,6 +133,8 @@ const styles = StyleSheet.create({
     subheading: { ...typography.titleSmall, color: colors.brand.espresso },
     body: { ...typography.body, color: colors.brand.espresso, flexShrink: 1 },
     muted: { ...typography.bodySmall, color: colors.text.muted },
+    // 가로 ScrollView의 내용 컨테이너가 화면 폭 이상이 되어야 달력이 화면 폭을 채운다.
+    calendarScroll: { flexGrow: 1 },
     calendar: { minWidth: sizes.minTouch * 7, flexGrow: 1 },
     week: { flexDirection: 'row' },
     weekday: { ...typography.label, color: colors.text.muted, textAlign: 'center', flex: 1, minWidth: sizes.minTouch, paddingVertical: spacing.sm },
