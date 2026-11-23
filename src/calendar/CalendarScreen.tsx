@@ -1,14 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Screen, SecondaryButton, StateView } from '../components';
 import {
-    calendarClock, calendarDate, calendarDuration, calendarWeeks, monthlyStats,
+    booksReadByDate, calendarClock, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
     moveCalendarMonth, readingDays, sessionsOn, type GroupStat,
 } from '../domain/calendarRules';
 import { pagesRead } from '../domain/readingTypes';
 import { colors, fontFamilies, radii, sizes, spacing, typography } from '../theme';
+import { DayCovers } from './DayCovers';
 import { useCalendarRecords } from './useCalendarRecords';
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
@@ -51,6 +52,9 @@ function CalendarContent({ initialDate, records }: {
     const [selectedDate, setSelectedDate] = useState(() => calendarDate(initialDate, Date.now()));
 
     const month = selectedDate.slice(0, 7);
+    // 날짜를 눌러도 다시 계산하지 않고, 저장소 변경으로 기록 배열이 바뀌거나 달이 바뀔 때만 한 달 치를 묶는다.
+    const booksByDate = useMemo(() => booksReadByDate(records.sessions, records.books, month),
+        [records.sessions, records.books, month]);
     const monthLabel = `${Number(month.slice(0, 4))}년 ${Number(month.slice(5))}월`;
     const dateLabel = `${Number(month.slice(5))}월 ${Number(selectedDate.slice(8))}일`;
     const days = readingDays(records.sessions, month);
@@ -78,14 +82,19 @@ function CalendarContent({ initialDate, records }: {
                                 if (day === null) return <View key={weekday} style={styles.day} />;
                                 const value = `${month}-${String(day).padStart(2, '0')}`;
                                 const selected = value === selectedDate;
-                                const read = days.has(day);
+                                const dayBooks = booksByDate.get(value) ?? [];
+                                const titles = dayBooks.map(item => bookById.get(item.bookId)?.title ?? '찾을 수 없는 책');
+                                const { shown, remaining } = dayCovers(dayBooks);
                                 return (
                                     <Pressable key={weekday} accessibilityRole="button"
-                                        accessibilityLabel={`${Number(month.slice(5))}월 ${day}일, ${read ? '독서함' : '독서 기록 없음'}`}
+                                        accessibilityLabel={`${Number(month.slice(5))}월 ${day}일, ${dayBooks.length > 0
+                                            ? `${dayBooks.length}권 읽음: ${titles.join(', ')}` : '독서 기록 없음'}`}
                                         accessibilityState={{ selected }} onPress={() => setSelectedDate(value)}
                                         style={({ pressed }) => [styles.day, selected && styles.selectedDay, pressed && styles.pressed]}>
                                         <Text style={[styles.dayNumber, selected && styles.selectedText]}>{day}</Text>
-                                        <Text accessible={false} style={[styles.dayMark, selected && styles.selectedText]}>{read ? '●' : ' '}</Text>
+                                        <DayCovers remaining={remaining} covers={shown.map((item, index) => ({
+                                            uri: bookById.get(item.bookId)?.coverUrl ?? null, title: titles[index],
+                                        }))} />
                                     </Pressable>
                                 );
                             })}
@@ -93,7 +102,6 @@ function CalendarContent({ initialDate, records }: {
                     ))}
                 </View>
             </ScrollView>
-            <Text style={styles.muted}>● 독서한 날 · 테두리로 선택한 날짜를 표시해요.</Text>
             {days.size === 0 && <StateView kind="empty" message="이 달에는 독서 기록이 없어요." />}
 
             <View style={styles.section}>
@@ -138,11 +146,11 @@ const styles = StyleSheet.create({
     calendar: { minWidth: sizes.minTouch * 7, flexGrow: 1 },
     week: { flexDirection: 'row' },
     weekday: { ...typography.label, color: colors.text.muted, textAlign: 'center', flex: 1, minWidth: sizes.minTouch, paddingVertical: spacing.sm },
-    day: { flex: 1, minWidth: sizes.minTouch, minHeight: sizes.button, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.surface.paper, borderRadius: radii.small },
+    // S-60: 위쪽 날짜 숫자, 그 아래 2:3 표지 영역. 위에서부터 쌓아 같은 줄 칸의 표지 위치를 맞춘다.
+    day: { flex: 1, flexBasis: 0, minWidth: sizes.minTouch, minHeight: sizes.button, alignItems: 'stretch', justifyContent: 'flex-start', gap: spacing.xs, padding: spacing.xs, borderWidth: 1, borderColor: colors.surface.paper, borderRadius: radii.small },
     selectedDay: { backgroundColor: colors.surface.sandSoft, borderColor: colors.brand.espresso },
     selectedText: { fontFamily: fontFamilies.bold },
-    dayNumber: { ...typography.label, color: colors.brand.espresso },
-    dayMark: { ...typography.footnote, color: colors.text.muted },
+    dayNumber: { ...typography.label, color: colors.brand.espresso, textAlign: 'center' },
     section: { gap: spacing.md },
     session: { minHeight: sizes.minTouch, gap: spacing.sm, paddingVertical: spacing.md, borderBottomWidth: 1, borderColor: colors.line.border },
     statistics: { gap: spacing.lg, padding: spacing.lg, backgroundColor: colors.surface.sandSoft, borderRadius: radii.card },

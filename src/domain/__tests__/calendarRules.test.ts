@@ -1,5 +1,5 @@
 import {
-    calendarClock, calendarDate, calendarDuration, calendarWeeks, monthlyStats,
+    booksReadByDate, booksReadOn, calendarClock, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
     moveCalendarMonth, readingDays, sessionsOn, streakDays, thisWeekSeconds,
 } from '../calendarRules';
 import { parseStartedAt } from '../kstDate';
@@ -132,4 +132,91 @@ test('FR-05 S-60 달력은 일요일부터 시작하고 윤년과 여섯 주인 
 test('FR-05 FR-06 S-61 S-62 시각은 KST로, 시간은 누적 시간과 분으로 표시해요', () => {
     expect(calendarClock(Date.parse('2026-10-31T15:00:00Z'))).toBe('00:00');
     expect([0, 59, 60, 1800, 3600, 90000].map(calendarDuration)).toEqual(['0초', '59초', '1분', '30분', '1시간 0분', '25시간 0분']);
+});
+
+test.each([
+    [0, 0, 0], [1, 1, 0], [2, 2, 0], [3, 2, 1], [5, 2, 3],
+])('FR-05 S-60 그날 %i권을 읽으면 표지 %i개를 보여 주고 남은 권수는 %i권이에요', (count, shown, remaining) => {
+    const books = Array.from({ length: count }, (_, index) => `book-${index}`);
+    expect(dayCovers(books)).toEqual({ shown: books.slice(0, shown), remaining });
+});
+
+test('FR-05 S-60 그날 읽은 책은 책별 읽은 시간을 합쳐 긴 책부터 보여 줘요', () => {
+    const list = [
+        session('2026-10-05', 600, { id: 'a1', bookId: 'a' }),
+        session('2026-10-05', 900, { id: 'b1', bookId: 'b' }),
+        session('2026-10-05', 600, { id: 'a2', bookId: 'a', startedAt: at('2026-10-05') + 3_600_000 }),
+        session('2026-10-05', 300, { id: 'c1', bookId: 'c' }),
+        session('2026-10-06', 9999, { id: 'other-day', bookId: 'c' }),
+    ];
+    expect(booksReadOn(list, [], '2026-10-05')).toEqual([
+        { bookId: 'a', seconds: 1200, firstStartedAt: at('2026-10-05') },
+        { bookId: 'b', seconds: 900, firstStartedAt: at('2026-10-05') },
+        { bookId: 'c', seconds: 300, firstStartedAt: at('2026-10-05') },
+    ]);
+});
+
+test('FR-05 S-60 읽은 시간이 같으면 그날 먼저 시작한 책부터 보여 줘요', () => {
+    const list = [
+        session('2026-10-05', 600, { id: 'late', bookId: 'late', startedAt: at('2026-10-05') + 60_000 }),
+        session('2026-10-05', 600, { id: 'early', bookId: 'early', startedAt: at('2026-10-05') - 60_000 }),
+        session('2026-10-05', 600, { id: 'middle', bookId: 'middle' }),
+    ];
+    expect(booksReadOn(list, [], '2026-10-05').map(item => item.bookId)).toEqual(['early', 'middle', 'late']);
+});
+
+test('FR-05 S-60 삭제된 세션과 삭제된 책의 기록은 빼고 목록에 없는 책은 남겨요', () => {
+    const list = [
+        session('2026-10-05', 3600, { id: 'deleted-session', bookId: 'kept', deleted: true }),
+        session('2026-10-05', 1800, { id: 'deleted-book', bookId: 'gone' }),
+        session('2026-10-05', 600, { id: 'kept', bookId: 'kept' }),
+        session('2026-10-05', 300, { id: 'missing', bookId: 'missing' }),
+    ];
+    const books = [book('kept', '소설'), book('gone', '소설', '작가', { deleted: true })];
+    expect(booksReadOn(list, books, '2026-10-05')).toEqual([
+        { bookId: 'kept', seconds: 600, firstStartedAt: at('2026-10-05') },
+        { bookId: 'missing', seconds: 300, firstStartedAt: at('2026-10-05') },
+    ]);
+    expect(booksReadOn(list, books, '2026-10-04')).toEqual([]);
+});
+
+test('FR-05 S-60 읽은 시간과 시작 시각이 모두 같으면 책 ID 순서로 보여 줘요', () => {
+    const list = ['c', 'a', 'b'].map(bookId => session('2026-10-05', 600, { id: `${bookId}1`, bookId }));
+    expect(booksReadOn(list, [], '2026-10-05').map(item => item.bookId)).toEqual(['a', 'b', 'c']);
+    expect(booksReadByDate(list, [], '2026-10').get('2026-10-05')?.map(item => item.bookId)).toEqual(['a', 'b', 'c']);
+});
+
+test('FR-05 S-60 한 달 치를 날짜별로 한 번에 묶은 결과는 날짜마다 booksReadOn과 같아요', () => {
+    const list = [
+        session('2026-10-05', 600, { id: 'a1', bookId: 'a' }),
+        session('2026-10-05', 900, { id: 'b1', bookId: 'b' }),
+        session('2026-10-05', 600, { id: 'a2', bookId: 'a', startedAt: at('2026-10-05') + 3_600_000 }),
+        session('2026-10-06', 600, { id: 'late', bookId: 'b', startedAt: at('2026-10-06') + 60_000 }),
+        session('2026-10-06', 600, { id: 'early', bookId: 'c', startedAt: at('2026-10-06') - 60_000 }),
+        session('2026-10-07', 3600, { id: 'deleted-session', bookId: 'a', deleted: true }),
+        session('2026-10-08', 1800, { id: 'deleted-book', bookId: 'gone' }),
+        session('2026-10-09', 300, { id: 'missing', bookId: 'missing' }),
+        // KST 월 경계: 10월 31일 23:59:59는 10월, 11월 1일 00:00은 11월
+        session('2026-10-31', 120, { id: 'oct-last', bookId: 'a', startedAt: Date.parse('2026-10-31T14:59:59Z') }),
+        session('2026-11-01', 120, { id: 'nov-first', bookId: 'a', startedAt: Date.parse('2026-10-31T15:00:00Z') }),
+        session('2026-09-30', 600, { id: 'other-month', bookId: 'a' }),
+    ];
+    const books = [book('a', '소설'), book('b', '소설'), book('c', '소설'), book('gone', '소설', '작가', { deleted: true })];
+    const byDate = booksReadByDate(list, books, '2026-10');
+    for (let day = 1; day <= 31; day += 1) {
+        const date = `2026-10-${String(day).padStart(2, '0')}`;
+        const expected = booksReadOn(list, books, date);
+        expect(byDate.get(date) ?? []).toEqual(expected);
+        expect(byDate.has(date)).toBe(expected.length > 0);
+    }
+    expect([...byDate.keys()].sort()).toEqual(['2026-10-05', '2026-10-06', '2026-10-09', '2026-10-31']);
+    expect(byDate.get('2026-10-05')).toEqual([
+        { bookId: 'a', seconds: 1200, firstStartedAt: at('2026-10-05') },
+        { bookId: 'b', seconds: 900, firstStartedAt: at('2026-10-05') },
+    ]);
+    expect(booksReadByDate(list, books, '2026-11')).toEqual(new Map([
+        ['2026-11-01', [{ bookId: 'a', seconds: 120, firstStartedAt: Date.parse('2026-10-31T15:00:00Z') }]],
+    ]));
+    expect(booksReadByDate([], books, '2026-10').size).toBe(0);
+    expect(() => booksReadByDate(list, books, '2026-1')).toThrow(RangeError);
 });
