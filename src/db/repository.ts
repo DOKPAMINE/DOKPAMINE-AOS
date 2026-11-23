@@ -268,6 +268,8 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
                     if (!current.deleted) {
                         reviewEntity.save({ id: newId, bookId: current.bookId, oneLine: current.oneLine,
                             body: current.body, visibility, publishedAt: null });
+                        // #95 S-50: 새 ID로 다시 만들어도 같은 감상이므로 처음 쓴 시각을 이어받는다. 독후감 번호와 날짜가 이 값으로 정해진다.
+                        db.update(schema.reviews).set({ createdAt: current.createdAt }).where(eq(schema.reviews.id, newId)).run();
                     }
                     db.update(schema.reviews).set({ conflict: null, deleted: true, syncPending: false })
                         .where(eq(schema.reviews.id, id)).run();
