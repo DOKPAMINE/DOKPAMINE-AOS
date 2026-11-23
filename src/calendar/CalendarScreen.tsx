@@ -89,7 +89,9 @@ function CalendarContent({ initialDate, records }: {
                                         accessibilityState={{ selected }} onPress={() => setSelectedDate(value)}
                                         style={({ pressed }) => [styles.day, selected && styles.selectedDay, pressed && styles.pressed]}>
                                         <Text style={[styles.dayNumber, selected && styles.selectedText]}>{day}</Text>
-                                        <DayCovers covers={shown.map(item => bookById.get(item.bookId)?.coverUrl ?? null)} remaining={remaining} />
+                                        <DayCovers remaining={remaining} covers={shown.map((item, index) => ({
+                                            uri: bookById.get(item.bookId)?.coverUrl ?? null, title: titles[index],
+                                        }))} />
                                     </Pressable>
                                 );
                             })}

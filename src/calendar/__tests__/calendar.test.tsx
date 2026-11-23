@@ -288,3 +288,64 @@ test('FR-05 S-60 날짜 칸 라벨에 읽은 권수와 모든 책 제목을 담�
     expect(within(button).getByTestId('calendar-cover-image', hidden).props.accessible).toBe(false);
     expect(screen.getByRole('button', { name: '11월 4일, 독서 기록 없음' })).toBeOnTheScreen();
 });
+
+function coverTitles(name: string) {
+    return dayCell(name).queryAllByTestId('calendar-cover-title', hidden).map(title => title.props.children);
+}
+
+test('FR-05 S-60 표지가 없거나 못 불러온 책은 기본 표지에 제목을, 찾을 수 없는 책은 "찾을 수 없는 책"을 보여 줘요', async () => {
+    repository.books.list.mockReturnValue([
+        coverBook('none', '표지 없는 책', null),
+        coverBook('broken', '깨진 표지 책', 'https://cover.test/broken.jpg'),
+        coverBook('photo', '사진 있는 책', 'https://cover.test/photo.jpg'),
+    ]);
+    repository.sessions.list.mockReturnValue([
+        session('n1', '2026-11-03', 600, { bookId: 'none' }),
+        session('b1', '2026-11-04', 600, { bookId: 'broken' }),
+        session('m1', '2026-11-05', 600, { bookId: 'missing' }),
+        session('p1', '2026-11-06', 600, { bookId: 'photo' }),
+    ]);
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    expect(coverTitles('11월 3일, 1권 읽음: 표지 없는 책')).toEqual(['표지 없는 책']);
+    const broken = '11월 4일, 1권 읽음: 깨진 표지 책';
+    expect(coverTitles(broken)).toEqual([]);
+    await act(async () => fireEvent(dayCell(broken).getByTestId('calendar-cover-image', hidden), 'error'));
+    expect(coverTitles(broken)).toEqual(['깨진 표지 책']);
+    expect(coverTitles('11월 5일, 1권 읽음: 찾을 수 없는 책')).toEqual(['찾을 수 없는 책']);
+    expect(coverTitles('11월 6일, 1권 읽음: 사진 있는 책')).toEqual([]);
+    const title = dayCell('11월 3일, 1권 읽음: 표지 없는 책').getByTestId('calendar-cover-title', hidden);
+    expect(StyleSheet.flatten(title.props.style)).toMatchObject({ fontSize: 11, textAlign: 'center' });
+    expect(title.props).toMatchObject({ numberOfLines: 3, ellipsizeMode: 'tail', maxFontSizeMultiplier: 1 });
+});
+
+test('FR-05 S-60 2권으로 반씩 나뉜 칸에서도 기본 표지마다 제목을 칸 높이에 맞는 줄 수로 말줄임해요', async () => {
+    repository.books.list.mockReturnValue([coverBook('a', '아주 긴 제목의 첫 번째 책', null), coverBook('b', '두 번째 책', 'https://cover.test/b.jpg')]);
+    repository.sessions.list.mockReturnValue([
+        session('a1', '2026-11-03', 1200, { bookId: 'a' }),
+        session('b1', '2026-11-03', 600, { bookId: 'b' }),
+        session('m1', '2026-11-03', 300, { bookId: 'missing' }),
+    ]);
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    const name = '11월 3일, 3권 읽음: 아주 긴 제목의 첫 번째 책, 두 번째 책, 찾을 수 없는 책';
+    expect(coverTitles(name)).toEqual(['아주 긴 제목의 첫 번째 책']);
+    await act(async () => fireEvent(dayCell(name).getByTestId('calendar-cover-image', hidden), 'error'));
+    expect(coverTitles(name)).toEqual(['아주 긴 제목의 첫 번째 책', '두 번째 책']);
+    const [first] = dayCell(name).getAllByTestId('calendar-cover-default', hidden);
+    await act(async () => fireEvent(first, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 19, height: 58 } } }));
+    const [firstTitle, secondTitle] = dayCell(name).getAllByTestId('calendar-cover-title', hidden);
+    expect(firstTitle.props.numberOfLines).toBe(4);
+    expect(secondTitle.props.numberOfLines).toBe(3);
+    await act(async () => fireEvent(first, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 19, height: 5 } } }));
+    expect(dayCell(name).getAllByTestId('calendar-cover-title', hidden)[0].props.numberOfLines).toBe(1);
+});
+
+test('FR-05 S-60 기본 표지의 제목 글자는 보조 기술에서 건너뛰고 날짜 칸 라벨로만 전달해요', async () => {
+    repository.books.list.mockReturnValue([coverBook('a', '표지 없는 책', null)]);
+    repository.sessions.list.mockReturnValue([session('a1', '2026-11-03', 600, { bookId: 'a' })]);
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    expect(screen.queryByText('표지 없는 책')).toBeNull();
+    const cell = dayCell('11월 3일, 1권 읽음: 표지 없는 책');
+    const title = cell.getByTestId('calendar-cover-title', hidden);
+    expect(title.props).toMatchObject({ accessible: false, importantForAccessibility: 'no' });
+    expect(cell.getByTestId('calendar-cover-default', hidden).props.importantForAccessibility).toBe('no-hide-descendants');
+});
