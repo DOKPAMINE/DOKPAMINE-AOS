@@ -180,6 +180,12 @@ test('FR-05 S-60 삭제된 세션과 삭제된 책의 기록은 빼고 목록에
     expect(booksReadOn(list, books, '2026-10-04')).toEqual([]);
 });
 
+test('FR-05 S-60 읽은 시간과 시작 시각이 모두 같으면 책 ID 순서로 보여 줘요', () => {
+    const list = ['c', 'a', 'b'].map(bookId => session('2026-10-05', 600, { id: `${bookId}1`, bookId }));
+    expect(booksReadOn(list, [], '2026-10-05').map(item => item.bookId)).toEqual(['a', 'b', 'c']);
+    expect(booksReadByDate(list, [], '2026-10').get('2026-10-05')?.map(item => item.bookId)).toEqual(['a', 'b', 'c']);
+});
+
 test('FR-05 S-60 한 달 치를 날짜별로 한 번에 묶은 결과는 날짜마다 booksReadOn과 같아요', () => {
     const list = [
         session('2026-10-05', 600, { id: 'a1', bookId: 'a' }),
