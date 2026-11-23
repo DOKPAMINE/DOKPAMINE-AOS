@@ -569,3 +569,51 @@ test('#91 S-50 카드의 수정·삭제 버튼은 가로·세로 모두 44dp 이
         expect(await screen.findByRole('button', { name })).toHaveStyle({ minHeight: sizes.minTouch, minWidth: sizes.minTouch });
     }
 });
+
+describe('#95 S-50 독후감 카드의 번호와 날짜', () => {
+    const id = (n: number) => `00000000-0000-4000-8000-00000000005${n}`;
+    let time: number;
+    let timed: RecordRepository;
+    beforeEach(async () => {
+        time = new Date(2026, 10, 1, 21, 0).getTime();
+        timed = createRecordRepository((await prepareRecordDatabase(memory.sqlite)).db, () => time);
+    });
+    const save = (n: number, oneLine: string | null, body: string | null, at: Date) => {
+        time = at.getTime();
+        timed.reviews.save({ id: id(n), bookId, oneLine, body, visibility: 'PRIVATE', publishedAt: null });
+    };
+
+    test('먼저 쓴 독후감이 1번이고 처음 쓴 날짜를 보여 주며 스크린리더는 날짜를 말로 읽어요', async () => {
+        save(1, '예전 한줄평', '함께 쓴 독후감', new Date(2026, 10, 1, 21, 0));
+        save(2, null, '둘째 독후감', new Date(2026, 10, 15, 8, 0));
+        await renderRouter(routes, { initialUrl: base });
+        const headings = await screen.findAllByText(/^독후감 \d+ · /);
+        expect(headings.map(node => node.props.children)).toEqual(['독후감 2 · 2026. 11. 15.', '독후감 1 · 2026. 11. 1.']);
+        expect(screen.getByLabelText('독후감 2, 2026년 11월 15일')).toBeOnTheScreen();
+        expect(screen.getByLabelText('독후감 1, 2026년 11월 1일')).toBeOnTheScreen();
+    });
+
+    test('독후감을 고쳐도 번호와 날짜가 그대로이고, 지우면 남은 것끼리 다시 매겨요', async () => {
+        save(1, null, '첫 독후감', new Date(2026, 10, 1, 21, 0));
+        save(2, null, '둘째 독후감', new Date(2026, 10, 15, 8, 0));
+        time = new Date(2026, 10, 20, 9, 0).getTime();
+        timed.reviews.updateReport(id(1), '고친 첫 독후감');
+        const alert = jest.spyOn(Alert, 'alert');
+        await renderRouter(routes, { initialUrl: base });
+        expect(await screen.findByText('독후감 1 · 2026. 11. 1.')).toBeOnTheScreen();
+        await fireEvent.press(screen.getByRole('button', { name: '독후감 고친 첫 독후감 삭제' }));
+        const buttons = alert.mock.calls.at(-1)?.[2] as { text: string; onPress?: () => void }[];
+        await act(async () => { buttons.find(item => item.text === '삭제')?.onPress?.(); });
+        expect(screen.queryByText('고친 첫 독후감')).toBeNull();
+        expect(screen.getAllByText(/^독후감 \d+ · /).map(node => node.props.children)).toEqual(['독후감 1 · 2026. 11. 15.']);
+    });
+
+    test('충돌한 독후감은 번호에서 빼요', async () => {
+        save(1, null, '충돌한 독후감', new Date(2026, 10, 1, 21, 0));
+        save(2, null, '둘째 독후감', new Date(2026, 10, 15, 8, 0));
+        timed.reviews.markConflict(id(1));
+        await renderRouter(routes, { initialUrl: base });
+        expect(await screen.findByText('독후감 1 · 2026. 11. 15.')).toBeOnTheScreen();
+        expect(screen.getAllByText(/^독후감 \d+ · /)).toHaveLength(1);
+    });
+});

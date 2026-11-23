@@ -8,7 +8,7 @@ import type { QuoteRecord, ReviewRecord } from '../db/schema';
 import { requestMixedVisibilityCheck } from './mixedVisibilityCheck';
 import { useReviewRecords } from './useReviewRecords';
 import { reviewStyles as styles } from './styles';
-import { bookOneLine, bookReports, conflictLockMessage, hasOneLineConflict, visibilityToKeepAfterDelete } from '../domain/reviewRules';
+import { bookOneLine, conflictLockMessage, hasOneLineConflict, numberedBookReports, reportHeading, visibilityToKeepAfterDelete } from '../domain/reviewRules';
 import { saveBookVisibilityForCurrentUser } from '../my/preferences';
 import { CardActions, confirmDelete } from './CardActions';
 
@@ -53,7 +53,7 @@ function ReviewSections({ bookId, canWrite, reviews, oneLineLocked, repository, 
     bookId: string; canWrite: boolean; reviews: ReviewRecord[]; oneLineLocked: boolean; repository: RecordRepository; remove: (work: () => void) => void;
 }) {
     const oneLine = bookOneLine(reviews);
-    const reports = bookReports(reviews);
+    const reports = numberedBookReports(reviews);
     const editOneLine = () => router.push({ pathname: '/book/[id]/review/one-line', params: { id: bookId } });
     // #91 FR-08: 마지막 감상을 지우면 지우기 직전의 책 공개 범위를 기기의 책별 값으로 남긴다.
     // 감상이 없는 책은 이 값(없으면 S-81 기본값)을 따르므로, 남기지 않으면 기본값이 바뀔 때 그 책의 공개 범위도 바뀐다.
@@ -82,7 +82,8 @@ function ReviewSections({ bookId, canWrite, reviews, oneLineLocked, repository, 
         <View style={styles.section}>
             <Text accessibilityRole="header" style={styles.heading}>독후감</Text>
             {canWrite && <SecondaryButton label="독후감 쓰기" onPress={() => router.push({ pathname: '/book/[id]/review/report', params: { id: bookId } })} />}
-            {reports.length === 0 ? <StateView kind="empty" message="아직 독후감이 없어요. 책을 읽고 느낀 점을 남겨 주세요." /> : reports.map(report => <Card key={report.id}>
+            {reports.length === 0 ? <StateView kind="empty" message="아직 독후감이 없어요. 책을 읽고 느낀 점을 남겨 주세요." /> : reports.map(({ report, number }) => <Card key={report.id}>
+                <ReportHeading number={number} createdAt={report.createdAt} />
                 <Text style={styles.meta}>{visibilityText(report.visibility)}</Text>
                 <Text style={styles.body}>{report.body}</Text>
                 {report.syncPending && <Text style={styles.meta}>기기에 저장됨 · 동기화 대기</Text>}
@@ -104,6 +105,12 @@ function QuoteCard({ bookId, quote, onDelete }: { bookId: string; quote: QuoteRe
         <CardActions subject={`문장 ${preview(quote.text)}`} onDelete={onDelete}
             onEdit={() => router.push({ pathname: '/book/[id]/review/quote', params: { id: bookId, quoteId: quote.id } })} />
     </Card>;
+}
+
+/** #95 S-50: 독후감 카드 위쪽의 번호와 처음 쓴 날짜. 스크린리더에는 "독후감 1, 2026년 11월 15일"로 읽힌다. */
+function ReportHeading({ number, createdAt }: { number: number; createdAt: number }) {
+    const { text, label } = reportHeading(number, createdAt);
+    return <Text accessibilityLabel={label} style={styles.label}>{text}</Text>;
 }
 
 const visibilityText = (visibility: ReviewRecord['visibility']) => visibility === 'PUBLIC' ? '공개' : '비공개 · 나만 보기';

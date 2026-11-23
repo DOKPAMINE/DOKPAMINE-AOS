@@ -8,10 +8,31 @@ export function bookOneLine<T extends ReviewEntry>(reviews: readonly T[]): T | u
         .sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id))[0];
 }
 
-/** S-50: 독후감은 독서마다 쌓이며 최신 작성 순으로 보여 준다. */
+/** S-50: 독후감은 독서마다 쌓이며 최신 작성 순으로 보여 준다. 작성 시각이 같으면 번호(#95)의 정확한 역순이다. */
 export function bookReports<T extends ReviewEntry>(reviews: readonly T[]): T[] {
+    return numberedBookReports(reviews).map(({ report }) => report);
+}
+
+/**
+ * #95 S-50: 독후감 번호는 그 책의 독후감(삭제·충돌은 호출하는 쪽이 뺀다)을 처음 쓴 순서(createdAt, 같으면 ID)로
+ * 매기며 먼저 쓴 것이 1번이다. 저장하지 않고 매번 계산하므로, 지우면 남은 것끼리 다시 매겨지고 고쳐도 바뀌지 않는다.
+ * 한줄평이 함께 든 예전 감상도 본문이 있으면 독후감으로 센다. 결과는 화면 순서(최신 작성 순)다.
+ */
+export function numberedBookReports<T extends ReviewEntry>(reviews: readonly T[]): { report: T; number: number }[] {
     return reviews.filter(review => review.body?.trim())
-        .sort((a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id));
+        .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+        .map((report, index) => ({ report, number: index + 1 }))
+        .reverse();
+}
+
+/**
+ * #95 S-50: 독후감 카드 위쪽 문구. 날짜는 처음 쓴 날(createdAt)을 기기 시간대로 보여 주고(개인 날짜 경계의 KST 고정과 다르다),
+ * 스크린리더는 "독후감 1, 2026년 11월 15일"처럼 읽는다.
+ */
+export function reportHeading(number: number, createdAt: number): { text: string; label: string } {
+    const date = new Date(createdAt);
+    const [year, month, day] = [date.getFullYear(), date.getMonth() + 1, date.getDate()];
+    return { text: `독후감 ${number} · ${year}. ${month}. ${day}.`, label: `독후감 ${number}, ${year}년 ${month}월 ${day}일` };
 }
 
 const visibilitySchema = z.enum(['PRIVATE', 'PUBLIC']).default('PRIVATE');
