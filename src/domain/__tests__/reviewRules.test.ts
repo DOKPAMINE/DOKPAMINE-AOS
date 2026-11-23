@@ -1,4 +1,4 @@
-import { bookOneLine, bookReports, bookVisibility, emptyQuoteFields, hasOneLineConflict, mixedVisibilityBooks, needsPublishConfirm, oneLineSchema, planOneLineSave, planQuoteSave, planReportSave, planReviewPartDelete, quoteFieldsOf, quoteSchema, reportSchema } from '../reviewRules';
+import { bookOneLine, bookReports, bookVisibility, emptyQuoteFields, hasOneLineConflict, mixedVisibilityBooks, needsPublishConfirm, oneLineSchema, planOneLineSave, planQuoteSave, planReportSave, planReviewPartDelete, quoteFieldsOf, quoteSchema, reportSchema, visibilityToKeepAfterDelete } from '../reviewRules';
 
 test.each([[1000, true], [1001, false]])('FR-07 S-52 문장 %i자 허용 여부는 %s예요', (count, success) => {
     expect(quoteSchema.safeParse({ ...emptyQuoteFields, text: '가'.repeat(count) }).success).toBe(success);
@@ -122,4 +122,14 @@ describe('#91 감상·문장 수정과 삭제 규칙', () => {
         expect(hasOneLineConflict([{ oneLine: '기기 한줄평', conflict: {} }])).toBe(true);
         expect(hasOneLineConflict([{ oneLine: null, conflict: { latest: { oneLine: '서버 한줄평' } } }])).toBe(true);
     });
+});
+
+test('#91 FR-08 S-50 감상을 지워 0개가 될 때만 지우기 직전의 책 공개 범위를 남겨요', () => {
+    const pub = { visibility: 'PUBLIC' as const };
+    const priv = { visibility: 'PRIVATE' as const };
+    expect(visibilityToKeepAfterDelete([pub], [])).toBe('PUBLIC');
+    expect(visibilityToKeepAfterDelete([pub, pub], [])).toBe('PUBLIC');
+    expect(visibilityToKeepAfterDelete([pub, priv], [])).toBe('PRIVATE');
+    expect(visibilityToKeepAfterDelete([pub, pub], [pub])).toBeNull();
+    expect(visibilityToKeepAfterDelete([], [])).toBeNull();
 });

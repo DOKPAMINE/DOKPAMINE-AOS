@@ -236,7 +236,7 @@ export function createRecordRepository(db: RecordDatabase, now: () => number = D
                 }
                 return targets.length;
             });
-            notify();
+            if (changed > 0) notify();
             return changed;
         },
         conflicts(bookId?: string) {

@@ -144,4 +144,14 @@ export function hasOneLineConflict(conflicts: readonly { oneLine: string | null;
     return conflicts.some(review => Boolean(review.oneLine?.trim() || review.conflict?.latest?.oneLine?.trim()));
 }
 
+/**
+ * #91 FR-08 / S-50: 감상을 지워 책에 남은 감상(충돌·삭제 제외)이 0개가 되면, 지우기 직전의 책 공개 범위를 돌려준다.
+ * 화면은 이 값을 기기의 책별 저장값으로 남겨, 그 뒤 S-81 기본값이 바뀌어도 그 책의 다음 감상 공개 범위가 바뀌지 않게 한다.
+ * 감상이 남아 있거나 원래 없었으면 null이다(책 공개 범위는 남은 감상들이 정한다).
+ */
+export function visibilityToKeepAfterDelete(before: readonly { visibility: Visibility }[], after: readonly unknown[]): Visibility | null {
+    if (before.length === 0 || after.length > 0) return null;
+    return bookVisibility(before, 'PRIVATE');
+}
+
 export const conflictLockMessage = '동기화 충돌을 먼저 해결하면 수정·삭제할 수 있어요.';

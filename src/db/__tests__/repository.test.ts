@@ -430,3 +430,13 @@ describe('#91 감상 수정·삭제', () => {
         expect(() => repository.reviews.updateReport(id(4), ' ')).toThrow('독후감은 비울 수 없어요.');
     });
 });
+
+test('#91 S-50 지울 한줄평이 없으면 아무것도 바꾸지 않고 알리지도 않아요', () => {
+    repository.reviews.save({ id: reviewId, bookId, oneLine: null, body: '독후감', visibility: 'PRIVATE', publishedAt: null });
+    const before = repository.reviews.get(reviewId);
+    const listener = jest.fn();
+    repository.subscribe(listener);
+    expect(repository.reviews.deleteOneLine(bookId)).toBe(0);
+    expect(listener).not.toHaveBeenCalled();
+    expect(repository.reviews.get(reviewId)).toEqual(before);
+});

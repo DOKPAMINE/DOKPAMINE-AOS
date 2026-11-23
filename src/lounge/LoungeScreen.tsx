@@ -16,10 +16,11 @@ export function LoungeScreen() {
     const [refreshing, setRefreshing] = useState(false);
     // #91: 탭으로 돌아올 때마다 최근 공개 감상을 서버에서 다시 받는다. 처음 열 때의 조회와는 겹치지 않는다.
     useFocusEffect(useCallback(() => { void refetchFeed(client); }, [client]));
-    // #91: 아래로 당기면 새로고침한다. 조회가 끝날 때까지 표시를 유지하고, 실패는 목록 자리에 안내한다.
+    // #91: 아래로 당기면 새로고침한다. 진행 중인 조회가 있으면 취소하지 않고 그 결과를 기다린다.
+    // 조회가 끝날 때까지 표시를 유지하고, 실패는 목록 자리에 안내한다.
     const refresh = () => {
         setRefreshing(true);
-        void feed.refetch().finally(() => setRefreshing(false));
+        void feed.refetch({ cancelRefetch: false }).finally(() => setRefreshing(false));
     };
     const search = () => {
         if (query.trim()) router.push({ pathname: '/lounge/search', params: { query: query.trim() } });

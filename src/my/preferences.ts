@@ -29,6 +29,12 @@ export const bookVisibilityPreferences = {
     },
 };
 
+/** #91 S-50: 지금 로그인한 계정의 책별 공개 범위를 저장한다. 로그인 전이면 저장하지 않는다. */
+export async function saveBookVisibilityForCurrentUser(bookId: string, visibility: ReviewVisibility): Promise<void> {
+    const userId = (await tokenStorage.getSession())?.userId;
+    if (userId) bookVisibilityPreferences.save(userId, bookId, visibility);
+}
+
 /**
  * S-31·S-51·S-53: 감상이 없는 책이 따를 공개 범위(기기에 저장한 책별 값, 없으면 S-81 기본값)를 읽는다.
  * 계정을 확인한 뒤 화면을 열어 작성 중인 값을 덮어쓰지 않는다. save는 저장 실패 시 예외를 던진다.

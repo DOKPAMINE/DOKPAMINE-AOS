@@ -260,3 +260,23 @@ describe('#91 라운지 새로고침', () => {
         expect(client.getQueryState(loungeKeys.books('데미안'))?.isInvalidated).toBe(true);
     });
 });
+
+test('#91 S-70 다시 받는 중에 아래로 당겨도 진행 중인 요청을 취소하지 않고 그 결과를 기다려요', async () => {
+    let resolve!: (value: FeedItem[]) => void;
+    const removed = { ...item, id: 'review-removed', nickname: '지운 독자' };
+    jest.mocked(feedList).mockResolvedValueOnce([item, removed])
+        .mockImplementationOnce(() => new Promise<FeedItem[]>(done => { resolve = done; }));
+    await renderRouter(routes, { initialUrl: '/lounge' });
+    expect(await screen.findByRole('button', { name: '데미안 · 지운 독자님의 감상 보기' })).toBeOnTheScreen();
+    // 목록이 있는 상태에서 다시 받는 중(탭 복귀·동기화 후 등)에 당긴다. TanStack Query는 데이터가 있을 때만 진행 중인 요청을 취소한다.
+    await act(async () => { void client.refetchQueries({ queryKey: loungeKeys.feed }); });
+    await waitFor(() => expect(feedList).toHaveBeenCalledTimes(2));
+    const pull = () => (RefreshControl as unknown as { latestRef: { props: RefreshControlProps } }).latestRef.props;
+    await act(async () => { pull().onRefresh?.(); });
+    expect(pull().refreshing).toBe(true);
+    expect(feedList).toHaveBeenCalledTimes(2);
+    await act(async () => resolve([item]));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '데미안 · 지운 독자님의 감상 보기' })).toBeNull());
+    await waitFor(() => expect(pull().refreshing).toBe(false));
+    expect(feedList).toHaveBeenCalledTimes(2);
+});

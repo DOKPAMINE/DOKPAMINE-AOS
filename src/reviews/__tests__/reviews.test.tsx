@@ -1,6 +1,6 @@
 import { Alert, Text } from 'react-native';
 import { router } from 'expo-router';
-import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import ReviewList from '../../../app/book/[id]/review';
 import QuoteWrite from '../../../app/book/[id]/review/quote';
 import OneLineWrite from '../../../app/book/[id]/review/one-line';
@@ -500,5 +500,59 @@ describe('#91 감상·문장 수정과 삭제', () => {
         await act(async () => router.push(`${base}/quote?quoteId=${quoteId}`));
         expect(await screen.findByText('고칠 문장을 찾을 수 없어요. 삭제됐는지 감상 목록에서 확인해 주세요.')).toBeOnTheScreen();
         expect(screen.queryByLabelText('좋아하는 문장')).toBeNull();
+    });
+});
+
+describe('#91 FR-08 마지막 감상을 지울 때 책 공개 범위 보존', () => {
+    const signIn = (userId: string) => jest.mocked(tokenStorage.getSession)
+        .mockResolvedValue({ accessToken: 'token', expiresAt: '2099-01-01T00:00:00Z', userId });
+    const save = (id: string, oneLine: string | null, body: string | null, visibility: 'PRIVATE' | 'PUBLIC') =>
+        repository.reviews.save({ id, bookId, oneLine, body, visibility, publishedAt: null });
+    const deleteBy = async (button: string) => {
+        const alert = jest.spyOn(Alert, 'alert');
+        await fireEvent.press(await screen.findByRole('button', { name: button }));
+        const buttons = alert.mock.calls.at(-1)?.[2] as { text: string; onPress?: () => void }[];
+        await act(async () => { buttons.find(item => item.text === '삭제')?.onPress?.(); });
+    };
+
+    test.each([
+        ['한줄평 삭제', '00000000-0000-4000-8000-000000000041', '공개 한줄평', null],
+        ['독후감 공개 독후감 삭제', '00000000-0000-4000-8000-000000000042', null, '공개 독후감'],
+    ] as const)('S-50 S-81 %s으로 감상이 0개가 되면 공개였던 책은 S-81 기본값을 바꿔도 다음 감상이 공개예요', async (button, id, oneLine, body) => {
+        signIn('keeper');
+        reviewPreferences.save('keeper', 'PRIVATE');
+        save(id, oneLine, body, 'PUBLIC');
+        await renderRouter(routes, { initialUrl: base });
+        await deleteBy(button);
+        await waitFor(() => expect(bookVisibilityPreferences.load('keeper', bookId)).toBe('PUBLIC'));
+        expect(repository.reviews.list({ bookId })).toEqual([]);
+
+        // 기본값을 다시 바꿔도 이 책은 지우기 직전의 공개 범위를 따른다.
+        reviewPreferences.save('keeper', 'PRIVATE');
+        await act(async () => router.push(`${base}/report`));
+        expect(await screen.findByText(/^이 독후감은 공개로 저장돼요\./)).toBeOnTheScreen();
+    });
+
+    test('S-50 감상이 남아 있으면 책별 값을 남기지 않고, 문장을 지워도 남기지 않아요', async () => {
+        signIn('remaining');
+        save('00000000-0000-4000-8000-000000000043', '남는 한줄평', null, 'PUBLIC');
+        save('00000000-0000-4000-8000-000000000044', null, '지울 독후감', 'PUBLIC');
+        repository.quotes.save({ id: '00000000-0000-4000-8000-000000000045', bookId, text: '지울 문장', page: null, memo: null });
+        await renderRouter(routes, { initialUrl: base });
+        await deleteBy('독후감 지울 독후감 삭제');
+        await deleteBy('문장 지울 문장 삭제');
+        expect(screen.queryByText('지울 문장')).toBeNull();
+        await act(async () => { await Promise.resolve(); });
+        expect(bookVisibilityPreferences.load('remaining', bookId)).toBeNull();
+    });
+
+    test('S-50 공개 범위가 섞인 책에서 마지막 감상들을 지우면 공개되지 않은 감상이 있던 사실대로 비공개를 남겨요', async () => {
+        signIn('mixed');
+        reviewPreferences.save('mixed', 'PUBLIC');
+        save('00000000-0000-4000-8000-000000000046', '공개 한줄평', null, 'PUBLIC');
+        save('00000000-0000-4000-8000-000000000047', '비공개 한줄평', null, 'PRIVATE');
+        await renderRouter(routes, { initialUrl: base });
+        await deleteBy('한줄평 삭제');
+        await waitFor(() => expect(bookVisibilityPreferences.load('mixed', bookId)).toBe('PRIVATE'));
     });
 });

@@ -8,7 +8,8 @@ import type { QuoteRecord, ReviewRecord } from '../db/schema';
 import { requestMixedVisibilityCheck } from './mixedVisibilityCheck';
 import { useReviewRecords } from './useReviewRecords';
 import { reviewStyles as styles } from './styles';
-import { bookOneLine, bookReports, conflictLockMessage, hasOneLineConflict } from '../domain/reviewRules';
+import { bookOneLine, bookReports, conflictLockMessage, hasOneLineConflict, visibilityToKeepAfterDelete } from '../domain/reviewRules';
+import { saveBookVisibilityForCurrentUser } from '../my/preferences';
 import { CardActions, confirmDelete } from './CardActions';
 
 const preview = (text: string) => text.length > 20 ? `${text.slice(0, 20)}…` : text;
@@ -54,6 +55,15 @@ function ReviewSections({ bookId, canWrite, reviews, oneLineLocked, repository, 
     const oneLine = bookOneLine(reviews);
     const reports = bookReports(reviews);
     const editOneLine = () => router.push({ pathname: '/book/[id]/review/one-line', params: { id: bookId } });
+    // #91 FR-08: 마지막 감상을 지우면 지우기 직전의 책 공개 범위를 기기의 책별 값으로 남긴다.
+    // 감상이 없는 책은 이 값(없으면 S-81 기본값)을 따르므로, 남기지 않으면 기본값이 바뀔 때 그 책의 공개 범위도 바뀐다.
+    const removeReview = (work: () => void) => remove(() => {
+        const active = () => repository.reviews.list({ bookId }).filter(review => !review.conflict);
+        const before = active();
+        work();
+        const keep = visibilityToKeepAfterDelete(before, active());
+        if (keep) void saveBookVisibilityForCurrentUser(bookId, keep).catch(() => undefined);
+    });
     return <>
         <View style={styles.section}>
             <Text accessibilityRole="header" style={styles.heading}>한줄평</Text>
@@ -64,7 +74,7 @@ function ReviewSections({ bookId, canWrite, reviews, oneLineLocked, repository, 
                 <Text style={styles.heading}>{oneLine.oneLine}</Text>
                 {oneLine.syncPending && <Text style={styles.meta}>기기에 저장됨 · 동기화 대기</Text>}
                 {canWrite && <CardActions subject="한줄평" lockedReason={oneLineLocked ? conflictLockMessage : undefined}
-                    onEdit={editOneLine} onDelete={() => remove(() => repository.reviews.deleteOneLine(bookId))} />}
+                    onEdit={editOneLine} onDelete={() => removeReview(() => repository.reviews.deleteOneLine(bookId))} />}
             </Card> : <StateView kind="empty" message="아직 한줄평이 없어요. 이 책을 한마디로 남겨 주세요." />}
         </View>
         <View style={styles.section}>
@@ -74,10 +84,10 @@ function ReviewSections({ bookId, canWrite, reviews, oneLineLocked, repository, 
                 <Text style={styles.meta}>{visibilityText(report.visibility)}</Text>
                 <Text style={styles.body}>{report.body}</Text>
                 {report.syncPending && <Text style={styles.meta}>기기에 저장됨 · 동기화 대기</Text>}
+                {/* 충돌한 독후감은 목록에서 빠지고 충돌 카드에만 보이므로 여기서는 막을 일이 없다. */}
                 {canWrite && <CardActions subject={`독후감 ${preview(report.body ?? '')}`}
-                    lockedReason={report.conflict ? conflictLockMessage : undefined}
                     onEdit={() => router.push({ pathname: '/book/[id]/review/report', params: { id: bookId, reviewId: report.id } })}
-                    onDelete={() => remove(() => repository.reviews.deleteReport(report.id))} />}
+                    onDelete={() => removeReview(() => repository.reviews.deleteReport(report.id))} />}
             </Card>)}
         </View>
     </>;
