@@ -27,6 +27,7 @@ export const books = sqliteTable('books', {
     coverUrl: text('cover_url'),
     sideCoverUrl: text('side_cover_url'),
     yes24ProductUrl: text('yes24_product_url'),
+    catalogPending: integer('catalog_pending', { mode: 'boolean' }).notNull().default(false),
     status: text('status', { enum: ['WANT', 'READING', 'DONE'] }).notNull().default('READING'),
     currentPage: integer('current_page').notNull().default(0),
     completedCount: integer('completed_count').notNull().default(0),

@@ -18,7 +18,7 @@ const reviewId = '00000000-0000-4000-8000-000000000003';
 const quoteId = '00000000-0000-4000-8000-000000000004';
 const book: SaveInput<BookRecord> = {
     id: bookId, isbn: null, title: '데미안', author: '헤르만 헤세', publisher: null,
-    totalPages: 240, genre: '소설/시', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, status: 'READING', currentPage: 0,
+    totalPages: 240, genre: '소설/시', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, catalogPending: false, status: 'READING', currentPage: 0,
     completedCount: 0, completedAt: null,
 };
 const session: SaveInput<SessionRecord> = {
@@ -56,7 +56,7 @@ test('NFR-04 기존 DB를 업그레이드해도 책·세션과 삭제 기록을 
         expect(upgraded.books.get(bookId)).toEqual({
             id: bookId, createdAt: 100000, syncPending: true, localVersion: 1, deleted: false,
             isbn: null, title: '데미안', author: '헤르만 헤세', publisher: null, totalPages: 240, genre: '소설/시',
-            coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, status: 'READING',
+            coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, catalogPending: false, status: 'READING',
             currentPage: 0, completedCount: 0, completedAt: null, updatedAt: 100000,
         });
         expect(upgraded.sessions.get(sessionId, true)).toEqual({

@@ -18,6 +18,7 @@ type Step = 'scan' | 'lookup' | 'confirm' | 'manual' | 'notFound' | 'duplicate' 
 export function BookAddScreen() {
     const [step, setStep] = useState<Step>('scan');
     const [values, setValues] = useState<BookAddValues>(emptyBookValues);
+    const [lookedUpIsbn, setLookedUpIsbn] = useState<string | null>(null);
     const [existing, setExisting] = useState<BookRecord | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
@@ -61,6 +62,7 @@ export function BookAddScreen() {
         if (!normalized) return;
         const version = ++requestVersion.current;
         setValues({ ...emptyBookValues, isbn: normalized });
+        setLookedUpIsbn(null);
         setError(null);
         setStep('lookup');
         try {
@@ -70,6 +72,7 @@ export function BookAddScreen() {
             if (duplicate) { showDuplicate(duplicate); return; }
             const result = await lookupBook(normalized);
             if (version !== requestVersion.current) return;
+            setLookedUpIsbn(normalized);
             setValues(result);
             setStep('confirm');
         } catch (caught) {
@@ -87,8 +90,7 @@ export function BookAddScreen() {
         try {
             const books = await getBookRepository();
             clientId.current ??= uuid.v4();
-            const result = saveNewBook(books, input, status, clientId.current, values.isbn);
-            if (result.kind === 'duplicate') { showDuplicate(result.book); return; }
+            const result = saveNewBook(books, input, status, clientId.current, values.isbn, lookedUpIsbn);            if (result.kind === 'duplicate') { showDuplicate(result.book); return; }
             // S-40은 6단계에서 구현하며 진입 경로만 계약에 맞춘다.
             router.replace((status === 'READING' ? `/reading-start?bookId=${result.book.id}` : `/book/${result.book.id}`) as Href);
         } finally { saveLocked.current = false; setSaving(false); }
