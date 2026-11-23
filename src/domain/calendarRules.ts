@@ -136,3 +136,38 @@ export function monthlyStats(sessions: readonly ReadingSession[], books: readonl
         sessionCount: inMonth.length, byGenre: groupBy('genre'), byAuthor: groupBy('author'),
     };
 }
+
+/** S-60: 날짜 칸에 함께 보여 줄 수 있는 표지 수. 나머지는 "+남은 권수"로 표시한다. */
+export const MAX_DAY_COVERS = 2;
+
+export interface CalendarDayBook {
+    readonly bookId: string;
+    /** 그날(KST) 이 책을 읽은 시간 합계 */
+    readonly seconds: number;
+    /** 그날 이 책의 가장 이른 세션 시작 시각 */
+    readonly firstStartedAt: number;
+}
+
+/**
+ * FR-05 / S-60: 그날(KST) 읽은 책 목록. 읽은 시간이 긴 책부터, 같으면 먼저 시작한 책부터 둔다.
+ * 삭제된 세션과 삭제된 책(tombstone)의 세션은 제외하고, 목록에 없는 책은 남겨 화면이 기본 표지로 보여 준다.
+ */
+export function booksReadOn(
+    sessions: readonly ReadingSession[], books: readonly Pick<StatisticsBook, 'id' | 'deleted'>[], date: string,
+): CalendarDayBook[] {
+    const deletedBooks = new Set(books.filter(book => book.deleted).map(book => book.id));
+    const byBook = new Map<string, { seconds: number; firstStartedAt: number }>();
+    sessionsOn(sessions, date).filter(session => !deletedBooks.has(session.bookId)).forEach(session => {
+        const previous = byBook.get(session.bookId);
+        byBook.set(session.bookId, previous
+            ? { seconds: previous.seconds + session.activeSeconds, firstStartedAt: Math.min(previous.firstStartedAt, session.startedAt) }
+            : { seconds: session.activeSeconds, firstStartedAt: session.startedAt });
+    });
+    return [...byBook].map(([bookId, stat]) => ({ bookId, ...stat }))
+        .sort((a, b) => b.seconds - a.seconds || a.firstStartedAt - b.firstStartedAt || (a.bookId < b.bookId ? -1 : a.bookId > b.bookId ? 1 : 0));
+}
+
+/** S-60: 앞에서부터 최대 2권의 표지를 보여 주고 나머지 권수를 센다(3권이면 +1, 5권이면 +3). */
+export function dayCovers<T>(books: readonly T[]): { readonly shown: readonly T[]; readonly remaining: number } {
+    return { shown: books.slice(0, MAX_DAY_COVERS), remaining: Math.max(0, books.length - MAX_DAY_COVERS) };
+}
