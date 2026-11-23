@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     week: { flexDirection: 'row' },
     weekday: { ...typography.label, color: colors.text.muted, textAlign: 'center', flex: 1, minWidth: sizes.minTouch, paddingVertical: spacing.sm },
     // S-60: 위쪽 날짜 숫자, 그 아래 2:3 표지 영역. 위에서부터 쌓아 같은 줄 칸의 표지 위치를 맞춘다.
-    day: { flex: 1, minWidth: sizes.minTouch, minHeight: sizes.button, alignItems: 'stretch', justifyContent: 'flex-start', gap: spacing.xs, padding: spacing.xs, borderWidth: 1, borderColor: colors.surface.paper, borderRadius: radii.small },
+    day: { flex: 1, flexBasis: 0, minWidth: sizes.minTouch, minHeight: sizes.button, alignItems: 'stretch', justifyContent: 'flex-start', gap: spacing.xs, padding: spacing.xs, borderWidth: 1, borderColor: colors.surface.paper, borderRadius: radii.small },
     selectedDay: { backgroundColor: colors.surface.sandSoft, borderColor: colors.brand.espresso },
     selectedText: { fontFamily: fontFamilies.bold },
     dayNumber: { ...typography.label, color: colors.brand.espresso, textAlign: 'center' },

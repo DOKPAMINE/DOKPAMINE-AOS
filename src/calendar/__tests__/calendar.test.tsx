@@ -184,7 +184,7 @@ test('FR-05 S-60 하루에 1권 읽은 날은 날짜 숫자 아래에 그 책의
     expect(coverUris(name)).toEqual(['https://cover.test/a.jpg']);
     expect(StyleSheet.flatten(cell.getByTestId('calendar-cover-area', hidden).props.style)).toMatchObject({ width: '100%', aspectRatio: 2 / 3 });
     const image = cell.getByTestId('calendar-cover-image', hidden);
-    expect(StyleSheet.flatten(image.props.style)).toMatchObject({ flex: 1, height: '100%' });
+    expect(StyleSheet.flatten(image.props.style)).toMatchObject({ flex: 1, alignSelf: 'stretch' });
     expect(image.props.resizeMode).toBe('cover');
     expect(screen.queryByText('●')).toBeNull();
     expect(screen.queryByText('날짜 아래에 그날 읽은 책 표지를 보여 주고, 테두리로 선택한 날짜를 표시해요.', hidden)).toBeNull();
@@ -319,7 +319,7 @@ test('FR-05 S-60 표지가 없거나 못 불러온 책은 기본 표지에 제�
     expect(title.props).toMatchObject({ numberOfLines: 3, ellipsizeMode: 'tail', maxFontSizeMultiplier: 1 });
 });
 
-test('FR-05 S-60 2권으로 반씩 나뉜 칸에서도 기본 표지마다 제목을 칸 높이에 맞는 줄 수로 말줄임해요', async () => {
+test('FR-05 S-60 2권으로 반씩 나뉜 칸에서도 기본 표지마다 제목을 고정 3줄에서 말줄임해요', async () => {
     repository.books.list.mockReturnValue([coverBook('a', '아주 긴 제목의 첫 번째 책', null), coverBook('b', '두 번째 책', 'https://cover.test/b.jpg')]);
     repository.sessions.list.mockReturnValue([
         session('a1', '2026-11-03', 1200, { bookId: 'a' }),
@@ -331,13 +331,8 @@ test('FR-05 S-60 2권으로 반씩 나뉜 칸에서도 기본 표지마다 제�
     expect(coverTitles(name)).toEqual(['아주 긴 제목의 첫 번째 책']);
     await act(async () => fireEvent(dayCell(name).getByTestId('calendar-cover-image', hidden), 'error'));
     expect(coverTitles(name)).toEqual(['아주 긴 제목의 첫 번째 책', '두 번째 책']);
-    const [first] = dayCell(name).getAllByTestId('calendar-cover-default', hidden);
-    await act(async () => fireEvent(first, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 19, height: 58 } } }));
-    const [firstTitle, secondTitle] = dayCell(name).getAllByTestId('calendar-cover-title', hidden);
-    expect(firstTitle.props.numberOfLines).toBe(4);
-    expect(secondTitle.props.numberOfLines).toBe(3);
-    await act(async () => fireEvent(first, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 19, height: 5 } } }));
-    expect(dayCell(name).getAllByTestId('calendar-cover-title', hidden)[0].props.numberOfLines).toBe(1);
+    dayCell(name).getAllByTestId('calendar-cover-title', hidden)
+        .forEach(title => expect(title.props).toMatchObject({ numberOfLines: 3, ellipsizeMode: 'tail', maxFontSizeMultiplier: 1 }));
 });
 
 test('FR-05 S-60 기본 표지의 제목 글자는 보조 기술에서 건너뛰고 날짜 칸 라벨로만 전달해요', async () => {
@@ -362,4 +357,35 @@ test('FR-05 S-60 안내 문구 없이도 선택한 날짜 칸만 accessibilitySt
     await fireEvent.press(other);
     expect(screen.getByRole('button', { name: '11월 3일, 1권 읽음: 데미안' }).props.accessibilityState).toMatchObject({ selected: true });
     expect(screen.getByRole('button', { name: '11월 2일, 독서 기록 없음' }).props.accessibilityState).toMatchObject({ selected: false });
+});
+
+test('FR-05 S-60 기본 표지 제목은 표지를 채우는 absolute 레이어에 있어 날짜 칸과 표지 크기를 바꾸지 않아요', async () => {
+    repository.books.list.mockReturnValue([coverBook('a', '으악', null), coverBook('b', '사진 책', 'https://cover.test/b.jpg')]);
+    repository.sessions.list.mockReturnValue([
+        session('a1', '2026-11-23', 600, { bookId: 'a' }),
+        session('b1', '2026-11-24', 600, { bookId: 'b' }),
+    ]);
+    await renderRouter(routes, { initialUrl: '/calendar?date=2026-11-24' });
+    const cellNames = ['11월 22일, 독서 기록 없음', '11월 23일, 1권 읽음: 으악', '11월 24일, 1권 읽음: 사진 책', '11월 25일, 독서 기록 없음'];
+    for (const name of cellNames) {
+        const button = screen.getByRole('button', { name });
+        // 모든 날짜 칸은 같은 비율로 폭을 나누고 내용 크기로 넓어지지 않는다.
+        expect(StyleSheet.flatten(button.props.style)).toMatchObject({ flex: 1, flexBasis: 0, minWidth: 44 });
+        expect(button.props.onLayout).toBeUndefined();
+        const area = within(button).getByTestId('calendar-cover-area', hidden);
+        expect(StyleSheet.flatten(area.props.style)).toMatchObject({ width: '100%', aspectRatio: 2 / 3, overflow: 'hidden' });
+        expect(area.props.onLayout).toBeUndefined();
+    }
+    const cell = dayCell('11월 23일, 1권 읽음: 으악');
+    const cover = cell.getByTestId('calendar-cover-default', hidden);
+    expect(cover.props.onLayout).toBeUndefined();
+    expect(StyleSheet.flatten(cover.props.style)).toMatchObject({ flex: 1, flexBasis: 0, overflow: 'hidden' });
+    const layer = cell.getByTestId('calendar-cover-title-layer', hidden);
+    expect(StyleSheet.flatten(layer.props.style)).toMatchObject({ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden' });
+    expect(layer.props.onLayout).toBeUndefined();
+    const title = within(layer).getByTestId('calendar-cover-title', hidden);
+    expect(title.props.children).toBe('으악');
+    expect(title.props).toMatchObject({ numberOfLines: 3, maxFontSizeMultiplier: 1, accessible: false, importantForAccessibility: 'no' });
+    expect(title.props.onLayout).toBeUndefined();
+    expect(screen.getByRole('button', { name: '11월 24일, 1권 읽음: 사진 책' })).toBeSelected();
 });
