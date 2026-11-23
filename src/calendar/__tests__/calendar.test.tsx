@@ -1,6 +1,6 @@
 import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 import CalendarScreen from '../../../app/(tabs)/calendar';
 import { initializeDatabase } from '../../db/client';
@@ -58,6 +58,15 @@ test('FR-05 S-60 로딩을 표시하고 빈 달에도 달력과 0 통계를 보�
     expect(screen.getByText('0초')).toBeOnTheScreen();
     expect(screen.getByText('0쪽')).toBeOnTheScreen();
     expect(screen.getByText('0권')).toBeOnTheScreen();
+});
+
+test('S-60 달력 가로 스크롤 내용이 화면 폭을 채우고 날짜 칸은 최소 44를 유지해요', async () => {
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    const scroll = screen.getByLabelText('2026년 11월 독서 달력');
+    expect(scroll.props.horizontal).toBe(true);
+    expect(StyleSheet.flatten(scroll.props.contentContainerStyle)).toMatchObject({ flexGrow: 1 });
+    const day = StyleSheet.flatten(screen.getByRole('button', { name: '11월 2일, 독서 기록 없음' }).props.style);
+    expect(day).toMatchObject({ flex: 1, minWidth: 44 });
 });
 
 test('FR-05 FR-06 S-60 S-61 S-62 지정 날짜를 열고 날짜 선택과 월 이동으로 기록·통계를 갱신해요', async () => {
