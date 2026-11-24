@@ -83,8 +83,8 @@ export function BookForm({ initialValues, onSave, onLookupIsbn }: {
                     {errors[name] && <Text accessibilityRole="alert" style={styles.error}>{errors[name]?.message}</Text>}
                                        {name === 'isbn' && (lookup?.kind === 'loading'
                                            ? <StateView kind="loading" message="ISBN으로 책을 찾고 있어요." />
-                                           : <Text accessibilityLiveRegion="polite" style={lookup?.kind === 'failed' ? styles.error : styles.hint}>
-                                               {lookup?.message ?? 'ISBN을 입력하면 책 정보를 자동으로 채워요.'}
+                        : <Text accessibilityRole={lookup?.kind === 'failed' ? 'alert' : undefined} accessibilityLiveRegion="polite"
+                            style={lookup?.kind === 'failed' ? styles.error : styles.hint}>                                               {lookup?.message ?? 'ISBN을 입력하면 책 정보를 자동으로 채워요.'}
                                            </Text>)}
                 </View>
             ))}
