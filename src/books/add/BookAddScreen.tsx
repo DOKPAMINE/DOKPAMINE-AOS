@@ -8,7 +8,7 @@ import { PrimaryButton, Screen, SecondaryButton, StateView } from '../../compone
 import type { BookRecord } from '../../db/schema';
 import { normalizeIsbn } from '../../domain/bookAddRules';
 import { colors, radii, spacing, typography } from '../../theme';
-import { BookForm } from './BookForm';
+import { BookForm, type IsbnLookupResult } from './BookForm';
 import { bookAddError, findExistingBook, getBookRepository, lookupBook, saveNewBook } from './service';
 import { bookAddSchema, emptyBookValues, type BookAddValues } from './validation';
 
@@ -82,6 +82,32 @@ export function BookAddScreen() {
                 : caught instanceof ApiError && caught.status === 404 ? 'notFound' : 'error');
         }
     };
+    /** FR-01 / S-21: 직접 입력 중 ISBN 자동 조회. 화면은 그대로 두고 결과만 폼에 돌려준다. */
+    const lookupInForm = async (isbn: string): Promise<IsbnLookupResult | null> => {
+        const normalized = normalizeIsbn(isbn);
+        if (!normalized) return null;
+        const version = ++requestVersion.current;
+        try {
+            const books = await getBookRepository();
+            if (version !== requestVersion.current) return null;
+            const duplicate = findExistingBook(books, normalized);
+            if (duplicate) { showDuplicate(duplicate); return null; }
+            const result = await lookupBook(normalized);
+            if (version !== requestVersion.current) return null;
+            setLookedUpIsbn(normalized);
+            setValues(result);
+            return { values: result };
+        } catch (caught) {
+            if (version !== requestVersion.current) return null;
+            if (caught instanceof ApiError && caught.kind === 'offline') {
+                return { message: '인터넷에 연결되어 있지 않아 자동으로 채우지 못했어요. 인터넷에 연결되면 ISBN을 인식해서 다시 채워요.' };
+            }
+            if (caught instanceof ApiError && caught.status === 404) {
+                return { message: 'ISBN에 맞는 책 정보가 없어요. 나머지 정보를 직접 입력해 주세요.' };
+            }
+            return { message: bookAddError(caught) };
+        }
+    };
     const save = async (input: BookAddValues, status: 'READING' | 'WANT') => {
         if (saveLocked.current) return;
         saveLocked.current = true;
@@ -90,7 +116,8 @@ export function BookAddScreen() {
         try {
             const books = await getBookRepository();
             clientId.current ??= uuid.v4();
-            const result = saveNewBook(books, input, status, clientId.current, values.isbn, lookedUpIsbn);            if (result.kind === 'duplicate') { showDuplicate(result.book); return; }
+            const result = saveNewBook(books, input, status, clientId.current, values.isbn, lookedUpIsbn);
+            if (result.kind === 'duplicate') { showDuplicate(result.book); return; }
             // S-40은 6단계에서 구현하며 진입 경로만 계약에 맞춘다.
             router.replace((status === 'READING' ? `/reading-start?bookId=${result.book.id}` : `/book/${result.book.id}`) as Href);
         } finally { saveLocked.current = false; setSaving(false); }
@@ -142,7 +169,7 @@ export function BookAddScreen() {
                 <SecondaryButton label="읽고 싶은 책에 담기" disabled={!complete || saving} onPress={() => { void saveConfirmed('WANT'); }} />
                 <SecondaryButton label="정보 수정" disabled={saving} onPress={manual} />
             </>}
-            {step === 'manual' && <BookForm initialValues={values} onSave={save} />}
+            {step === 'manual' && <BookForm initialValues={values} onSave={save} onLookupIsbn={lookupInForm} />}
             {step === 'duplicate' && existing && <>
                 <Text style={styles.title}>{existing.title}</Text><Text style={styles.body}>이미 등록한 책이에요. 기존 책에서 독서 기록을 이어 가세요.</Text>
                 <PrimaryButton label="기존 책 상세 보기" onPress={() => router.replace(`/book/${existing.id}` as Href)} />
