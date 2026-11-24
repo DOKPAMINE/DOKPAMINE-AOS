@@ -1,5 +1,5 @@
 import {
-    booksReadByDate, booksReadOn, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
+    booksReadByDate, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
     moveCalendarMonth, readingDays, sessionsOn, streakDays, thisWeekSeconds,
 } from '../calendarRules';
 import { parseStartedAt } from '../kstDate';
@@ -15,6 +15,9 @@ const session = (day: string, seconds = 600, changes: Partial<ReadingSession> = 
 const book = (id: string, genre: string, author = `작가 ${id}`, changes: Partial<StatisticsBook> = {}): StatisticsBook => ({
     id, genre, author, completedAt: null, deleted: false, ...changes,
 });
+/** 그날(YYYY-MM-DD) 읽은 책 목록. 화면처럼 그 달을 booksReadByDate로 묶은 뒤 그날 것을 꺼낸다. */
+const dayBooks = (list: readonly ReadingSession[], books: readonly StatisticsBook[], date: string) =>
+    booksReadByDate(list, books, date.slice(0, 7)).get(date) ?? [];
 
 test('FR-05 S-60 S-61 날짜별 기록과 읽은 날은 중복 날짜를 합치고 삭제 기록을 제외해요', () => {
     const list = [session('2026-10-01'), session('2026-10-01', 1200), session('2026-10-03'), session('2026-10-02', 600, { deleted: true }), session('2026-11-01')];
@@ -146,7 +149,7 @@ test('FR-05 S-60 그날 읽은 책은 책별 읽은 시간을 합쳐 긴 책부�
         session('2026-10-05', 300, { id: 'c1', bookId: 'c' }),
         session('2026-10-06', 9999, { id: 'other-day', bookId: 'c' }),
     ];
-    expect(booksReadOn(list, [], '2026-10-05')).toEqual([
+    expect(dayBooks(list, [], '2026-10-05')).toEqual([
         { bookId: 'a', seconds: 1200, firstStartedAt: at('2026-10-05') },
         { bookId: 'b', seconds: 900, firstStartedAt: at('2026-10-05') },
         { bookId: 'c', seconds: 300, firstStartedAt: at('2026-10-05') },
@@ -159,7 +162,7 @@ test('FR-05 S-60 읽은 시간이 같으면 그날 먼저 시작한 책부터 �
         session('2026-10-05', 600, { id: 'early', bookId: 'early', startedAt: at('2026-10-05') - 60_000 }),
         session('2026-10-05', 600, { id: 'middle', bookId: 'middle' }),
     ];
-    expect(booksReadOn(list, [], '2026-10-05').map(item => item.bookId)).toEqual(['early', 'middle', 'late']);
+    expect(dayBooks(list, [], '2026-10-05').map(item => item.bookId)).toEqual(['early', 'middle', 'late']);
 });
 
 test('FR-05 S-60 삭제된 세션과 삭제된 책의 기록은 빼고 목록에 없는 책은 남겨요', () => {
@@ -170,20 +173,19 @@ test('FR-05 S-60 삭제된 세션과 삭제된 책의 기록은 빼고 목록에
         session('2026-10-05', 300, { id: 'missing', bookId: 'missing' }),
     ];
     const books = [book('kept', '소설'), book('gone', '소설', '작가', { deleted: true })];
-    expect(booksReadOn(list, books, '2026-10-05')).toEqual([
+    expect(dayBooks(list, books, '2026-10-05')).toEqual([
         { bookId: 'kept', seconds: 600, firstStartedAt: at('2026-10-05') },
         { bookId: 'missing', seconds: 300, firstStartedAt: at('2026-10-05') },
     ]);
-    expect(booksReadOn(list, books, '2026-10-04')).toEqual([]);
+    expect(dayBooks(list, books, '2026-10-04')).toEqual([]);
 });
 
 test('FR-05 S-60 읽은 시간과 시작 시각이 모두 같으면 책 ID 순서로 보여 줘요', () => {
     const list = ['c', 'a', 'b'].map(bookId => session('2026-10-05', 600, { id: `${bookId}1`, bookId }));
-    expect(booksReadOn(list, [], '2026-10-05').map(item => item.bookId)).toEqual(['a', 'b', 'c']);
-    expect(booksReadByDate(list, [], '2026-10').get('2026-10-05')?.map(item => item.bookId)).toEqual(['a', 'b', 'c']);
+    expect(dayBooks(list, [], '2026-10-05').map(item => item.bookId)).toEqual(['a', 'b', 'c']);
 });
 
-test('FR-05 S-60 한 달 치를 날짜별로 한 번에 묶은 결과는 날짜마다 booksReadOn과 같아요', () => {
+test('FR-05 S-60 한 달 치를 날짜별로 한 번에 묶은 결과는 날짜마다 그날 기록만 따로 묶은 결과와 같아요', () => {
     const list = [
         session('2026-10-05', 600, { id: 'a1', bookId: 'a' }),
         session('2026-10-05', 900, { id: 'b1', bookId: 'b' }),
@@ -202,7 +204,8 @@ test('FR-05 S-60 한 달 치를 날짜별로 한 번에 묶은 결과는 날짜�
     const byDate = booksReadByDate(list, books, '2026-10');
     for (let day = 1; day <= 31; day += 1) {
         const date = `2026-10-${String(day).padStart(2, '0')}`;
-        const expected = booksReadOn(list, books, date);
+        // 그날 세션만 넘겨 따로 묶은 결과와 비교한다.
+        const expected = booksReadByDate(sessionsOn(list, date), books, '2026-10').get(date) ?? [];
         expect(byDate.get(date) ?? []).toEqual(expected);
         expect(byDate.has(date)).toBe(expected.length > 0);
     }

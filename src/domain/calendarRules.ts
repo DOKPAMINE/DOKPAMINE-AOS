@@ -75,7 +75,7 @@ export function calendarDuration(seconds: number): string {
     return minutes < 60 ? `${minutes}분` : `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`;
 }
 
-/** FR-05 / S-60: 시작한 날(KST)에 기록 전체를 귀속한다. 삭제 tombstone은 집계하지 않는다. booksReadOn이 그날 세션을 고를 때 쓴다. */
+/** FR-05 / S-60: 시작한 날(KST)에 기록 전체를 귀속한다. 삭제 tombstone은 집계하지 않는다. */
 export function sessionsOn(sessions: readonly ReadingSession[], date: string): ReadingSession[] {
     requireDate(date);
     return sessions.filter(session => !session.deleted && kstDate(session.startedAt) === date);
@@ -174,19 +174,10 @@ export interface CalendarDayBook {
 }
 
 /**
- * FR-05 / S-60: 그날(KST) 읽은 책 목록. 읽은 시간이 긴 책부터, 같으면 먼저 시작한 책부터 둔다.
- * 삭제된 세션과 삭제된 책(tombstone)의 세션은 제외하고, 목록에 없는 책은 남겨 화면이 기본 표지로 보여 준다.
- */
-export function booksReadOn(
-    sessions: readonly ReadingSession[], books: readonly Pick<StatisticsBook, 'id' | 'deleted'>[], date: string,
-): CalendarDayBook[] {
-    const deletedBooks = deletedBookIds(books);
-    return rankDayBooks(sessionsOn(sessions, date).filter(session => !deletedBooks.has(session.bookId)));
-}
-
-/**
  * FR-05 / S-60·S-61: 한 달(KST)의 날짜(YYYY-MM-DD)별 읽은 책 목록. 날짜 칸마다 전체 세션을 다시 거르지 않도록
- * 세션을 한 번만 훑어 묶는다. 각 날짜의 결과는 booksReadOn과 같고, 기록이 없는 날은 키가 없다.
+ * 세션을 한 번만 훑어 묶고, 기록이 없는 날은 키가 없다.
+ * 하루 목록은 읽은 시간이 긴 책부터, 같으면 먼저 시작한 책부터 둔다. 삭제된 세션과 삭제된 책(tombstone)의 세션은
+ * 제외하고, 목록에 없는 책은 남겨 화면이 기본 표지로 보여 준다.
  * 달력 날짜 칸의 표지와 날짜별 기록의 책 줄(책별 총 시간 seconds)이 같은 결과를 써서 순서가 어긋나지 않는다.
  */
 export function booksReadByDate(
