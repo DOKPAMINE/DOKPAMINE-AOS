@@ -1,3 +1,4 @@
+import { ActivityIndicator, KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { useCameraPermissions } from 'expo-camera';
@@ -20,6 +21,10 @@ jest.mock('expo-camera', () => {
 jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn() }));
 jest.mock('../src/api/endpoints', () => ({ catalogIsbn: jest.fn() }));
 jest.mock('../src/api/connectivity', () => ({ isOnline: jest.fn() }));
+
+// react-native는 컴포넌트를 처음 쓸 때 불러온다. 첫 render가 그 로딩을 떠안으면 전체 실행처럼 워커가 몰릴 때
+// 5초 제한을 넘으므로, 시간 제한이 없는 파일 로딩 단계에서 책 등록 화면이 쓰는 컴포넌트를 미리 불러 둔다(#103).
+void [ActivityIndicator, KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput];
 
 const isbn = '9780306406157';
 const requestPermission = jest.fn();
