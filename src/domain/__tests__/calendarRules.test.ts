@@ -1,5 +1,5 @@
 import {
-    booksReadByDate, booksReadOn, calendarClock, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
+    booksReadByDate, booksReadOn, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
     moveCalendarMonth, readingDays, sessionsOn, streakDays, thisWeekSeconds,
 } from '../calendarRules';
 import { parseStartedAt } from '../kstDate';
@@ -129,8 +129,7 @@ test('FR-05 S-60 달력은 일요일부터 시작하고 윤년과 여섯 주인 
     expect(august.flat().filter(day => day !== null)).toEqual(Array.from({ length: 31 }, (_, i) => i + 1));
 });
 
-test('FR-05 FR-06 S-61 S-62 시각은 KST로, 시간은 누적 시간과 분으로 표시해요', () => {
-    expect(calendarClock(Date.parse('2026-10-31T15:00:00Z'))).toBe('00:00');
+test('FR-05 FR-06 S-61 S-62 시간은 누적 시간과 분으로 표시해요', () => {
     expect([0, 59, 60, 1800, 3600, 90000].map(calendarDuration)).toEqual(['0초', '59초', '1분', '30분', '1시간 0분', '25시간 0분']);
 });
 

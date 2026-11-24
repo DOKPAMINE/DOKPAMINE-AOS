@@ -1,4 +1,4 @@
-import { DAY_MS, KST_OFFSET_MS, kstDate, parseDate } from './kstDate';
+import { DAY_MS, kstDate, parseDate } from './kstDate';
 import { pagesRead, type ReadingSession, type StatisticsBook } from './readingTypes';
 
 export interface GroupStat {
@@ -70,11 +70,7 @@ export function calendarDuration(seconds: number): string {
     return minutes < 60 ? `${minutes}분` : `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`;
 }
 
-export function calendarClock(timestampMs: number): string {
-    return new Date(timestampMs + KST_OFFSET_MS).toISOString().slice(11, 16);
-}
-
-/** FR-05 / S-61: 시작한 날(KST)에 기록 전체를 귀속한다. 삭제 tombstone은 집계하지 않는다. */
+/** FR-05 / S-60: 시작한 날(KST)에 기록 전체를 귀속한다. 삭제 tombstone은 집계하지 않는다. booksReadOn이 그날 세션을 고를 때 쓴다. */
 export function sessionsOn(sessions: readonly ReadingSession[], date: string): ReadingSession[] {
     requireDate(date);
     return sessions.filter(session => !session.deleted && kstDate(session.startedAt) === date);
