@@ -1,6 +1,6 @@
 import {
     booksReadByDate, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
-    moveCalendarMonth, readingDays, sessionsOn, streakDays, thisWeekSeconds,
+    monthlyTotalDuration, moveCalendarMonth, sessionsOn, streakDays, thisWeekSeconds,
 } from '../calendarRules';
 import { parseStartedAt } from '../kstDate';
 import { toManualSession, validateManualSession } from '../manualSessionRules';
@@ -21,7 +21,8 @@ const dayBooks = (list: readonly ReadingSession[], books: readonly StatisticsBoo
 
 test('FR-05 S-60 S-61 날짜별 기록과 읽은 날은 중복 날짜를 합치고 삭제 기록을 제외해요', () => {
     const list = [session('2026-10-01'), session('2026-10-01', 1200), session('2026-10-03'), session('2026-10-02', 600, { deleted: true }), session('2026-11-01')];
-    expect(readingDays(list, [], '2026-10')).toEqual(new Set([1, 3]));
+    // 10월 1일(두 번)과 3일만 읽은 날이다. 2일은 삭제 기록, 11월 1일은 다른 달이다.
+    expect(monthlyStats(list, [], '2026-10').readingDayCount).toBe(2);
     expect(sessionsOn(list, '2026-10-01')).toHaveLength(2);
     expect(sessionsOn(list, '2026-10-02')).toEqual([]);
 });
@@ -90,9 +91,8 @@ test('FR-02 T09 FR-05 FR-06 수동 기록은 캘린더와 통계와 연속 독�
     const today = toManualSession(input, 'today', 'book', null, startedAt + 3600000);
     const yesterday = { ...today, id: 'yesterday', startedAt: today.startedAt - 86400000, endedAt: today.endedAt - 86400000 };
     const list = [today, yesterday];
-    expect(readingDays(list, [book('book', '소설')], '2026-10')).toEqual(new Set([28, 29]));
     expect(sessionsOn(list, '2026-10-29')).toEqual([today]);
-    expect(monthlyStats(list, [book('book', '소설')], '2026-10')).toMatchObject({ totalSeconds: 2400, totalPages: 40 });
+    expect(monthlyStats(list, [book('book', '소설')], '2026-10')).toMatchObject({ totalSeconds: 2400, totalPages: 40, readingDayCount: 2 });
     expect(streakDays(list, '2026-10-29')).toBe(2);
     expect(thisWeekSeconds(list, '2026-10-29')).toBe(2400);
 });
@@ -100,7 +100,6 @@ test('FR-05 FR-06 잘못된 날짜와 월은 조용히 다른 날짜로 집계�
     expect(() => sessionsOn([], '2026-02-30')).toThrow(RangeError);
     expect(() => streakDays([], '2026-2-01')).toThrow(RangeError);
     expect(() => thisWeekSeconds([], 'bad')).toThrow(RangeError);
-    expect(() => readingDays([], [], '2026-13')).toThrow(RangeError);
     expect(() => monthlyStats([], [], '2026-1')).toThrow(RangeError);
 });
 
@@ -323,7 +322,7 @@ test('FR-06 S-62 삭제한 책과 삭제한 세션의 기록은 시간·쪽수·
     });
 });
 
-test('FR-05 FR-06 S-60 S-62 읽은 날도 달력 날짜 칸(booksReadByDate)과 같은 기준으로 삭제한 책의 기록을 빼요', () => {
+test('FR-05 FR-06 S-60 S-62 읽은 일수도 달력 날짜 칸(booksReadByDate)과 같은 기준으로 삭제한 책의 기록을 빼요', () => {
     const list = [
         session('2026-11-03', 600, { id: 'kept', bookId: 'kept' }),
         session('2026-11-04', 600, { id: 'gone', bookId: 'gone' }),
@@ -331,12 +330,12 @@ test('FR-05 FR-06 S-60 S-62 읽은 날도 달력 날짜 칸(booksReadByDate)과 
         session('2026-11-06', 600, { id: 'missing', bookId: 'missing' }),
     ];
     const books = [book('kept', '소설'), book('gone', '소설', '작가', { deleted: true })];
-    const days = readingDays(list, books, '2026-11');
-    expect(days).toEqual(new Set([3, 6]));
-    expect([...booksReadByDate(list, books, '2026-11').keys()].map(date => Number(date.slice(8))).sort((a, b) => a - b)).toEqual([...days]);
-    expect(monthlyStats(list, books, '2026-11').readingDayCount).toBe(days.size);
+    const byDate = booksReadByDate(list, books, '2026-11');
+    expect([...byDate.keys()].sort()).toEqual(['2026-11-03', '2026-11-06']);
+    expect(monthlyStats(list, books, '2026-11').readingDayCount).toBe(byDate.size);
     // 삭제한 책의 기록만 있는 달은 빈 달이다.
-    expect(readingDays([list[1]], books, '2026-11').size).toBe(0);
+    expect(booksReadByDate([list[1]], books, '2026-11').size).toBe(0);
+    expect(monthlyStats([list[1]], books, '2026-11')).toMatchObject({ readingDayCount: 0, byGenre: [] });
 });
 
 test('FR-06 S-62 KST 월 경계: 10월 31일 23:59:59 시작은 10월, 11월 1일 00:00 시작은 11월의 읽은 일수·책·장르예요', () => {
@@ -356,4 +355,11 @@ test('FR-06 S-62 기록이 없는 달은 요약 숫자가 모두 0이고 장르�
         month: '2026-12', totalSeconds: 0, totalPages: 0, completedBooks: 0, sessionCount: 0,
         readingDayCount: 0, booksReadCount: 0, byGenre: [],
     });
+});
+
+test('FR-06 S-62 월간 통계 총 독서시간은 0초일 때만 0분이고 나머지는 캘린더 시간 표기와 같아요', () => {
+    expect(monthlyTotalDuration(0)).toBe('0분');
+    expect([1, 59, 60, 5400].map(monthlyTotalDuration)).toEqual(['1초', '59초', '1분', '1시간 30분']);
+    // 다른 화면이 쓰는 calendarDuration은 그대로 0초다.
+    expect(calendarDuration(0)).toBe('0초');
 });

@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen, SecondaryButton, StateView } from '../components';
 import {
     booksReadByDate, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
-    moveCalendarMonth, readingDays,
+    moveCalendarMonth,
 } from '../domain/calendarRules';
 import { BookCover } from '../shelf/BookCover';
 import { colors, fontFamilies, radii, sizes, spacing, typography } from '../theme';
@@ -47,7 +47,6 @@ function CalendarContent({ initialDate, records }: {
         [records.sessions, records.books, month]);
     const monthLabel = `${Number(month.slice(0, 4))}년 ${Number(month.slice(5))}월`;
     const dateLabel = `${Number(month.slice(5))}월 ${Number(selectedDate.slice(8))}일`;
-    const days = readingDays(records.sessions, records.books, month);
     // S-61은 달력 날짜 칸과 같은 계산 결과를 써서 책 순서·합계·삭제 처리가 어긋나지 않게 한다.
     const selectedBooks = booksByDate.get(selectedDate) ?? [];
     const stats = monthlyStats(records.sessions, records.books, month);
@@ -93,7 +92,6 @@ function CalendarContent({ initialDate, records }: {
                     ))}
                 </View>
             </ScrollView>
-            {days.size === 0 && <StateView kind="empty" message="이 달에는 독서 기록이 없어요." />}
 
             <View style={styles.section}>
                 <Text accessibilityRole="header" style={styles.heading}>{dateLabel} 기록</Text>

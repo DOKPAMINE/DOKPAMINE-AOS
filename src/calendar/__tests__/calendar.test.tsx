@@ -54,18 +54,20 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
-test('FR-05 S-60 로딩을 표시하고 빈 달에도 달력과 0 통계를 보여 줘요', async () => {
+test('FR-05 S-60 로딩을 표시하고 빈 달에도 달력과 0 통계, 빈 달 안내 한 번을 보여 줘요', async () => {
     let finish!: (value: Awaited<ReturnType<typeof initializeDatabase>>) => void;
     jest.mocked(initializeDatabase).mockReturnValue(new Promise(resolve => { finish = resolve; }));
     await renderRouter(routes, { initialUrl: '/calendar' });
     expect(screen.getByText('독서 기록을 불러오고 있어요.')).toBeOnTheScreen();
-    expect(screen.queryByText('0초')).toBeNull();
+    expect(screen.queryByText('0분')).toBeNull();
     await act(async () => finish(prepared()));
     expect(screen.getByRole('header', { name: '2026년 11월' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '11월 2일, 독서 기록 없음' })).toBeSelected();
-    // 달력 아래 빈 달 안내와 S-62 장르별 자리의 안내가 함께 나온다.
-    expect(screen.getAllByText('이 달에는 독서 기록이 없어요.')).toHaveLength(2);
-    expect(screen.getByLabelText('총 독서시간 0초')).toBeOnTheScreen();
+    // 빈 달 안내는 S-62 장르별 자리에만 한 번 나온다(달력 바로 아래에는 없다).
+    expect(screen.getAllByText('이 달에는 독서 기록이 없어요.')).toHaveLength(1);
+    expect(within(screen.getByTestId('monthly-statistics')).getByText('이 달에는 독서 기록이 없어요.')).toBeOnTheScreen();
+    expect(screen.getByLabelText('총 독서시간 0분')).toBeOnTheScreen();
+    expect(screen.queryByText('0초')).toBeNull();
     expect(screen.getByLabelText('완독 0권')).toBeOnTheScreen();
     expect(screen.getByLabelText('읽은 일수 0일')).toBeOnTheScreen();
     expect(screen.getByLabelText('읽은 책 0권')).toBeOnTheScreen();
@@ -157,7 +159,8 @@ test('NFR-04 FR-05 FR-06 S-60 기록 삭제와 변경을 구독하고 화면 종
     expect(screen.queryByText('데미안')).toBeNull();
     expect(screen.getByLabelText('완독 0권')).toBeOnTheScreen();
     expect(screen.getByLabelText('읽은 책 0권')).toBeOnTheScreen();
-    expect(screen.getByLabelText('총 독서시간 0초')).toBeOnTheScreen();
+    expect(screen.getByLabelText('총 독서시간 0분')).toBeOnTheScreen();
+    expect(screen.getAllByText('이 달에는 독서 기록이 없어요.')).toHaveLength(1);
     await rendered.unmount();
     expect(unsubscribe).toHaveBeenCalled();
 });
@@ -171,7 +174,7 @@ test('FR-05 S-60 초기화 오류와 읽기 오류에서 다시 시도할 수 �
     expect(screen.getByRole('alert')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(screen.getByText('0초')).toBeOnTheScreen();
+    expect(screen.getByText('0분')).toBeOnTheScreen();
 });
 
 function coverBook(id: string, title: string, coverUrl: string | null): BookRecord {

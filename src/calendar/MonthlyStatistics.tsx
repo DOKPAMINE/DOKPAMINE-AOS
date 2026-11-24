@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { StateView } from '../components';
-import { calendarDuration, type GenreStat, type MonthlyStats } from '../domain/calendarRules';
+import { calendarDuration, monthlyTotalDuration, type GenreStat, type MonthlyStats } from '../domain/calendarRules';
 import { colors, radii, sizes, spacing, typography } from '../theme';
 
 /** S-62 요약 숫자 하나. 숫자와 라벨을 "총 독서시간 3시간 20분"처럼 한 요소로 읽는다. */
@@ -35,7 +35,7 @@ export function MonthlyStatistics({ title, stats }: { title: string; stats: Mont
         <View testID="monthly-statistics" style={styles.statistics}>
             <Text accessibilityRole="header" style={styles.heading}>{title}</Text>
             <View style={styles.summary}>
-                <SummaryItem label="총 독서시간" value={calendarDuration(stats.totalSeconds)} />
+                <SummaryItem label="총 독서시간" value={monthlyTotalDuration(stats.totalSeconds)} />
                 <SummaryItem label="완독" value={`${stats.completedBooks}권`} />
                 <SummaryItem label="읽은 일수" value={`${stats.readingDayCount}일`} />
                 <SummaryItem label="읽은 책" value={`${stats.booksReadCount}권`} />

@@ -69,6 +69,11 @@ export function calendarWeeks(month: string): (number | null)[][] {
         }));
 }
 
+/** S-62: 월간 통계 요약의 총 독서시간. 기록이 없는 달의 0초만 "0분"으로 보여 주고 나머지는 calendarDuration과 같다. */
+export function monthlyTotalDuration(seconds: number): string {
+    return seconds === 0 ? '0분' : calendarDuration(seconds);
+}
+
 export function calendarDuration(seconds: number): string {
     if (seconds < 60) return `${seconds}초`;
     const minutes = Math.floor(seconds / 60);
@@ -84,7 +89,7 @@ export function sessionsOn(sessions: readonly ReadingSession[], date: string): R
 /**
  * FR-05·FR-06 / S-60·S-62: 그 달(KST)에 시작한 세션 중 삭제된 세션과 삭제된 책(tombstone)의 세션을 뺀 것.
  * 책을 삭제해도 세션에는 tombstone이 생기지 않으므로 책 목록으로 한 번 더 거른다.
- * 달력 날짜 칸·날짜별 기록(booksReadByDate)과 월간 통계·읽은 날이 모두 이 기준을 쓴다.
+ * 달력 날짜 칸·날짜별 기록(booksReadByDate)과 월간 통계(읽은 일수 포함)가 모두 이 기준을 쓴다.
  */
 function monthSessions(
     sessions: readonly ReadingSession[], books: readonly Pick<StatisticsBook, 'id' | 'deleted'>[], month: string,
@@ -93,13 +98,6 @@ function monthSessions(
     const deletedBooks = deletedBookIds(books);
     return sessions.filter(session => !session.deleted && !deletedBooks.has(session.bookId)
         && kstDate(session.startedAt).startsWith(`${month}-`));
-}
-
-/** FR-05 / S-60: 그 달에 기록이 있는 날(일). 달력 날짜 칸과 같은 기준으로 삭제된 세션·책의 기록을 뺀다. */
-export function readingDays(
-    sessions: readonly ReadingSession[], books: readonly Pick<StatisticsBook, 'id' | 'deleted'>[], month: string,
-): Set<number> {
-    return new Set(monthSessions(sessions, books, month).map(session => Number(kstDate(session.startedAt).slice(8))));
 }
 
 /** FR-05 / S-10: 하루 합계 1분 이상. 오늘 기록이 없으면 어제까지의 연속일을 센다. */

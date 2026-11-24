@@ -105,15 +105,17 @@ test('FR-06 S-62 쪽수와 작가별 통계는 표시하지 않아요', async ()
     expect(statistics().getByRole('header', { name: '장르별' })).toBeOnTheScreen();
 });
 
-test('FR-06 S-62 기록이 없는 달은 숫자가 0이고 장르별 자리에 "이 달에는 독서 기록이 없어요."가 보여요', async () => {
+test('FR-06 S-62 기록이 없는 달은 숫자가 0(총 독서시간 0분)이고 장르별 자리에만 "이 달에는 독서 기록이 없어요."가 한 번 보여요', async () => {
     await renderRouter(routes, { initialUrl: '/calendar?date=2026-12-01' });
     const stats = statistics();
     expect(stats.getByRole('header', { name: '2026년 12월 월간 통계' })).toBeOnTheScreen();
-    expect(stats.getByLabelText('총 독서시간 0초')).toBeOnTheScreen();
+    expect(stats.getByLabelText('총 독서시간 0분')).toHaveTextContent('0분총 독서시간');
+    expect(stats.queryByText('0초')).toBeNull();
     expect(stats.getByLabelText('완독 0권')).toBeOnTheScreen();
     expect(stats.getByLabelText('읽은 일수 0일')).toBeOnTheScreen();
     expect(stats.getByLabelText('읽은 책 0권')).toBeOnTheScreen();
     expect(stats.getByText('이 달에는 독서 기록이 없어요.')).toBeOnTheScreen();
+    expect(screen.getAllByText('이 달에는 독서 기록이 없어요.')).toHaveLength(1);
     expect(stats.queryAllByTestId('genre-row')).toHaveLength(0);
 });
 
@@ -127,13 +129,13 @@ test('FR-06 S-62 삭제한 책의 기록은 요약 숫자와 장르별에 들어
     expect(genreRows().map(row => row.props.accessibilityLabel)).toEqual(['소설/시, 1시간 0분']);
 });
 
-test('FR-06 S-62 삭제한 책의 기록만 있는 달은 빈 달 안내가 나오고 숫자는 0이에요', async () => {
+test('FR-06 S-62 삭제한 책의 기록만 있는 달은 빈 달 안내가 한 번 나오고 숫자는 0이에요', async () => {
     repository.books.list.mockReturnValue([{ ...essay, deleted: true }]);
     repository.sessions.list.mockReturnValue([session('e1', 'essay', '2026-11-10', 1800)]);
     await renderRouter(routes, { initialUrl: '/calendar' });
-    // 달력 아래 안내(readingDays)와 장르별 자리 안내가 모두 나온다.
-    expect(screen.getAllByText('이 달에는 독서 기록이 없어요.')).toHaveLength(2);
-    expect(statistics().getByLabelText('총 독서시간 0초')).toBeOnTheScreen();
+    expect(screen.getAllByText('이 달에는 독서 기록이 없어요.')).toHaveLength(1);
+    expect(statistics().getByText('이 달에는 독서 기록이 없어요.')).toBeOnTheScreen();
+    expect(statistics().getByLabelText('총 독서시간 0분')).toBeOnTheScreen();
     expect(statistics().getByLabelText('읽은 책 0권')).toBeOnTheScreen();
 });
 
