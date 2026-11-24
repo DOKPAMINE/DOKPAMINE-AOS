@@ -2,7 +2,7 @@ import {
     booksReadByDate, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
     monthlyTotalDuration, moveCalendarMonth, streakDays, thisWeekSeconds,
 } from '../calendarRules';
-import { kstDate, parseStartedAt } from '../kstDate';
+import { parseStartedAt } from '../kstDate';
 import { toManualSession, validateManualSession } from '../manualSessionRules';
 import type { ReadingSession, StatisticsBook } from '../readingTypes';
 
@@ -23,6 +23,7 @@ test('FR-05 S-60 S-61 날짜별 기록과 읽은 날은 중복 날짜를 합치�
     const list = [session('2026-10-01'), session('2026-10-01', 1200), session('2026-10-03'), session('2026-10-02', 600, { deleted: true }), session('2026-11-01')];
     // 10월 1일(두 번)과 3일만 읽은 날이다. 2일은 삭제 기록, 11월 1일은 다른 달이다.
     expect(monthlyStats(list, [], '2026-10').readingDayCount).toBe(2);
+    expect(new Set(booksReadByDate(list, [], '2026-10').keys())).toEqual(new Set(['2026-10-01', '2026-10-03']));
     expect(dayBooks(list, [], '2026-10-01')).toEqual([{ bookId: 'book', seconds: 1800, firstStartedAt: at('2026-10-01') }]);
     expect(dayBooks(list, [], '2026-10-02')).toEqual([]);
 });
@@ -183,7 +184,7 @@ test('FR-05 S-60 읽은 시간과 시작 시각이 모두 같으면 책 ID 순�
     expect(dayBooks(list, [], '2026-10-05').map(item => item.bookId)).toEqual(['a', 'b', 'c']);
 });
 
-test('FR-05 S-60 한 달 치를 날짜별로 한 번에 묶은 결과는 날짜마다 그날 기록만 따로 묶은 결과와 같아요', () => {
+test('FR-05 S-60 한 달 치를 날짜별로 묶으면 날짜마다 그날 읽은 책과 시간이 정해진 값과 같아요', () => {
     const list = [
         session('2026-10-05', 600, { id: 'a1', bookId: 'a' }),
         session('2026-10-05', 900, { id: 'b1', bookId: 'b' }),
@@ -199,19 +200,19 @@ test('FR-05 S-60 한 달 치를 날짜별로 한 번에 묶은 결과는 날짜�
         session('2026-09-30', 600, { id: 'other-month', bookId: 'a' }),
     ];
     const books = [book('a', '소설'), book('b', '소설'), book('c', '소설'), book('gone', '소설', '작가', { deleted: true })];
-    const byDate = booksReadByDate(list, books, '2026-10');
-    for (let day = 1; day <= 31; day += 1) {
-        const date = `2026-10-${String(day).padStart(2, '0')}`;
-        // 그날 세션만 넘겨 따로 묶은 결과와 비교한다.
-        const expected = booksReadByDate(list.filter(item => !item.deleted && kstDate(item.startedAt) === date), books, '2026-10').get(date) ?? [];
-        expect(byDate.get(date) ?? []).toEqual(expected);
-        expect(byDate.has(date)).toBe(expected.length > 0);
-    }
-    expect([...byDate.keys()].sort()).toEqual(['2026-10-05', '2026-10-06', '2026-10-09', '2026-10-31']);
-    expect(byDate.get('2026-10-05')).toEqual([
-        { bookId: 'a', seconds: 1200, firstStartedAt: at('2026-10-05') },
-        { bookId: 'b', seconds: 900, firstStartedAt: at('2026-10-05') },
-    ]);
+    // 7일(삭제 세션)·8일(삭제한 책)·9월 30일(다른 달)은 키가 없고, 6일은 같은 시간이라 먼저 시작한 c가 앞이다.
+    expect(booksReadByDate(list, books, '2026-10')).toEqual(new Map([
+        ['2026-10-05', [
+            { bookId: 'a', seconds: 1200, firstStartedAt: at('2026-10-05') },
+            { bookId: 'b', seconds: 900, firstStartedAt: at('2026-10-05') },
+        ]],
+        ['2026-10-06', [
+            { bookId: 'c', seconds: 600, firstStartedAt: at('2026-10-06') - 60_000 },
+            { bookId: 'b', seconds: 600, firstStartedAt: at('2026-10-06') + 60_000 },
+        ]],
+        ['2026-10-09', [{ bookId: 'missing', seconds: 300, firstStartedAt: at('2026-10-09') }]],
+        ['2026-10-31', [{ bookId: 'a', seconds: 120, firstStartedAt: Date.parse('2026-10-31T14:59:59Z') }]],
+    ]));
     expect(booksReadByDate(list, books, '2026-11')).toEqual(new Map([
         ['2026-11-01', [{ bookId: 'a', seconds: 120, firstStartedAt: Date.parse('2026-10-31T15:00:00Z') }]],
     ]));

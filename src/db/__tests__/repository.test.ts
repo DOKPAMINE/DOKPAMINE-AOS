@@ -6,6 +6,7 @@ import * as schema from '../schema';
 import { prepareRecordDatabase } from '../client';
 import { createRecordRepository, type EntityRepository, type RecordDatabase, type RecordRepository, type SaveInput } from '../repository';
 import { books, sessions, type BookRecord, type QuoteRecord, type ReviewRecord, type SessionRecord } from '../schema';
+import { booksReadByDate, monthlyStats } from '../../domain/calendarRules';
 import { bookOneLine } from '../../domain/reviewRules';
 import { memorySQLite } from './sqliteAdapter';
 
@@ -258,6 +259,30 @@ test('NFR-04·05 S-30 책 삭제는 자식도 tombstone으로 만들고 재삭�
     repository.books.softDelete(bookId);
     expect(entities.map(entity => entity.list({ includeDeleted: true }))).toEqual(before);
     expect(before.every(rows => rows[0].deleted && rows[0].syncPending)).toBe(true);
+});
+
+test('#105 FR-05 FR-06 S-60 S-62 책을 삭제하면 그 달 통계와 날짜 칸에서 그 책의 기록이 빠져요', () => {
+    const otherBookId = '00000000-0000-4000-8000-000000000005';
+    const nov3 = Date.parse('2026-11-03T03:00:00Z');
+    const nov4 = Date.parse('2026-11-04T03:00:00Z');
+    now = Date.parse('2026-11-05T00:00:00Z');
+    repository.books.save({ ...book, id: otherBookId, title: '수레바퀴 아래서' });
+    repository.sessions.save({ ...session, id: '00000000-0000-4000-8000-000000000006', bookId: otherBookId, startedAt: nov3, endedAt: nov3 + 600_000, activeSeconds: 600 });
+    repository.sessions.save({ ...session, id: '00000000-0000-4000-8000-000000000007', startedAt: nov3 + 3_600_000, endedAt: nov3 + 4_800_000, activeSeconds: 1200 });
+    repository.sessions.save({ ...session, id: '00000000-0000-4000-8000-000000000008', startedAt: nov4, endedAt: nov4 + 1_800_000, activeSeconds: 1800 });
+    // 화면(useCalendarRecords·useMyRecords)처럼 저장소의 기본 목록을 넘긴다.
+    const stats = () => monthlyStats(repository.sessions.list(), repository.books.list(), '2026-11');
+    const byDate = () => booksReadByDate(repository.sessions.list(), repository.books.list(), '2026-11');
+    expect(stats()).toMatchObject({ totalSeconds: 3600, sessionCount: 3, readingDayCount: 2, booksReadCount: 2 });
+    expect([...byDate().keys()]).toEqual(['2026-11-03', '2026-11-04']);
+
+    repository.books.softDelete(bookId);
+
+    expect(stats()).toMatchObject({
+        totalSeconds: 600, sessionCount: 1, readingDayCount: 1, booksReadCount: 1,
+        byGenre: [{ label: '소설/시', seconds: 600, ratio: 1 }],
+    });
+    expect(byDate()).toEqual(new Map([['2026-11-03', [{ bookId: otherBookId, seconds: 600, firstStartedAt: nov3 }]]]));
 });
 
 test.each([

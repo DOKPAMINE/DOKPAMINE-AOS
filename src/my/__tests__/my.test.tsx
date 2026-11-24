@@ -19,8 +19,6 @@ import { queryClient } from '../../api/queryClient';
 import { initializeDatabase, prepareRecordDatabase } from '../../db/client';
 import { createRecordRepository, type RecordRepository } from '../../db/repository';
 import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
-import { monthlyStats, calendarDuration } from '../../domain/calendarRules';
-import { kstDate } from '../../domain/kstDate';
 import { subscribeSyncState } from '../../sync';
 import { reviewPreferences } from '../preferences';
 
@@ -114,15 +112,15 @@ test.each(['book', 'session'] as const)('NFR-04 S-80 거절된 %s의 안내와 �
     expect(screen).toHavePathname(kind === 'book' ? `/book/${bookId}/edit` : `/book/${bookId}/records/${sessionId}`);
 });
 
-test('FR-10 S-80 닉네임과 monthlyStats 요약이 일치하고 삭제 전송 대기도 세어요', async () => {
+test('FR-10 S-80 닉네임과 이번 달 요약(1시간 30분·240쪽·완독 1권)을 보여 주고 삭제 전송 대기도 세어요', async () => {
     repository.quotes.save({ id: quoteId, bookId, text: '문장', page: null, memo: null });
     repository.quotes.softDelete(quoteId);
-    const stats = monthlyStats(repository.sessions.list(), repository.books.list(), kstDate(Date.now()).slice(0, 7));
     await renderRouter(routes, { initialUrl: '/my' });
     expect(await screen.findByText('책산책님')).toBeOnTheScreen();
-    expect(await screen.findByText(calendarDuration(stats.totalSeconds))).toBeOnTheScreen();
-    expect(screen.getByText(`${stats.totalPages}쪽`)).toBeOnTheScreen();
-    expect(screen.getByText(`${stats.completedBooks}권`)).toBeOnTheScreen();
+    // 준비한 기록: 이번 달 5400초·0→240쪽 세션 1개와 이번 달에 완독한 책 1권
+    expect(await screen.findByText('1시간 30분')).toBeOnTheScreen();
+    expect(screen.getByText('240쪽')).toBeOnTheScreen();
+    expect(screen.getByText('1권')).toBeOnTheScreen();
     expect(screen.getByText('전송 대기 3건')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '설정' }));
     expect(await screen.findByRole('header', { name: '설정' })).toBeOnTheScreen();
