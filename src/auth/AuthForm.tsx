@@ -80,7 +80,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     const hints = {
         email: registering ? '가입할 이메일을 입력해 주세요.' : '가입한 이메일을 입력해 주세요.',
         password: '8자 이상 입력해 주세요.',
-        nickname: '1~10자로 입력해 주세요.',
+        nickname: '1~30자로 입력해 주세요.',
     };
     // 로그인은 화면을 가볍게 하려고 오류가 있을 때만 아래 문구를 보여 주고, 회원가입은 규칙을 미리 알려 준다.
     const showHint = (name: FieldName) => !!errors[name] || registering;

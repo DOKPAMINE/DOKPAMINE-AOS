@@ -7,7 +7,8 @@ export const loginSchema = z.object({
 });
 
 export const signupSchema = loginSchema.extend({
-    nickname: z.string().trim().min(1, '닉네임을 입력해 주세요.').max(10, '닉네임은 10자 이내로 입력해 주세요.'),});
+    nickname: z.string().trim().min(1, '닉네임을 입력해 주세요.').max(30, '닉네임은 30자 이내로 입력해 주세요.'),
+});
 
 export type LoginValues = z.infer<typeof loginSchema>;
 export type SignupValues = z.infer<typeof signupSchema>;
