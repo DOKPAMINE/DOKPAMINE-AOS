@@ -99,38 +99,38 @@ test('FR-18 · S-01 첫 실행에는 안내 3장과 건너뛰기가 나오고 �
     await first.unmount();
     await renderRouter(routes, { initialUrl: '/onboarding' });
     expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
-    expect(screen.queryByText('독파민 사용법 안내')).toBeNull();
+    expect(screen.queryByRole('header', { name: '독파민 사용법 안내' })).toBeNull();
 });
 
 test('FR-18 · S-01 건너뛰기도 완료 상태를 저장해요', async () => {
     await renderRouter(routes, { initialUrl: '/' });
-    await screen.findByText('독파민 사용법 안내');
+    await screen.findByRole('header', { name: '독파민 사용법 안내' });
     await fireEvent.press(screen.getByRole('button', { name: '건너뛰기' }));
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
     expect(stored.get('dokpamine.onboardingSeen')).toBe('true');
 });
 
 test('FR-18 · S-01 안내 저장 실패는 안내를 유지하고 재시도할 수 있어요', async () => {
     jest.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error('storage failed'));
     await renderRouter(routes, { initialUrl: '/' });
-    await screen.findByText('독파민 사용법 안내');
+    await screen.findByRole('header', { name: '독파민 사용법 안내' });
     await fireEvent.press(screen.getByRole('button', { name: '건너뛰기' }));
     expect(await screen.findByText('안내 완료 상태를 저장하지 못했어요. 다시 시도해 주세요.')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '건너뛰기' }));
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
 });
 
 test.each(['/', '/shelf', '/signup'])('FR-10 · S-02 유효한 토큰은 주소 %s에서도 탭으로 들어가요', async initialUrl => {
     session();
     await renderRouter(routes, { initialUrl });
     expect(await screen.findByText(initialUrl === '/shelf' ? '인증된 책장' : '인증된 홈')).toBeOnTheScreen();
-    expect(screen.queryByText('독파민 로그인')).toBeNull();
+    expect(screen.queryByRole('header', { name: '독파민 로그인' })).toBeNull();
 });
 
 test.each(['/', '/shelf'])('FR-10 · S-02 토큰이 없으면 탭 주소 %s에 접근하지 못해요', async initialUrl => {
     seen();
     await renderRouter(routes, { initialUrl });
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
     expect(screen.queryByText('인증된 홈')).toBeNull();
     expect(screen.queryByText('인증된 책장')).toBeNull();
 });
@@ -146,7 +146,7 @@ test('FR-10 · S-02 잘못된 로그인은 서버 문구를 보여 주고 세션
     seen();
     jest.mocked(login).mockRejectedValue(new ApiError('credentials', 'INVALID_CREDENTIALS', '로그인 정보가 맞지 않아요.', 401));
     await renderRouter(routes, { initialUrl: '/login' });
-    await screen.findByText('독파민 로그인');
+    await screen.findByRole('header', { name: '독파민 로그인' });
     await fillLogin();
     await fireEvent.press(screen.getByRole('button', { name: '로그인' }));
     expect(await screen.findByText('로그인 정보가 맞지 않아요.')).toBeOnTheScreen();
@@ -156,7 +156,7 @@ test('FR-10 · S-02 잘못된 로그인은 서버 문구를 보여 주고 세션
 test('FR-10 · S-02 폼 오류는 서버 호출 없이 표시하고 올바른 로그인은 토큰 저장 뒤 홈을 열어요', async () => {
     seen();
     await renderRouter(routes, { initialUrl: '/login' });
-    await screen.findByText('독파민 로그인');
+    await screen.findByRole('header', { name: '독파민 로그인' });
     await fireEvent.press(screen.getByRole('button', { name: '로그인' }));
     expect(await screen.findByText('올바른 이메일을 입력해 주세요.')).toBeOnTheScreen();
     expect(login).not.toHaveBeenCalled();
@@ -168,7 +168,7 @@ test('FR-10 · S-02 폼 오류는 서버 호출 없이 표시하고 올바른 �
     expect(syncAfterLogin).toHaveBeenCalledTimes(1);
     expect(JSON.parse(stored.get('dokpamine.authSession')!)).toMatchObject({ expiresAt: validResponse.expiresAt });
     await fireEvent.press(screen.getByRole('button', { name: '로그아웃' }));
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
     expect(stored.has('dokpamine.accessToken')).toBe(false);
     expect(stopRecordSync).toHaveBeenCalled();
     expect(stored.has('dokpamine.authSession')).toBe(false);
@@ -178,7 +178,7 @@ test('FR-10 · S-02 폼 오류는 서버 호출 없이 표시하고 올바른 �
 test('FR-10 · S-03 닉네임을 검증하고 회원가입 성공 후 바로 홈을 열어요', async () => {
     seen();
     await renderRouter(routes, { initialUrl: '/signup' });
-    await screen.findByText('독파민 회원가입');
+    await screen.findByRole('header', { name: '독파민 회원가입' });
     await fillLogin();
     await fireEvent.press(screen.getByRole('button', { name: '가입하고 시작하기' }));
     expect(await screen.findByText('닉네임을 입력해 주세요.')).toBeOnTheScreen();
@@ -193,7 +193,7 @@ test('FR-10 · S-03 중복 이메일은 서버의 오류 문구를 그대로 보
     seen();
     jest.mocked(signup).mockRejectedValue(new ApiError('http', 'EMAIL_TAKEN', '이미 가입한 이메일이에요.', 409));
     await renderRouter(routes, { initialUrl: '/signup' });
-    await screen.findByText('독파민 회원가입');
+    await screen.findByRole('header', { name: '독파민 회원가입' });
     await fillLogin();
     await fireEvent.changeText(screen.getByLabelText('닉네임'), '독자');
     await fireEvent.press(screen.getByRole('button', { name: '가입하고 시작하기' }));
@@ -210,7 +210,7 @@ test('FR-10 · S-02 보호 API의 401은 토큰을 보존한 채 로그인으로
     expect(stored.get('dokpamine.accessToken')).toBe(validResponse.accessToken);
     await first.unmount();
     await renderRouter(routes, { initialUrl: '/' });
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
 });
 
 test('FR-10 · S-02 이전 세션에서 늦게 도착한 401은 현재 세션을 만료시키지 않아요', async () => {
@@ -228,7 +228,7 @@ test('FR-10 · S-02 앱 복귀 시 만료된 세션은 탭을 닫고 재로그�
     await screen.findByText('인증된 홈');
     const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 120_000);
     await act(() => { for (const [, listener] of spy.mock.calls) listener('active'); });
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
     now.mockRestore();
 
 });
@@ -249,7 +249,7 @@ test('FR-10 · S-02 로그인 요청 중 중복 전송을 막고 동기화 실�
     jest.mocked(login).mockReturnValue(new Promise(resolve => { resolveLogin = resolve; }));
     jest.mocked(syncAfterLogin).mockRejectedValueOnce(new Error('sync offline'));
     await renderRouter(routes, { initialUrl: '/login' });
-    await screen.findByText('독파민 로그인');
+    await screen.findByRole('header', { name: '독파민 로그인' });
     await fillLogin();
     await fireEvent.press(screen.getByRole('button', { name: '로그인' }));
     expect(await screen.findByRole('button', { name: '로그인', disabled: true })).toBeOnTheScreen();
@@ -263,7 +263,7 @@ test('FR-10 · S-02 토큰 저장 실패는 로그인 화면을 유지해요', a
     seen();
     jest.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error('storage failed'));
     await renderRouter(routes, { initialUrl: '/login' });
-    await screen.findByText('독파민 로그인');
+    await screen.findByRole('header', { name: '독파민 로그인' });
     await fillLogin();
     await fireEvent.press(screen.getByRole('button', { name: '로그인' }));
     expect(await screen.findByText('로그인 정보를 저장하지 못했어요. 다시 시도해 주세요.')).toBeOnTheScreen();
@@ -279,31 +279,31 @@ test('FR-10 · S-02 만료 상태 저장에 실패해도 재시도로 이전 토
     await act(() => { notifyUnauthorized(validResponse.accessToken); });
     expect(await screen.findByText('로그인 상태를 저장하지 못했어요. 다시 시도해 주세요.')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
     expect(screen.queryByText('인증된 홈')).toBeNull();
 });
 
 test('FR-10 · S-02/S-03 회원가입에서 Android 뒤로 가기와 로그인 버튼은 로그인으로 돌아와요', async () => {
     seen();
     await renderRouter(routes, { initialUrl: '/login' });
-    await screen.findByText('독파민 로그인');
+    await screen.findByRole('header', { name: '독파민 로그인' });
     await fireEvent.press(screen.getByRole('button', { name: '회원가입' }));
-    expect(await screen.findByText('독파민 회원가입')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 회원가입' })).toBeOnTheScreen();
     expect(router.canGoBack()).toBe(true);
     await act(() => router.back());
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '회원가입' }));
-    await screen.findByText('독파민 회원가입');
+    await screen.findByRole('header', { name: '독파민 회원가입' });
     await fireEvent.press(screen.getByRole('button', { name: '로그인으로 돌아가기' }));
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
 });
 
 test('FR-10 · S-03 회원가입 딥링크에서 이전 화면이 없어도 로그인으로 이동해요', async () => {
     seen();
     await renderRouter(routes, { initialUrl: '/signup' });
-    await screen.findByText('독파민 회원가입');
+    await screen.findByRole('header', { name: '독파민 회원가입' });
     await fireEvent.press(screen.getByRole('button', { name: '로그인으로 돌아가기' }));
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
 });
 
 test('FR-10 · S-02 저장소 읽기가 계속 실패해도 인증 키만 초기화하고 새 로그인으로 복구해요', async () => {
@@ -314,7 +314,7 @@ test('FR-10 · S-02 저장소 읽기가 계속 실패해도 인증 키만 초기
     await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
     await screen.findByText('로그인 정보를 불러오지 못했어요. 다시 시도해 주세요.');
     await fireEvent.press(screen.getByRole('button', { name: '다시 로그인하기' }));
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
     expect(jest.mocked(SecureStore.deleteItemAsync).mock.calls.map(([key]) => key).sort()).toEqual(['dokpamine.accessToken', 'dokpamine.authSession']);
     expect(stored.get('dokpamine.onboardingSeen')).toBe('true');
     await fillLogin();
@@ -332,7 +332,7 @@ test('FR-10 · S-02 인증 키 초기화 실패는 오류와 재시도 경로를
     expect(await screen.findByText('로그인 정보를 초기화하지 못했어요. 다시 시도해 주세요.')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '다시 시도해 주세요' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '다시 로그인하기' }));
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
 });
 
 test('FR-10 NFR-05 · S-02 계정 저장소 준비가 끝나기 전에는 탭과 동기화를 열지 않아요', async () => {
@@ -352,7 +352,7 @@ test('FR-10 NFR-05 · S-02 계정 정보가 없는 구버전 세션은 재로그
     session();
     stored.set('dokpamine.authSession', JSON.stringify({ accessToken: validResponse.accessToken, expiresAt: validResponse.expiresAt }));
     await renderRouter(routes, { initialUrl: '/' });
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
     expect(syncAfterLogin).not.toHaveBeenCalled();
     expect(prepareRecordAccount).not.toHaveBeenCalled();
     expect(stopRecordSync).toHaveBeenCalled();
@@ -362,7 +362,7 @@ test('FR-10 NFR-05 · S-02 Provider 마운트 전에 도착한 401도 유효한 
     session();
     notifyUnauthorized(validResponse.accessToken);
     await renderRouter(routes, { initialUrl: '/' });
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
     expect(syncAfterLogin).not.toHaveBeenCalled();
 });
 
@@ -373,7 +373,7 @@ test('FR-10 NFR-05 · S-02 저장소 준비 중 도착한 401은 복원 완료 �
     await renderRouter(routes, { initialUrl: '/' });
     await waitFor(() => expect(prepareRecordAccount).toHaveBeenCalled());
     await act(async () => { notifyUnauthorized(validResponse.accessToken); finish(); });
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
     expect(syncAfterLogin).not.toHaveBeenCalled();
 });
 
@@ -387,7 +387,7 @@ test('FR-10 NFR-05 · S-80 로그아웃 키 삭제 실패도 탭과 동기화를
     expect(await screen.findByText('로그아웃 정보를 저장하지 못했어요. 다시 로그인하기로 초기화해 주세요.')).toBeOnTheScreen();
     expect(screen.queryByText('인증된 홈')).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
     expect(syncAfterLogin).not.toHaveBeenCalled();
 });
 
@@ -396,7 +396,7 @@ test('FR-10 NFR-05 · S-02 로그인 저장소 준비 중 401이 오면 새 세�
     let finish!: () => void;
     jest.mocked(prepareRecordAccount).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
     await renderRouter(routes, { initialUrl: '/login' });
-    await screen.findByText('독파민 로그인');
+    await screen.findByRole('header', { name: '독파민 로그인' });
     await fillLogin();
     await fireEvent.press(screen.getByRole('button', { name: '로그인' }));
     await waitFor(() => expect(prepareRecordAccount).toHaveBeenCalled());
@@ -418,7 +418,7 @@ test('FR-10 NFR-05 · S-80 로그아웃 뒤 끝난 저장소 초기화는 동기
         await screen.findByText('인증된 홈');
         await waitFor(() => expect(initializeDatabase).toHaveBeenCalledWith(expect.any(String)));
         await fireEvent.press(screen.getByRole('button', { name: '로그아웃' }));
-        await screen.findByText('독파민 로그인');
+        await screen.findByRole('header', { name: '독파민 로그인' });
         await act(async () => { finish({} as Awaited<ReturnType<typeof initializeDatabase>>); });
         expect(syncAfterLogin).not.toHaveBeenCalled();
     } finally {
@@ -439,7 +439,7 @@ test('FR-10 NFR-05 · S-02 계정 전환 준비 중 로그아웃하면 늦은 �
     await act(() => { signingIn = controls.signIn({ ...validResponse, accessToken: 'account-b-token', user: { ...validResponse.user, id: 'account-b' } }); });
     await act(() => { signingOut = controls.signOut(); });
     await act(async () => { finish(); await Promise.all([signingIn, signingOut]); });
-    expect(await screen.findByText('독파민 로그인')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '독파민 로그인' })).toBeOnTheScreen();
     expect(screen.queryByText('인증된 홈')).toBeNull();
     expect(syncAfterLogin).not.toHaveBeenCalled();
     expect(stored.has('dokpamine.authSession')).toBe(false);
