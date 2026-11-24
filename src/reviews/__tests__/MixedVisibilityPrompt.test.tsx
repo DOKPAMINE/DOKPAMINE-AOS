@@ -1,4 +1,4 @@
-import { Alert, Modal, Pressable, Text, View } from 'react-native';
+import { Alert } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { initializeDatabase, prepareRecordDatabase } from '../../db/client';
 import { createRecordRepository, type RecordRepository, type SaveInput } from '../../db/repository';
@@ -7,14 +7,14 @@ import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
 import { getSyncState, subscribeSyncState } from '../../sync';
 import { MixedVisibilityPrompt } from '../MixedVisibilityPrompt';
 import { requestMixedVisibilityCheck } from '../mixedVisibilityCheck';
+import { preloadReactNative } from '../../__tests__/preloadReactNative';
 
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
 jest.mock('../../db/client', () => ({ ...jest.requireActual('../../db/client'), initializeDatabase: jest.fn() }));
 jest.mock('../../sync', () => ({ getSyncState: jest.fn(), subscribeSyncState: jest.fn() }));
 
-// react-native는 컴포넌트를 처음 쓸 때 불러온다. 첫 render가 그 로딩(특히 Modal)을 떠안으면 전체 실행처럼
-// 워커가 몰릴 때 5초 제한을 넘으므로, 시간 제한이 없는 파일 로딩 단계에서 알림이 쓰는 컴포넌트를 미리 불러 둔다(#103).
-void [Modal, Pressable, Text, View];
+// 첫 render의 RN 컴포넌트 지연 로딩이 5초 제한을 넘지 않도록 파일 로딩 단계에서 미리 불러온다(#103). 지우면 안 된다.
+preloadReactNative();
 
 const uuid = (last: number) => `00000000-0000-4000-8000-${String(last).padStart(12, '0')}`;
 const book = (id: string, title: string): SaveInput<BookRecord> => ({ id, title, author: '지은이', isbn: null, publisher: null, totalPages: 200, currentPage: 0,
