@@ -7,10 +7,14 @@ import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
 import { getSyncState, subscribeSyncState } from '../../sync';
 import { MixedVisibilityPrompt } from '../MixedVisibilityPrompt';
 import { requestMixedVisibilityCheck } from '../mixedVisibilityCheck';
+import { preloadReactNative } from '../../__tests__/preloadReactNative';
 
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
 jest.mock('../../db/client', () => ({ ...jest.requireActual('../../db/client'), initializeDatabase: jest.fn() }));
 jest.mock('../../sync', () => ({ getSyncState: jest.fn(), subscribeSyncState: jest.fn() }));
+
+// 첫 render의 RN 컴포넌트 지연 로딩이 5초 제한을 넘지 않도록 파일 로딩 단계에서 미리 불러온다(#103). 지우면 안 된다.
+preloadReactNative();
 
 const uuid = (last: number) => `00000000-0000-4000-8000-${String(last).padStart(12, '0')}`;
 const book = (id: string, title: string): SaveInput<BookRecord> => ({ id, title, author: '지은이', isbn: null, publisher: null, totalPages: 200, currentPage: 0,

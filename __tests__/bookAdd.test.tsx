@@ -6,6 +6,7 @@ import { initializeDatabase } from '../src/db/client';
 import { catalogIsbn } from '../src/api/endpoints';
 import { isOnline } from '../src/api/connectivity';
 import { ApiError } from '../src/api/errors';
+import { preloadReactNative } from '../src/__tests__/preloadReactNative';
 
 jest.mock('expo', () => ({ uuid: { v4: () => '00000000-0000-4000-8000-000000000001' } }));
 jest.mock('expo-router', () => ({
@@ -20,6 +21,9 @@ jest.mock('expo-camera', () => {
 jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn() }));
 jest.mock('../src/api/endpoints', () => ({ catalogIsbn: jest.fn() }));
 jest.mock('../src/api/connectivity', () => ({ isOnline: jest.fn() }));
+
+// 첫 render의 RN 컴포넌트 지연 로딩이 5초 제한을 넘지 않도록 파일 로딩 단계에서 미리 불러온다(#103). 지우면 안 된다.
+preloadReactNative();
 
 const isbn = '9780306406157';
 const requestPermission = jest.fn();
