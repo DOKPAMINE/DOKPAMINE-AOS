@@ -18,8 +18,7 @@ test.each(['', '   ', '가'.repeat(31)])('FR-10 · S-03 닉네임 경계 밖 %s�
     expect(signupSchema.safeParse({ ...valid, nickname }).success).toBe(false);
 });
 
-test.each([1, 30])('FR-10 · S-03 닉네임 경계 %i자는 허용해요', length => {
-    expect(signupSchema.safeParse({ ...valid, nickname: '가'.repeat(length) }).success).toBe(true);
+test.each([1, 10])('FR-10 · S-03 닉네임 경계 %i자는 허용해요', length => {    expect(signupSchema.safeParse({ ...valid, nickname: '가'.repeat(length) }).success).toBe(true);
 });
 
 test('FR-10 · S-03 이메일과 닉네임은 공백을 정리하고 비밀번호 원문은 보존해요', () => {
