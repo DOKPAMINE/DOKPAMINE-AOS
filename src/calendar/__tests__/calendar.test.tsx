@@ -94,9 +94,10 @@ test('FR-05 FR-06 S-60 S-61 S-62 지정 날짜를 열고 날짜 선택과 월 �
     await renderRouter(routes, { initialUrl: '/calendar?date=2026-10-05' });
     expect(screen.getByRole('header', { name: '2026년 10월' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '10월 5일, 1권 읽음: 데미안' })).toBeSelected();
-    expect(screen.getAllByText('데미안')).toHaveLength(2);
-    expect(screen.getByText('직접 입력한 기록')).toBeOnTheScreen();
-    expect(screen.getByText('30분')).toBeOnTheScreen();
+    // S-61: 같은 책의 타이머 10분과 직접 입력 20분은 한 줄의 30분이 된다.
+    expect(screen.getAllByText('데미안')).toHaveLength(1);
+    expect(within(screen.getByRole('button', { name: '데미안, 30분, 책 상세 보기' })).getByText('30분')).toBeOnTheScreen();
+    expect(screen.queryByText('직접 입력한 기록')).toBeNull();
     expect(screen.getByText('50쪽')).toBeOnTheScreen();
     expect(screen.getByText('1권')).toBeOnTheScreen();
     expect(screen.getAllByText('30분 · 50쪽')).toHaveLength(2);
@@ -104,7 +105,8 @@ test('FR-05 FR-06 S-60 S-61 S-62 지정 날짜를 열고 날짜 선택과 월 �
     expect(screen.getByRole('button', { name: '10월 7일, 독서 기록 없음' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '10월 6일, 1권 읽음: 데미안' }));
     expect(screen.getByRole('header', { name: '10월 6일 기록' })).toBeOnTheScreen();
-    expect(screen.getByText('12:00 · 59초 · 0쪽')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: '데미안, 59초, 책 상세 보기' })).toBeOnTheScreen();
+    expect(screen.queryByText(/12:00/)).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: '다음 달' }));
     expect(screen.getByRole('header', { name: '2026년 11월' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '11월 6일, 독서 기록 없음' })).toBeSelected();
@@ -129,10 +131,10 @@ test('FR-05 S-60 같은 라우트에 새 날짜 파라미터를 받으면 월과
     expect(screen.getByRole('button', { name: '2월 29일, 독서 기록 없음' })).toBeSelected();
 });
 
-test('FR-05 S-61 기록 항목은 해당 책 상세로 이동해요', async () => {
+test('FR-05 S-61 책 줄을 누르면 그 책 상세 화면으로 이동해요', async () => {
     repository.sessions.list.mockReturnValue([session('a', '2026-11-02', 600)]);
     await renderRouter(routes, { initialUrl: '/calendar' });
-    await fireEvent.press(screen.getByRole('button', { name: '데미안, 12:00 · 10분 · 0쪽, 책 상세 보기' }));
+    await fireEvent.press(screen.getByRole('button', { name: '데미안, 10분, 책 상세 보기' }));
     expect(screen).toHavePathname('/book/book');
     expect(screen.getByText('책 상세 book')).toBeOnTheScreen();
 });
@@ -393,4 +395,130 @@ test('FR-05 S-60 기본 표지 제목은 표지를 채우는 absolute 레이어�
     expect(title.props).toMatchObject({ numberOfLines: COVER_TITLE_LINES, maxFontSizeMultiplier: 1, accessible: false, importantForAccessibility: 'no' });
     expect(title.props.onLayout).toBeUndefined();
     expect(screen.getByRole('button', { name: '11월 24일, 1권 읽음: 사진 책' })).toBeSelected();
+});
+
+/** S-61 날짜별 기록의 책 줄. 라벨은 "제목, 총 시간, 책 상세 보기"다. */
+function dayBookRow(title: string, duration: string) {
+    return screen.getByRole('button', { name: `${title}, ${duration}, 책 상세 보기` });
+}
+function dayBookRows() {
+    return screen.queryAllByRole('button', { name: /, 책 상세 보기$/ });
+}
+
+test('FR-05 S-61 같은 날 같은 책을 30분, 50분 두 번 읽으면 그 책이 한 줄로 나오고 "1시간 20분"이 표시돼요', async () => {
+    repository.sessions.list.mockReturnValue([
+        session('a1', '2026-11-02', 1800),
+        session('a2', '2026-11-02', 3000, { startedAt: Date.parse('2026-11-02T15:00:00+09:00'), source: 'MANUAL', endPage: 40 }),
+    ]);
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    expect(dayBookRows()).toHaveLength(1);
+    const row = dayBookRow('데미안', '1시간 20분');
+    expect(within(row).getByText('데미안')).toBeOnTheScreen();
+    expect(within(row).getByText('1시간 20분')).toBeOnTheScreen();
+});
+
+test('FR-05 S-61 쪽수, 시작 시각, 타이머/직접 입력 구분은 표시하지 않아요', async () => {
+    repository.sessions.list.mockReturnValue([
+        session('a1', '2026-11-02', 1800, { endPage: 30 }),
+        session('a2', '2026-11-02', 600, { startedAt: Date.parse('2026-11-02T15:30:00+09:00'), source: 'MANUAL', startPage: 30, endPage: 50 }),
+    ]);
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    const row = dayBookRow('데미안', '40분');
+    expect(within(row).queryByText(/쪽/)).toBeNull();
+    expect(screen.queryByText(/12:00|15:30/)).toBeNull();
+    expect(screen.queryByText('타이머 기록')).toBeNull();
+    expect(screen.queryByText('직접 입력한 기록')).toBeNull();
+});
+
+test('FR-05 S-61 각 줄 왼쪽에 책 앞표지가 보이고 표지가 없으면 기본 표지가 보여요', async () => {
+    repository.books.list.mockReturnValue([coverBook('a', '사진 책', 'https://cover.test/a.jpg'), coverBook('b', '표지 없는 책', null)]);
+    repository.sessions.list.mockReturnValue([
+        session('a1', '2026-11-02', 1200, { bookId: 'a' }),
+        session('b1', '2026-11-02', 600, { bookId: 'b' }),
+    ]);
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    const photo = dayBookRow('사진 책', '20분');
+    const image = within(photo).getByTestId('book-cover-image', hidden);
+    expect(image.props.source.uri).toBe('https://cover.test/a.jpg');
+    // 홈(S-10)과 같은 66×99 표지
+    expect(StyleSheet.flatten(image.props.style)).toMatchObject({ width: 66, height: 99 });
+    // 표지 묶음이 가로 줄의 첫 자식이라 표지가 왼쪽, 제목·시간이 오른쪽이다.
+    expect(StyleSheet.flatten(photo.props.style)).toMatchObject({ flexDirection: 'row' });
+    expect(photo.children[0]).toBe(within(photo).getByTestId('day-book-cover', hidden));
+    const none = dayBookRow('표지 없는 책', '10분');
+    expect(within(none).queryByTestId('book-cover-image', hidden)).toBeNull();
+    const fallback = within(none).getByTestId('book-cover-default', hidden);
+    expect(within(fallback).getByText('소설/시', hidden)).toBeTruthy();
+});
+
+test('FR-05 S-61 표지를 불러오지 못하면 기본 표지로 바꿔 보여 줘요', async () => {
+    repository.books.list.mockReturnValue([coverBook('a', '깨진 표지 책', 'https://cover.test/broken.jpg')]);
+    repository.sessions.list.mockReturnValue([session('a1', '2026-11-02', 600, { bookId: 'a' })]);
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    const row = () => within(dayBookRow('깨진 표지 책', '10분'));
+    await act(async () => fireEvent(row().getByTestId('book-cover-image', hidden), 'error'));
+    expect(row().queryByTestId('book-cover-image', hidden)).toBeNull();
+    expect(row().getByTestId('book-cover-default', hidden)).toBeTruthy();
+});
+
+test('FR-05 S-61 책 순서가 위 달력 날짜 칸의 표지 순서와 같아요', async () => {
+    const ids = ['a', 'b', 'c'];
+    repository.books.list.mockReturnValue(ids.map(id => coverBook(id, `책${id}`, `https://cover.test/${id}.jpg`)));
+    repository.sessions.list.mockReturnValue([
+        // a는 한 번씩은 짧지만 합치면 가장 길고, b와 c는 같은 시간이라 먼저 시작한 c가 앞선다.
+        session('a1', '2026-11-03', 600, { bookId: 'a', startedAt: Date.parse('2026-11-03T13:00:00+09:00') }),
+        session('a2', '2026-11-03', 600, { bookId: 'a', startedAt: Date.parse('2026-11-03T14:00:00+09:00') }),
+        session('b1', '2026-11-03', 900, { bookId: 'b', startedAt: Date.parse('2026-11-03T12:30:00+09:00') }),
+        session('c1', '2026-11-03', 900, { bookId: 'c', startedAt: Date.parse('2026-11-03T12:00:00+09:00') }),
+    ]);
+    await renderRouter(routes, { initialUrl: '/calendar?date=2026-11-03' });
+    expect(coverUris('11월 3일, 3권 읽음: 책a, 책c, 책b')).toEqual(['https://cover.test/a.jpg', 'https://cover.test/c.jpg']);
+    expect(dayBookRows().map(row => row.props.accessibilityLabel)).toEqual([
+        '책a, 20분, 책 상세 보기', '책c, 15분, 책 상세 보기', '책b, 15분, 책 상세 보기',
+    ]);
+});
+
+test('FR-05 S-61 책 정보를 찾을 수 없는 기록은 "찾을 수 없는 책"과 기본 표지로 보이고 누를 수 없어요', async () => {
+    repository.sessions.list.mockReturnValue([session('m1', '2026-11-02', 600, { bookId: 'missing' })]);
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    const row = dayBookRow('찾을 수 없는 책', '10분');
+    expect(within(row).getByText('찾을 수 없는 책')).toBeOnTheScreen();
+    expect(within(row).getByTestId('book-cover-default', hidden)).toBeTruthy();
+    expect(row).toBeDisabled();
+    expect(row.props.accessibilityState).toMatchObject({ disabled: true });
+    await fireEvent.press(row);
+    expect(screen).toHavePathname('/calendar');
+});
+
+test('FR-05 S-61 삭제된 세션과 삭제된 책의 기록은 달력 칸처럼 날짜별 기록에서도 빠져요', async () => {
+    repository.books.list.mockReturnValue([book, { ...coverBook('gone', '삭제된 책', null), deleted: true }]);
+    repository.sessions.list.mockReturnValue([
+        session('a1', '2026-11-02', 600),
+        session('a-deleted', '2026-11-02', 3600, { deleted: true }),
+        session('gone1', '2026-11-02', 1200, { bookId: 'gone' }),
+    ]);
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    expect(screen.getByRole('button', { name: '11월 2일, 1권 읽음: 데미안' })).toBeSelected();
+    expect(dayBookRows().map(row => row.props.accessibilityLabel)).toEqual(['데미안, 10분, 책 상세 보기']);
+    expect(screen.queryByText('찾을 수 없는 책')).toBeNull();
+});
+
+test('FR-05 S-61 줄마다 버튼 역할과 "제목, 시간, 책 상세 보기" 라벨이 있고 표지는 건너뛰며 높이는 최소 44예요', async () => {
+    repository.sessions.list.mockReturnValue([session('a1', '2026-11-02', 4800)]);
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    const row = dayBookRow('데미안', '1시간 20분');
+    expect(row.props.accessibilityRole).toBe('button');
+    expect(StyleSheet.flatten(row.props.style)).toMatchObject({ minHeight: 44 });
+    const cover = within(row).getByTestId('day-book-cover', hidden);
+    expect(cover.props).toMatchObject({ accessible: false, importantForAccessibility: 'no-hide-descendants' });
+    // 기본 표지의 장르 글자는 보조 기술에 노출되지 않는다.
+    expect(within(row).queryByText('소설/시')).toBeNull();
+});
+
+test('FR-05 S-61 기록이 없는 날은 제목 "N월 N일 기록"과 빈 상태 안내만 보여요', async () => {
+    repository.sessions.list.mockReturnValue([session('a1', '2026-11-03', 600)]);
+    await renderRouter(routes, { initialUrl: '/calendar' });
+    expect(screen.getByRole('header', { name: '11월 2일 기록' })).toBeOnTheScreen();
+    expect(screen.getByText('이 날짜에는 독서 기록이 없어요.')).toBeOnTheScreen();
+    expect(dayBookRows()).toHaveLength(0);
 });

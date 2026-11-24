@@ -220,3 +220,39 @@ test('FR-05 S-60 한 달 치를 날짜별로 한 번에 묶은 결과는 날짜�
     expect(booksReadByDate([], books, '2026-10').size).toBe(0);
     expect(() => booksReadByDate(list, books, '2026-1')).toThrow(RangeError);
 });
+
+test('FR-05 S-61 같은 날 같은 책을 30분, 50분 두 번 읽으면 그 책 한 줄로 합쳐 1시간 20분이에요', () => {
+    const list = [
+        session('2026-10-05', 1800, { id: 'a1', bookId: 'a', source: 'TIMER' }),
+        session('2026-10-05', 3000, { id: 'a2', bookId: 'a', source: 'MANUAL', startedAt: at('2026-10-05') + 7_200_000 }),
+    ];
+    const day = booksReadByDate(list, [book('a', '소설')], '2026-10').get('2026-10-05');
+    expect(day).toEqual([{ bookId: 'a', seconds: 4800, firstStartedAt: at('2026-10-05') }]);
+    expect(calendarDuration(day![0].seconds)).toBe('1시간 20분');
+});
+
+test('FR-05 S-61 날짜별 기록의 책별 총 시간은 삭제된 세션과 삭제된 책의 세션을 빼고 합쳐요', () => {
+    const list = [
+        session('2026-10-05', 1800, { id: 'a1', bookId: 'a' }),
+        session('2026-10-05', 3600, { id: 'a-deleted', bookId: 'a', deleted: true }),
+        session('2026-10-05', 600, { id: 'a2', bookId: 'a', startedAt: at('2026-10-05') + 60_000 }),
+        session('2026-10-05', 9000, { id: 'gone1', bookId: 'gone' }),
+    ];
+    const books = [book('a', '소설'), book('gone', '소설', '작가', { deleted: true })];
+    expect(booksReadByDate(list, books, '2026-10').get('2026-10-05')).toEqual([
+        { bookId: 'a', seconds: 2400, firstStartedAt: at('2026-10-05') },
+    ]);
+    expect(booksReadByDate([list[1], list[3]], books, '2026-10').has('2026-10-05')).toBe(false);
+});
+
+test('FR-05 S-61 날짜별 기록의 책 순서는 그날 총 시간이 긴 책부터, 같으면 먼저 시작한 책부터예요', () => {
+    const list = [
+        // 한 번은 짧지만 합치면 가장 긴 책
+        session('2026-10-05', 1200, { id: 'a1', bookId: 'a', startedAt: at('2026-10-05') + 120_000 }),
+        session('2026-10-05', 1200, { id: 'a2', bookId: 'a', startedAt: at('2026-10-05') + 240_000 }),
+        session('2026-10-05', 1800, { id: 'b1', bookId: 'b', startedAt: at('2026-10-05') + 60_000 }),
+        session('2026-10-05', 1800, { id: 'c1', bookId: 'c' }),
+    ];
+    expect(booksReadByDate(list, [], '2026-10').get('2026-10-05')?.map(item => [item.bookId, item.seconds]))
+        .toEqual([['a', 2400], ['c', 1800], ['b', 1800]]);
+});

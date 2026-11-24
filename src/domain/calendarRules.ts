@@ -160,8 +160,9 @@ export function booksReadOn(
 }
 
 /**
- * FR-05 / S-60: 한 달(KST)의 날짜(YYYY-MM-DD)별 읽은 책 목록. 날짜 칸마다 전체 세션을 다시 거르지 않도록
+ * FR-05 / S-60·S-61: 한 달(KST)의 날짜(YYYY-MM-DD)별 읽은 책 목록. 날짜 칸마다 전체 세션을 다시 거르지 않도록
  * 세션을 한 번만 훑어 묶는다. 각 날짜의 결과는 booksReadOn과 같고, 기록이 없는 날은 키가 없다.
+ * 달력 날짜 칸의 표지와 날짜별 기록의 책 줄(책별 총 시간 seconds)이 같은 결과를 써서 순서가 어긋나지 않는다.
  */
 export function booksReadByDate(
     sessions: readonly ReadingSession[], books: readonly Pick<StatisticsBook, 'id' | 'deleted'>[], month: string,
