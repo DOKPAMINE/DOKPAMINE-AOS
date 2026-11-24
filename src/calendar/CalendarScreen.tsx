@@ -4,13 +4,16 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Screen, SecondaryButton, StateView } from '../components';
 import {
-    booksReadByDate, calendarClock, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
-    moveCalendarMonth, readingDays, sessionsOn, type GroupStat,
+    booksReadByDate, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
+    moveCalendarMonth, readingDays, type GroupStat,
 } from '../domain/calendarRules';
-import { pagesRead } from '../domain/readingTypes';
+import { BookCover } from '../shelf/BookCover';
 import { colors, fontFamilies, radii, sizes, spacing, typography } from '../theme';
 import { DayCovers } from './DayCovers';
 import { useCalendarRecords } from './useCalendarRecords';
+
+/** S-61 줄 표지 폭. 홈(S-10) 읽는 중 책 표지와 같은 66(최소 터치 44 × 1.5, 높이 99)으로 둔다. */
+const DAY_BOOK_COVER_WIDTH = sizes.minTouch * 1.5;
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -58,7 +61,8 @@ function CalendarContent({ initialDate, records }: {
     const monthLabel = `${Number(month.slice(0, 4))}년 ${Number(month.slice(5))}월`;
     const dateLabel = `${Number(month.slice(5))}월 ${Number(selectedDate.slice(8))}일`;
     const days = readingDays(records.sessions, month);
-    const daySessions = sessionsOn(records.sessions, selectedDate).sort((a, b) => a.startedAt - b.startedAt);
+    // S-61은 달력 날짜 칸과 같은 계산 결과를 써서 책 순서·합계·삭제 처리가 어긋나지 않게 한다.
+    const selectedBooks = booksByDate.get(selectedDate) ?? [];
     const stats = monthlyStats(records.sessions, records.books, month);
     const bookById = new Map(records.books.filter(book => !book.deleted).map(book => [book.id, book]));
 
@@ -106,18 +110,24 @@ function CalendarContent({ initialDate, records }: {
 
             <View style={styles.section}>
                 <Text accessibilityRole="header" style={styles.heading}>{dateLabel} 기록</Text>
-                {daySessions.length === 0 ? <StateView kind="empty" message="이 날짜에는 독서 기록이 없어요." /> : daySessions.map(session => {
-                    const book = bookById.get(session.bookId);
+                {selectedBooks.length === 0 ? <StateView kind="empty" message="이 날짜에는 독서 기록이 없어요." /> : selectedBooks.map(item => {
+                    const book = bookById.get(item.bookId);
                     const title = book?.title ?? '찾을 수 없는 책';
-                    const description = `${calendarClock(session.startedAt)} · ${calendarDuration(session.activeSeconds)} · ${pagesRead(session)}쪽`;
+                    const duration = calendarDuration(item.seconds);
                     return (
-                        <Pressable key={session.id} accessibilityRole="button" accessibilityLabel={`${title}, ${description}, 책 상세 보기`}
+                        <Pressable key={item.bookId} accessibilityRole="button" accessibilityLabel={`${title}, ${duration}, 책 상세 보기`}
                             accessibilityState={{ disabled: !book }} disabled={!book}
-                            onPress={() => router.push({ pathname: '/book/[id]', params: { id: session.bookId } })}
-                            style={({ pressed }) => [styles.session, pressed && styles.pressed]}>
-                            <Text style={styles.subheading}>{title}</Text>
-                            <Text style={styles.muted}>{description}</Text>
-                            <Text style={styles.muted}>{session.source === 'MANUAL' ? '직접 입력한 기록' : '타이머 기록'}</Text>
+                            onPress={() => router.push({ pathname: '/book/[id]', params: { id: item.bookId } })}
+                            style={({ pressed }) => [styles.dayBook, pressed && styles.pressed]}>
+                            {/* 표지는 장식이므로 보조 기술에서 건너뛰고 책 정보는 줄 라벨로 전달한다. 찾을 수 없는 책은 기본 표지와 '기타'를 쓴다. */}
+                            <View testID="day-book-cover" accessible={false} importantForAccessibility="no-hide-descendants">
+                                <BookCover key={book?.coverUrl ?? 'none'} uri={book?.coverUrl ?? null} genre={book?.genre ?? '기타'}
+                                    width={DAY_BOOK_COVER_WIDTH} />
+                            </View>
+                            <View style={styles.dayBookText}>
+                                <Text style={styles.subheading}>{title}</Text>
+                                <Text style={styles.muted}>{duration}</Text>
+                            </View>
                         </Pressable>
                     );
                 })}
@@ -152,7 +162,8 @@ const styles = StyleSheet.create({
     selectedText: { fontFamily: fontFamilies.bold },
     dayNumber: { ...typography.label, color: colors.brand.espresso, textAlign: 'center' },
     section: { gap: spacing.md },
-    session: { minHeight: sizes.minTouch, gap: spacing.sm, paddingVertical: spacing.md, borderBottomWidth: 1, borderColor: colors.line.border },
+    dayBook: { minHeight: sizes.minTouch, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderColor: colors.line.border },
+    dayBookText: { flex: 1, gap: spacing.xs },
     statistics: { gap: spacing.lg, padding: spacing.lg, backgroundColor: colors.surface.sandSoft, borderRadius: radii.card },
     statRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
     groupLabel: { ...typography.bodySmall, color: colors.brand.espresso, flexShrink: 1 },
