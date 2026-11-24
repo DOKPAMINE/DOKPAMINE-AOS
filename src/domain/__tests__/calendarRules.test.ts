@@ -1,8 +1,8 @@
 import {
     booksReadByDate, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
-    monthlyTotalDuration, moveCalendarMonth, sessionsOn, streakDays, thisWeekSeconds,
+    monthlyTotalDuration, moveCalendarMonth, streakDays, thisWeekSeconds,
 } from '../calendarRules';
-import { parseStartedAt } from '../kstDate';
+import { kstDate, parseStartedAt } from '../kstDate';
 import { toManualSession, validateManualSession } from '../manualSessionRules';
 import type { ReadingSession, StatisticsBook } from '../readingTypes';
 
@@ -23,14 +23,14 @@ test('FR-05 S-60 S-61 날짜별 기록과 읽은 날은 중복 날짜를 합치�
     const list = [session('2026-10-01'), session('2026-10-01', 1200), session('2026-10-03'), session('2026-10-02', 600, { deleted: true }), session('2026-11-01')];
     // 10월 1일(두 번)과 3일만 읽은 날이다. 2일은 삭제 기록, 11월 1일은 다른 달이다.
     expect(monthlyStats(list, [], '2026-10').readingDayCount).toBe(2);
-    expect(sessionsOn(list, '2026-10-01')).toHaveLength(2);
-    expect(sessionsOn(list, '2026-10-02')).toEqual([]);
+    expect(dayBooks(list, [], '2026-10-01')).toEqual([{ bookId: 'book', seconds: 1800, firstStartedAt: at('2026-10-01') }]);
+    expect(dayBooks(list, [], '2026-10-02')).toEqual([]);
 });
 test('FR-05 FR-06 S-60 S-62 KST 자정과 월 경계는 시작 시각으로 집계해요', () => {
     const before = session('2026-10-31', 600, { startedAt: Date.parse('2026-10-31T14:59:59Z') });
     const after = session('2026-11-01', 1200, { startedAt: Date.parse('2026-10-31T15:00:00Z') });
-    expect(sessionsOn([before, after], '2026-10-31')).toEqual([before]);
-    expect(sessionsOn([before, after], '2026-11-01')).toEqual([after]);
+    expect(dayBooks([before, after], [], '2026-10-31')).toEqual([{ bookId: 'book', seconds: 600, firstStartedAt: Date.parse('2026-10-31T14:59:59Z') }]);
+    expect(dayBooks([before, after], [], '2026-11-01')).toEqual([{ bookId: 'book', seconds: 1200, firstStartedAt: Date.parse('2026-10-31T15:00:00Z') }]);
     expect(monthlyStats([before, after], [], '2026-10').totalSeconds).toBe(600);
     expect(monthlyStats([before, after], [], '2026-11').totalSeconds).toBe(1200);
 });
@@ -91,13 +91,12 @@ test('FR-02 T09 FR-05 FR-06 수동 기록은 캘린더와 통계와 연속 독�
     const today = toManualSession(input, 'today', 'book', null, startedAt + 3600000);
     const yesterday = { ...today, id: 'yesterday', startedAt: today.startedAt - 86400000, endedAt: today.endedAt - 86400000 };
     const list = [today, yesterday];
-    expect(sessionsOn(list, '2026-10-29')).toEqual([today]);
+    expect(dayBooks(list, [book('book', '소설')], '2026-10-29')).toEqual([{ bookId: 'book', seconds: 1200, firstStartedAt: startedAt }]);
     expect(monthlyStats(list, [book('book', '소설')], '2026-10')).toMatchObject({ totalSeconds: 2400, totalPages: 40, readingDayCount: 2 });
     expect(streakDays(list, '2026-10-29')).toBe(2);
     expect(thisWeekSeconds(list, '2026-10-29')).toBe(2400);
 });
 test('FR-05 FR-06 잘못된 날짜와 월은 조용히 다른 날짜로 집계하지 않아요', () => {
-    expect(() => sessionsOn([], '2026-02-30')).toThrow(RangeError);
     expect(() => streakDays([], '2026-2-01')).toThrow(RangeError);
     expect(() => thisWeekSeconds([], 'bad')).toThrow(RangeError);
     expect(() => monthlyStats([], [], '2026-1')).toThrow(RangeError);
@@ -204,7 +203,7 @@ test('FR-05 S-60 한 달 치를 날짜별로 한 번에 묶은 결과는 날짜�
     for (let day = 1; day <= 31; day += 1) {
         const date = `2026-10-${String(day).padStart(2, '0')}`;
         // 그날 세션만 넘겨 따로 묶은 결과와 비교한다.
-        const expected = booksReadByDate(sessionsOn(list, date), books, '2026-10').get(date) ?? [];
+        const expected = booksReadByDate(list.filter(item => !item.deleted && kstDate(item.startedAt) === date), books, '2026-10').get(date) ?? [];
         expect(byDate.get(date) ?? []).toEqual(expected);
         expect(byDate.has(date)).toBe(expected.length > 0);
     }

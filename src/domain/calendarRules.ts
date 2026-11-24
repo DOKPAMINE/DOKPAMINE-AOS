@@ -80,15 +80,10 @@ export function calendarDuration(seconds: number): string {
     return minutes < 60 ? `${minutes}분` : `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`;
 }
 
-/** FR-05 / S-60: 시작한 날(KST)에 기록 전체를 귀속한다. 삭제 tombstone은 집계하지 않는다. */
-export function sessionsOn(sessions: readonly ReadingSession[], date: string): ReadingSession[] {
-    requireDate(date);
-    return sessions.filter(session => !session.deleted && kstDate(session.startedAt) === date);
-}
-
 /**
  * FR-05·FR-06 / S-60·S-62: 그 달(KST)에 시작한 세션 중 삭제된 세션과 삭제된 책(tombstone)의 세션을 뺀 것.
- * 책을 삭제해도 세션에는 tombstone이 생기지 않으므로 책 목록으로 한 번 더 거른다.
+ * 기록은 시작한 날(KST)에 전체를 귀속한다.
+ * 책을 삭제하면 저장소가 세션도 tombstone으로 만들지만, 넘겨받은 목록에 삭제된 책이 섞여도 결과가 같도록 한 번 더 거른다.
  * 달력 날짜 칸·날짜별 기록(booksReadByDate)과 월간 통계(읽은 일수 포함)가 모두 이 기준을 쓴다.
  */
 function monthSessions(
