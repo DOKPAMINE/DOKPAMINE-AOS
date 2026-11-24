@@ -18,7 +18,7 @@ const book = (id: string, genre: string, author = `작가 ${id}`, changes: Parti
 
 test('FR-05 S-60 S-61 날짜별 기록과 읽은 날은 중복 날짜를 합치고 삭제 기록을 제외해요', () => {
     const list = [session('2026-10-01'), session('2026-10-01', 1200), session('2026-10-03'), session('2026-10-02', 600, { deleted: true }), session('2026-11-01')];
-    expect(readingDays(list, '2026-10')).toEqual(new Set([1, 3]));
+    expect(readingDays(list, [], '2026-10')).toEqual(new Set([1, 3]));
     expect(sessionsOn(list, '2026-10-01')).toHaveLength(2);
     expect(sessionsOn(list, '2026-10-02')).toEqual([]);
 });
@@ -30,20 +30,19 @@ test('FR-05 FR-06 S-60 S-62 KST 자정과 월 경계는 시작 시각으로 집�
     expect(monthlyStats([before, after], [], '2026-10').totalSeconds).toBe(600);
     expect(monthlyStats([before, after], [], '2026-11').totalSeconds).toBe(1200);
 });
-test('FR-06 S-62 10분 20쪽과 20분 30쪽은 30분 50쪽이며 장르와 작가별로 합산해요', () => {
+test('FR-06 S-62 10분 20쪽과 20분 30쪽은 30분이며 마이에서 쓰는 쪽수 50쪽도 계산하고 장르별로 합산해요', () => {
     const list = [session('2026-10-05', 600, { bookId: 'sf', endPage: 20 }), session('2026-10-05', 1200, { bookId: 'history', endPage: 30 })];
     const books = [book('sf', 'SF'), book('history', '역사')];
     const stats = monthlyStats(list, books, '2026-10');
     expect(stats).toMatchObject({ month: '2026-10', totalSeconds: 1800, totalPages: 50, completedBooks: 0, sessionCount: 2 });
-    expect(stats.byGenre).toEqual([{ label: '역사', seconds: 1200, pages: 30 }, { label: 'SF', seconds: 600, pages: 20 }]);
-    expect(stats.byAuthor).toEqual([{ label: '작가 history', seconds: 1200, pages: 30 }, { label: '작가 sf', seconds: 600, pages: 20 }]);
-    expect(monthlyStats(list, books, '2026-11')).toEqual({ month: '2026-11', totalSeconds: 0, totalPages: 0, completedBooks: 0, sessionCount: 0, byGenre: [], byAuthor: [] });
+    expect(stats.byGenre).toEqual([{ label: '역사', seconds: 1200, ratio: 1 }, { label: 'SF', seconds: 600, ratio: 0.5 }]);
+    expect(stats).not.toHaveProperty('byAuthor');
 });
-test('FR-06 S-62 시간만 기록과 되돌아 읽기는 0쪽이며 같은 장르와 작가는 합쳐요', () => {
+test('FR-06 S-62 시간만 기록과 되돌아 읽기는 0쪽이며 같은 장르는 한 줄로 합쳐요', () => {
     const list = [session('2026-10-01', 600, { bookId: 'a', startPage: 112, endPage: 80 }), session('2026-10-02', 600, { bookId: 'b' }), session('2026-10-03', 600, { bookId: 'b', endPage: 10 })];
     const stats = monthlyStats(list, [book('a', 'SF', '같은 작가'), book('b', 'SF', '같은 작가')], '2026-10');
-    expect(stats.byGenre).toEqual([{ label: 'SF', seconds: 1800, pages: 10 }]);
-    expect(stats.byAuthor).toEqual([{ label: '같은 작가', seconds: 1800, pages: 10 }]);
+    expect(stats.totalPages).toBe(10);
+    expect(stats.byGenre).toEqual([{ label: 'SF', seconds: 1800, ratio: 1 }]);
 });
 test('FR-06 S-62 완독 권수는 KST 완독 월에 책당 한 번 세고 삭제 tombstone은 제외해요', () => {
     const books = [
@@ -60,8 +59,7 @@ test('FR-06 S-62 완독 권수는 KST 완독 월에 책당 한 번 세고 삭제
 });
 test('FR-06 S-62 연결할 책이 없는 기록은 기타로 집계해요', () => {
     const stats = monthlyStats([session('2026-10-01')], [], '2026-10');
-    expect(stats.byGenre).toEqual([{ label: '기타', seconds: 600, pages: 0 }]);
-    expect(stats.byAuthor).toEqual(stats.byGenre);
+    expect(stats.byGenre).toEqual([{ label: '기타', seconds: 600, ratio: 1 }]);
 });
 test('FR-05 S-10 하루 합계 1분 이상인 날만 연속 독서일로 세요', () => {
     const list = [session('2026-10-10', 120), session('2026-10-09', 30), session('2026-10-09', 30), session('2026-10-08', 59)];
@@ -89,7 +87,7 @@ test('FR-02 T09 FR-05 FR-06 수동 기록은 캘린더와 통계와 연속 독�
     const today = toManualSession(input, 'today', 'book', null, startedAt + 3600000);
     const yesterday = { ...today, id: 'yesterday', startedAt: today.startedAt - 86400000, endedAt: today.endedAt - 86400000 };
     const list = [today, yesterday];
-    expect(readingDays(list, '2026-10')).toEqual(new Set([28, 29]));
+    expect(readingDays(list, [book('book', '소설')], '2026-10')).toEqual(new Set([28, 29]));
     expect(sessionsOn(list, '2026-10-29')).toEqual([today]);
     expect(monthlyStats(list, [book('book', '소설')], '2026-10')).toMatchObject({ totalSeconds: 2400, totalPages: 40 });
     expect(streakDays(list, '2026-10-29')).toBe(2);
@@ -99,7 +97,7 @@ test('FR-05 FR-06 잘못된 날짜와 월은 조용히 다른 날짜로 집계�
     expect(() => sessionsOn([], '2026-02-30')).toThrow(RangeError);
     expect(() => streakDays([], '2026-2-01')).toThrow(RangeError);
     expect(() => thisWeekSeconds([], 'bad')).toThrow(RangeError);
-    expect(() => readingDays([], '2026-13')).toThrow(RangeError);
+    expect(() => readingDays([], [], '2026-13')).toThrow(RangeError);
     expect(() => monthlyStats([], [], '2026-1')).toThrow(RangeError);
 });
 
@@ -254,4 +252,105 @@ test('FR-05 S-61 날짜별 기록의 책 순서는 그날 총 시간이 긴 책�
     ];
     expect(booksReadByDate(list, [], '2026-10').get('2026-10-05')?.map(item => [item.bookId, item.seconds]))
         .toEqual([['a', 2400], ['c', 1800], ['b', 1800]]);
+});
+
+/** S-62 요약 숫자 확인용: 11월에 3일 동안 2권을 총 1시간 30분 읽고 1권을 완독한 달 */
+const november = {
+    sessions: [
+        session('2026-11-03', 1200, { id: 'n1', bookId: 'novel' }),
+        session('2026-11-03', 600, { id: 'n2', bookId: 'novel', startedAt: at('2026-11-03') + 3_600_000 }),
+        session('2026-11-10', 1800, { id: 'e1', bookId: 'essay' }),
+        session('2026-11-20', 1800, { id: 'n3', bookId: 'novel' }),
+    ],
+    books: [
+        book('novel', '소설', '작가', { completedAt: at('2026-11-20') }),
+        book('essay', '에세이'),
+    ],
+};
+
+test('FR-06 S-62 11월에 3일 동안 2권을 1시간 30분 읽고 1권을 완독하면 요약 숫자가 1시간 30분·1권·3일·2권이에요', () => {
+    const stats = monthlyStats(november.sessions, november.books, '2026-11');
+    expect(calendarDuration(stats.totalSeconds)).toBe('1시간 30분');
+    expect(stats).toMatchObject({ completedBooks: 1, readingDayCount: 3, booksReadCount: 2 });
+});
+
+test('FR-06 S-62 같은 날 여러 번 읽어도 읽은 일수는 하루, 같은 책을 여러 날 읽어도 읽은 책은 한 권이에요', () => {
+    const list = [
+        session('2026-11-03', 600, { id: 'a1', bookId: 'a' }),
+        session('2026-11-03', 600, { id: 'a2', bookId: 'a', startedAt: at('2026-11-03') + 60_000 }),
+        session('2026-11-04', 600, { id: 'a3', bookId: 'a' }),
+    ];
+    expect(monthlyStats(list, [book('a', '소설')], '2026-11')).toMatchObject({ readingDayCount: 2, booksReadCount: 1, sessionCount: 3 });
+});
+
+test('FR-06 S-62 소설 1시간, 에세이 30분이면 소설이 먼저이고 막대 비율은 1과 0.5예요', () => {
+    const list = [
+        session('2026-11-03', 1800, { id: 'e', bookId: 'essay' }),
+        session('2026-11-04', 3600, { id: 'n', bookId: 'novel' }),
+    ];
+    const stats = monthlyStats(list, [book('novel', '소설'), book('essay', '에세이')], '2026-11');
+    expect(stats.byGenre).toEqual([{ label: '소설', seconds: 3600, ratio: 1 }, { label: '에세이', seconds: 1800, ratio: 0.5 }]);
+});
+
+test('FR-06 S-62 장르별 시간이 같으면 장르 이름 순서로 두고 둘 다 100% 막대예요', () => {
+    const list = [
+        session('2026-11-03', 600, { id: 'b', bookId: 'b' }),
+        session('2026-11-03', 600, { id: 'a', bookId: 'a' }),
+        session('2026-11-03', 300, { id: 'c', bookId: 'c' }),
+    ];
+    const stats = monthlyStats(list, [book('a', '에세이'), book('b', '소설'), book('c', 'SF')], '2026-11');
+    expect(stats.byGenre.map(genre => [genre.label, genre.ratio])).toEqual([['소설', 1], ['에세이', 1], ['SF', 0.5]]);
+});
+
+test('FR-06 S-62 0초 기록만 있는 달은 막대 비율이 0이고 0으로 나누지 않아요', () => {
+    const stats = monthlyStats([session('2026-11-03', 0)], [book('book', '소설')], '2026-11');
+    expect(stats.byGenre).toEqual([{ label: '소설', seconds: 0, ratio: 0 }]);
+});
+
+test('FR-06 S-62 삭제한 책과 삭제한 세션의 기록은 시간·쪽수·읽은 일수·읽은 책·완독·장르에서 모두 빠져요', () => {
+    const list = [
+        session('2026-11-03', 600, { id: 'kept', bookId: 'kept', endPage: 10 }),
+        session('2026-11-04', 3600, { id: 'gone', bookId: 'gone', endPage: 100 }),
+        session('2026-11-05', 1800, { id: 'deleted', bookId: 'kept', endPage: 50, deleted: true }),
+    ];
+    const books = [book('kept', '소설'), book('gone', '에세이', '작가', { deleted: true, completedAt: at('2026-11-04') })];
+    expect(monthlyStats(list, books, '2026-11')).toEqual({
+        month: '2026-11', totalSeconds: 600, totalPages: 10, completedBooks: 0, sessionCount: 1,
+        readingDayCount: 1, booksReadCount: 1, byGenre: [{ label: '소설', seconds: 600, ratio: 1 }],
+    });
+});
+
+test('FR-05 FR-06 S-60 S-62 읽은 날도 달력 날짜 칸(booksReadByDate)과 같은 기준으로 삭제한 책의 기록을 빼요', () => {
+    const list = [
+        session('2026-11-03', 600, { id: 'kept', bookId: 'kept' }),
+        session('2026-11-04', 600, { id: 'gone', bookId: 'gone' }),
+        session('2026-11-05', 600, { id: 'deleted', bookId: 'kept', deleted: true }),
+        session('2026-11-06', 600, { id: 'missing', bookId: 'missing' }),
+    ];
+    const books = [book('kept', '소설'), book('gone', '소설', '작가', { deleted: true })];
+    const days = readingDays(list, books, '2026-11');
+    expect(days).toEqual(new Set([3, 6]));
+    expect([...booksReadByDate(list, books, '2026-11').keys()].map(date => Number(date.slice(8))).sort((a, b) => a - b)).toEqual([...days]);
+    expect(monthlyStats(list, books, '2026-11').readingDayCount).toBe(days.size);
+    // 삭제한 책의 기록만 있는 달은 빈 달이다.
+    expect(readingDays([list[1]], books, '2026-11').size).toBe(0);
+});
+
+test('FR-06 S-62 KST 월 경계: 10월 31일 23:59:59 시작은 10월, 11월 1일 00:00 시작은 11월의 읽은 일수·책·장르예요', () => {
+    const before = session('2026-10-31', 600, { id: 'before', bookId: 'a', startedAt: Date.parse('2026-10-31T14:59:59Z') });
+    const after = session('2026-11-01', 1200, { id: 'after', bookId: 'b', startedAt: Date.parse('2026-10-31T15:00:00Z') });
+    const books = [book('a', '소설'), book('b', '에세이')];
+    expect(monthlyStats([before, after], books, '2026-10')).toMatchObject({
+        totalSeconds: 600, readingDayCount: 1, booksReadCount: 1, byGenre: [{ label: '소설', seconds: 600, ratio: 1 }],
+    });
+    expect(monthlyStats([before, after], books, '2026-11')).toMatchObject({
+        totalSeconds: 1200, readingDayCount: 1, booksReadCount: 1, byGenre: [{ label: '에세이', seconds: 1200, ratio: 1 }],
+    });
+});
+
+test('FR-06 S-62 기록이 없는 달은 요약 숫자가 모두 0이고 장르별이 비어 있어요', () => {
+    expect(monthlyStats(november.sessions, november.books, '2026-12')).toEqual({
+        month: '2026-12', totalSeconds: 0, totalPages: 0, completedBooks: 0, sessionCount: 0,
+        readingDayCount: 0, booksReadCount: 0, byGenre: [],
+    });
 });

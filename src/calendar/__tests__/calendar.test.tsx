@@ -63,10 +63,12 @@ test('FR-05 S-60 로딩을 표시하고 빈 달에도 달력과 0 통계를 보�
     await act(async () => finish(prepared()));
     expect(screen.getByRole('header', { name: '2026년 11월' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '11월 2일, 독서 기록 없음' })).toBeSelected();
-    expect(screen.getByText('이 달에는 독서 기록이 없어요.')).toBeOnTheScreen();
-    expect(screen.getByText('0초')).toBeOnTheScreen();
-    expect(screen.getByText('0쪽')).toBeOnTheScreen();
-    expect(screen.getByText('0권')).toBeOnTheScreen();
+    // 달력 아래 빈 달 안내와 S-62 장르별 자리의 안내가 함께 나온다.
+    expect(screen.getAllByText('이 달에는 독서 기록이 없어요.')).toHaveLength(2);
+    expect(screen.getByLabelText('총 독서시간 0초')).toBeOnTheScreen();
+    expect(screen.getByLabelText('완독 0권')).toBeOnTheScreen();
+    expect(screen.getByLabelText('읽은 일수 0일')).toBeOnTheScreen();
+    expect(screen.getByLabelText('읽은 책 0권')).toBeOnTheScreen();
 });
 
 test('FR-05 S-60 달력 가로 스크롤 내용이 화면 폭을 채우고 날짜 칸은 최소 44를 유지해요', async () => {
@@ -98,10 +100,14 @@ test('FR-05 FR-06 S-60 S-61 S-62 지정 날짜를 열고 날짜 선택과 월 �
     expect(screen.getAllByText('데미안')).toHaveLength(1);
     expect(within(screen.getByRole('button', { name: '데미안, 30분, 책 상세 보기' })).getByText('30분')).toBeOnTheScreen();
     expect(screen.queryByText('직접 입력한 기록')).toBeNull();
-    expect(screen.getByText('50쪽')).toBeOnTheScreen();
-    expect(screen.getByText('1권')).toBeOnTheScreen();
-    expect(screen.getAllByText('30분 · 50쪽')).toHaveLength(2);
-    expect(screen.getByText('소설/시')).toBeOnTheScreen();    expect(screen.getByText('헤르만 헤세')).toBeOnTheScreen();
+    // S-62: 10월은 5·6일 이틀, 데미안 1권을 30분 59초 읽었고 10월 31일에 완독했다. 쪽수와 작가는 표시하지 않는다.
+    expect(screen.getByLabelText('총 독서시간 30분')).toBeOnTheScreen();
+    expect(screen.getByLabelText('완독 1권')).toBeOnTheScreen();
+    expect(screen.getByLabelText('읽은 일수 2일')).toBeOnTheScreen();
+    expect(screen.getByLabelText('읽은 책 1권')).toBeOnTheScreen();
+    expect(screen.getByLabelText('소설/시, 30분')).toBeOnTheScreen();
+    expect(screen.queryByText(/쪽/)).toBeNull();
+    expect(screen.queryByText('헤르만 헤세')).toBeNull();
     expect(screen.getByRole('button', { name: '10월 7일, 독서 기록 없음' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '10월 6일, 1권 읽음: 데미안' }));
     expect(screen.getByRole('header', { name: '10월 6일 기록' })).toBeOnTheScreen();
@@ -110,8 +116,9 @@ test('FR-05 FR-06 S-60 S-61 S-62 지정 날짜를 열고 날짜 선택과 월 �
     await fireEvent.press(screen.getByRole('button', { name: '다음 달' }));
     expect(screen.getByRole('header', { name: '2026년 11월' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '11월 6일, 독서 기록 없음' })).toBeSelected();
-    expect(screen.getByText('1시간 0분')).toBeOnTheScreen();
-    expect(screen.getByText('10쪽')).toBeOnTheScreen();
+    expect(screen.getByLabelText('총 독서시간 1시간 0분')).toBeOnTheScreen();
+    expect(screen.getByLabelText('완독 0권')).toBeOnTheScreen();
+    expect(screen.getByLabelText('읽은 일수 1일')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '이전 달' }));
     expect(screen.getByRole('button', { name: '10월 6일, 1권 읽음: 데미안' })).toBeSelected();
 });
@@ -148,8 +155,9 @@ test('NFR-04 FR-05 FR-06 S-60 기록 삭제와 변경을 구독하고 화면 종
     await act(async () => changed());
     expect(screen.getByRole('button', { name: '11월 2일, 독서 기록 없음' })).toBeSelected();
     expect(screen.queryByText('데미안')).toBeNull();
-    expect(screen.getByText('0권')).toBeOnTheScreen();
-    expect(screen.getByText('0초')).toBeOnTheScreen();
+    expect(screen.getByLabelText('완독 0권')).toBeOnTheScreen();
+    expect(screen.getByLabelText('읽은 책 0권')).toBeOnTheScreen();
+    expect(screen.getByLabelText('총 독서시간 0초')).toBeOnTheScreen();
     await rendered.unmount();
     expect(unsubscribe).toHaveBeenCalled();
 });

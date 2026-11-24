@@ -5,31 +5,18 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen, SecondaryButton, StateView } from '../components';
 import {
     booksReadByDate, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
-    moveCalendarMonth, readingDays, type GroupStat,
+    moveCalendarMonth, readingDays,
 } from '../domain/calendarRules';
 import { BookCover } from '../shelf/BookCover';
 import { colors, fontFamilies, radii, sizes, spacing, typography } from '../theme';
 import { DayCovers } from './DayCovers';
+import { MonthlyStatistics } from './MonthlyStatistics';
 import { useCalendarRecords } from './useCalendarRecords';
 
 /** S-61 줄 표지 폭. 홈(S-10) 읽는 중 책 표지와 같은 66(최소 터치 44 × 1.5, 높이 99)으로 둔다. */
 const DAY_BOOK_COVER_WIDTH = sizes.minTouch * 1.5;
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-
-function GroupStats({ title, groups }: { title: string; groups: readonly GroupStat[] }) {
-    return (
-        <View style={styles.section}>
-            <Text accessibilityRole="header" style={styles.subheading}>{title}</Text>
-            {groups.length === 0 ? <Text style={styles.muted}>집계할 독서 기록이 없어요.</Text> : groups.map(group => (
-                <View key={group.label} style={styles.statRow}>
-                    <Text style={styles.groupLabel}>{group.label}</Text>
-                    <Text style={styles.statValue}>{calendarDuration(group.seconds)} · {group.pages}쪽</Text>
-                </View>
-            ))}
-        </View>
-    );
-}
 
 /** S-60 독서 캘린더 · S-61 날짜별 기록 · S-62 월간 통계 / FR-05·FR-06 */
 export function CalendarScreen() {
@@ -60,7 +47,7 @@ function CalendarContent({ initialDate, records }: {
         [records.sessions, records.books, month]);
     const monthLabel = `${Number(month.slice(0, 4))}년 ${Number(month.slice(5))}월`;
     const dateLabel = `${Number(month.slice(5))}월 ${Number(selectedDate.slice(8))}일`;
-    const days = readingDays(records.sessions, month);
+    const days = readingDays(records.sessions, records.books, month);
     // S-61은 달력 날짜 칸과 같은 계산 결과를 써서 책 순서·합계·삭제 처리가 어긋나지 않게 한다.
     const selectedBooks = booksByDate.get(selectedDate) ?? [];
     const stats = monthlyStats(records.sessions, records.books, month);
@@ -133,14 +120,7 @@ function CalendarContent({ initialDate, records }: {
                 })}
             </View>
 
-            <View style={styles.statistics}>
-                <Text accessibilityRole="header" style={styles.heading}>{monthLabel} 월간 통계</Text>
-                <View style={styles.statRow}><Text style={styles.body}>총 독서 시간</Text><Text style={styles.statValue}>{calendarDuration(stats.totalSeconds)}</Text></View>
-                <View style={styles.statRow}><Text style={styles.body}>총 읽은 쪽수</Text><Text style={styles.statValue}>{stats.totalPages}쪽</Text></View>
-                <View style={styles.statRow}><Text style={styles.body}>완독한 책</Text><Text style={styles.statValue}>{stats.completedBooks}권</Text></View>
-                <GroupStats title="장르별" groups={stats.byGenre} />
-                <GroupStats title="작가별" groups={stats.byAuthor} />
-            </View>
+            <MonthlyStatistics title={`${monthLabel} 월간 통계`} stats={stats} />
         </Screen>
     );
 }
@@ -149,7 +129,6 @@ const styles = StyleSheet.create({
     monthNavigation: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
     heading: { ...typography.title, color: colors.brand.espresso, flexShrink: 1 },
     subheading: { ...typography.titleSmall, color: colors.brand.espresso },
-    body: { ...typography.body, color: colors.brand.espresso, flexShrink: 1 },
     muted: { ...typography.bodySmall, color: colors.text.muted },
     // 가로 ScrollView의 내용 컨테이너가 화면 폭 이상이 되어야 달력이 화면 폭을 채운다.
     calendarScroll: { flexGrow: 1 },
@@ -164,9 +143,5 @@ const styles = StyleSheet.create({
     section: { gap: spacing.md },
     dayBook: { minHeight: sizes.minTouch, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderColor: colors.line.border },
     dayBookText: { flex: 1, gap: spacing.xs },
-    statistics: { gap: spacing.lg, padding: spacing.lg, backgroundColor: colors.surface.sandSoft, borderRadius: radii.card },
-    statRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
-    groupLabel: { ...typography.bodySmall, color: colors.brand.espresso, flexShrink: 1 },
-    statValue: { ...typography.label, color: colors.brand.espresso, textAlign: 'right' },
     pressed: { opacity: 0.6 },
 });
