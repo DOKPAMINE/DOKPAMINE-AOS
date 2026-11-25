@@ -24,6 +24,6 @@ export const syncSnapshot = (options?: SyncRequestOptions) => apiRequest<SyncSna
 export const searchBookReviews = (query: string) => apiRequest<BookReviewSearchResponse>(`/api/feed/books?query=${encodeURIComponent(query)}`);
 export const feedList = (signal?: AbortSignal) => apiRequest<FeedListResponse>('/api/feed', { signal });
 export const feedUserBook = (userBookId: string, signal?: AbortSignal) => apiRequest<FeedListResponse>(`/api/feed/user-books/${encodeURIComponent(userBookId)}`, { signal });
-export const feedItem =(id: string, signal?: AbortSignal) => apiRequest<FeedItem>(`/api/feed/${encodeURIComponent(id)}`, { signal });
+export const feedItem = (id: string, signal?: AbortSignal) => apiRequest<FeedItem>(`/api/feed/${encodeURIComponent(id)}`, { signal });
 export const likeReview = (id: string) => apiRequest<ReviewLikeResponse>(`/api/feed/${encodeURIComponent(id)}/like`, { method: 'POST' });
 export const unlikeReview = (id: string) => apiRequest<ReviewLikeResponse>(`/api/feed/${encodeURIComponent(id)}/like`, { method: 'DELETE' });
