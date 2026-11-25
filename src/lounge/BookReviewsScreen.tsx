@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState, type Ref } from 'react';
 import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import type { BookReviewGroup } from '../api/types';
 import { Screen, SecondaryButton, StateView } from '../components';
-import { groupCover, groupReviewBoxes, sortReviewBoxes, type ReviewBoxOrder } from '../domain/loungeRules';
+import { findBookGroup, groupCover, groupReviewBoxes, sortReviewBoxes, type ReviewBoxOrder } from '../domain/loungeRules';
 import { BookCover } from '../shelf/BookCover';
 import { sizes } from '../theme';
-import { BookSearchField } from './BookSearchField';
+import { BookSearchField, SearchDismissArea, pickBookHint, type BookSearchFieldHandle, type SelectedBook } from './BookSearchField';
 import { LoungeBox } from './LoungeBox';
 import { useBookReviews } from './queries';
 import { QueryError } from './QueryState';
@@ -19,41 +19,47 @@ const orders: { value: ReviewBoxOrder; label: string }[] = [
 ];
 
 /**
- * S-71 · FR-16 책별 감상: 서버의 책 묶음(제목·저자·ISBN)과 묶음 순서는 그대로 두고, #113 묶음 안 감상을
- * 사람의 책 박스로 묶는다. 묶음마다 위에 책 정보(왼쪽 표지: coverUrl이 있는 첫 감상의 표지, 없으면 책장의 기본 표지 /
- * 오른쪽 제목·저자·ISBN)를 두고, 구분선 아래에 "N명의 감상"(N은 박스 수)과 그 옆 정렬 버튼(좁으면 아래 줄), 그 아래 카드 모양의 박스를 둔다.
+ * S-71 · FR-16 책별 감상. #124 라운지나 이 화면 위쪽 검색창의 자동완성에서 고른 책 묶음 하나를 보여 준다.
+ * query는 그 목록을 만든 검색어, bookKey는 고른 책 묶음이다. 그 검색어의 서버 결과에서 bookKey 묶음을 찾고,
+ * 그 사이 감상이 지워지는 등으로 묶음이 없어졌으면 빈 안내를, 고른 책 없이 들어왔으면 책을 골라 달라는 안내를 보여 준다.
+ * 위에 책 정보(왼쪽 표지: coverUrl이 있는 첫 감상의 표지, 없으면 책장의 기본 표지 / 오른쪽 제목·저자·ISBN)를 두고,
+ * 구분선 아래에 #113 "N명의 감상"(N은 사람의 책 박스 수)과 그 옆 정렬 버튼(좁으면 아래 줄), 그 아래 카드 모양의 박스를 둔다.
  * 박스에는 표지와 책 제목 없이 닉네임, 대표 감상 앞부분, 날짜만 둔다. 박스는 S-76, userBookId가 없는 예전 응답의 감상은 S-72로 간다.
- * [최신순]·[좋아요 많은 순]은 묶음마다 보이지만 정렬은 하나를 공유한다. 어느 묶음에서 바꿔도 모든 묶음의 정렬과 선택 표시가 같이 바뀐다. 묶음 순서는 바꾸지 않고
- * 각 묶음 안 박스 순서에만 적용한다. 기본은 최신순이고, 검색어가 바뀌면 최신순으로 되돌린다.
- * 맨 위에 라운지와 같은 검색창을 두고, 들어올 때 검색한 단어를 채워 보여 준다. 고쳐서 검색하면 새 화면을 쌓지 않고
- * 이 화면의 검색어(query 파라미터)만 바꿔 결과를 다시 받는다. 그래서 뒤로 가기는 언제나 라운지로 간다.
- * 같은 검색어로 다시 검색하면 파라미터가 그대로이므로 결과를 직접 다시 받는다(refetch).
+ * [최신순]·[좋아요 많은 순]은 박스 순서에만 적용한다. 기본은 최신순이고, 다른 책을 고르면 최신순으로 되돌린다.
+ * 맨 위에 라운지와 같은 검색창을 두고 고른 책의 제목으로 채운다. 여기서 다른 책을 고르면 새 화면을 쌓지 않고
+ * 이 화면의 파라미터만 바꿔 결과를 다시 받는다. 그래서 뒤로 가기는 언제나 라운지로 간다.
+ * 같은 책을 다시 고르면 파라미터가 그대로이므로 결과를 직접 다시 받는다(refetch).
  */
-export function BookReviewsScreen({ query }: { query: string }) {
-    const result = useBookReviews(query);
-    // 정렬은 그 검색어에 묶어 둔다. 검색어가 바뀌면 저장된 정렬이 다른 검색어의 것이므로 최신순으로 본다.
-    const [sort, setSort] = useState<{ query: string; order: ReviewBoxOrder }>({ query, order: 'latest' });
-    const order = sort.query === query ? sort.order : 'latest';
-    const setOrder = (next: ReviewBoxOrder) => setSort({ query, order: next });
-    const search = (next: string) => {
-        if (next === query) void result.refetch();
-        else router.setParams({ query: next });
+export function BookReviewsScreen({ query, bookKey, title }: { query: string; bookKey: string; title: string }) {
+    // 고른 책(bookKey) 없이 열리면 보여 줄 책이 없으므로 요청하지 않는다.
+    const result = useBookReviews(bookKey ? query : '');
+    // 정렬은 고른 책에 묶어 둔다. 다른 책을 고르면 저장된 정렬이 다른 책의 것이므로 최신순으로 본다.
+    const selection = `${query}
+${bookKey}`;
+    const [sort, setSort] = useState<{ selection: string; order: ReviewBoxOrder }>({ selection, order: 'latest' });
+    const order = sort.selection === selection ? sort.order : 'latest';
+    const setOrder = (next: ReviewBoxOrder) => setSort({ selection, order: next });
+    const selectBook = (book: SelectedBook) => {
+        if (book.query === query && book.bookKey === bookKey) void result.refetch();
+        else router.setParams({ query: book.query, bookKey: book.bookKey, title: book.bookTitle });
     };
+    const group = result.data ? findBookGroup(result.data, bookKey) : undefined;
+    const search = useRef<BookSearchFieldHandle>(null);
     return (
-        <Screen title="책별 감상">
+        <Screen title="책별 감상" keyboardShouldPersistTaps="handled">
             <View style={styles.section}>
-                {/* 검색어 파라미터가 바뀌면(이 화면에서 다시 검색) key로 검색창을 새로 만들어 그 단어로 채운다. */}
-                <SearchAgain key={query} query={query} onSearch={search} />
+                {/* 다른 책을 고르면 key로 검색창을 새로 만들어 그 책의 제목으로 채운다. */}
+                <SearchAgain key={selection} ref={search} title={title} onSelectBook={selectBook} />
             </View>
-            <SecondaryButton label="라운지로 돌아가기" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/lounge')} />
-            <Text style={styles.body}>{query.trim() ? `“${query}” 검색 결과` : '책 이름을 입력해 주세요.'}</Text>
-            {!query.trim() ? null : result.isError ? <QueryError error={result.error} retry={() => { void result.refetch(); }} />
-                : result.isPending ? <StateView kind="loading" />
-                    : result.data.length === 0 ? <StateView kind="empty" message="아직 공개된 감상이 없어요" />
-                        // 책 묶음이 여러 개면 묶음 사이를 넓게 띄운다.
-                        : <View style={styles.groups}>
-                            {result.data.map(group => <BookGroup key={group.bookKey} group={group} order={order} onOrderChange={setOrder} />)}
-                        </View>}
+            {/* #124 검색창 밖(뒤로 가기·정렬 버튼·감상 박스 등)을 누르면 키보드와 자동완성을 닫는다. */}
+            <SearchDismissArea search={search}>
+                <SecondaryButton label="라운지로 돌아가기" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/lounge')} />
+                {!query.trim() || !bookKey ? <StateView kind="empty" message={pickBookHint} />
+                    : result.isError ? <QueryError error={result.error} retry={() => { void result.refetch(); }} />
+                        : result.isPending ? <StateView kind="loading" />
+                            : !group ? <StateView kind="empty" message="아직 공개된 감상이 없어요" />
+                                : <BookGroup group={group} order={order} onOrderChange={setOrder} />}
+            </SearchDismissArea>
         </Screen>
     );
 }
@@ -77,8 +83,7 @@ function BookGroup({ group, order, onOrderChange }: {
             <View testID="book-group-divider" accessible={false} importantForAccessibility="no" style={styles.divider} />
             <View testID="book-group-count-row" style={styles.countRow}>
                 <Text accessibilityRole="header" style={styles.titleSmall}>{boxes.length}명의 감상</Text>
-                {/* 정렬은 화면 전체가 하나를 공유한다. 여러 묶음의 버튼을 스크린리더가 구분하도록 책 제목을 붙인다. */}
-                <View accessibilityRole="radiogroup" accessibilityLabel={`${group.bookTitle} 감상 정렬`} style={styles.chips}>
+                <View accessibilityRole="radiogroup" accessibilityLabel="감상 정렬" style={styles.chips}>
                     {orders.map(option => {
                         const selected = option.value === order;
                         return (
@@ -98,8 +103,8 @@ function BookGroup({ group, order, onOrderChange }: {
     );
 }
 
-/** S-71 맨 위 검색창. 들어올 때(또는 검색어가 바뀔 때) 그 검색어로 채운다. */
-function SearchAgain({ query, onSearch }: { query: string; onSearch: (query: string) => void }) {
-    const [input, setInput] = useState(query);
-    return <BookSearchField value={input} onChangeText={setInput} onSearch={onSearch} />;
+/** S-71 맨 위 검색창. 들어올 때(또는 다른 책을 고를 때) 고른 책의 제목으로 채운다. */
+function SearchAgain({ title, onSelectBook, ref }: { title: string; onSelectBook: (book: SelectedBook) => void; ref?: Ref<BookSearchFieldHandle> }) {
+    const [input, setInput] = useState(title);
+    return <BookSearchField ref={ref} value={input} onChangeText={setInput} onSelectBook={onSelectBook} />;
 }

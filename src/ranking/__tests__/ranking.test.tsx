@@ -13,6 +13,8 @@ import { rankingKeys } from '../queries';
 
 jest.mock('../../api/endpoints', () => ({ weeklyRanking: jest.fn(), patchMe: jest.fn(), feedList: jest.fn() }));
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn() } }));
+// #124 검색창 돋보기(@expo/vector-icons)가 글꼴을 불러오지 않게 한다.
+jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), isLoaded: () => true, loadAsync: jest.fn() }));
 
 const user: MeResponse = { id: 'reader', username: 'reader_01', nickname: '책산책', rankingOptIn: false };
 const entry = (rank: number, me = false): RankingEntry => ({ rank, userId: `reader-${rank}`, nickname: me ? user.nickname : `독서가 ${rank}`, seconds: 18000 - rank * 60, me });

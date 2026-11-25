@@ -10,7 +10,8 @@ import { onboardingStorage } from './onboardingStorage';
 import { authSyncLifecycle } from './syncLifecycle';
 
 type AuthStatus = 'loading' | 'error' | 'onboarding' | 'signedOut' | 'signedIn';
-interface AuthState { status: AuthStatus; notice?: string }
+/** #124: userId는 로그인한(signedIn) 계정이다. 계정별로 기기에만 두는 값(라운지 최근 고른 책)을 나누는 데 쓴다. */
+interface AuthState { status: AuthStatus; notice?: string; userId?: string }
 interface AuthContextValue extends AuthState {
     retry: () => void;
     recoverSession: () => Promise<void>;
@@ -52,7 +53,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
                         return;
                     }
                     session.current = saved;
-                    setState({ status: 'signedIn' });
+                    setState({ status: 'signedIn', userId: saved.userId });
                     void Promise.resolve().then(() => {
                         if (active && session.current === saved) return authSyncLifecycle.syncAfterLogin(saved.userId, saved.accessToken);
                     }).catch(() => {});
@@ -140,7 +141,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         queryClient.clear();
         invalidatedToken.current = null;
         session.current = next;
-        setState({ status: 'signedIn' });
+        setState({ status: 'signedIn', userId: next.userId });
         // 동기화 엔진이 재시도를 관리하며 오프라인에서도 로그인된 화면은 열린다.
         void Promise.resolve().then(() => { if (session.current === next) return authSyncLifecycle.syncAfterLogin(next.userId, next.accessToken); }).catch(() => {});
     };
@@ -161,6 +162,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
 
     return <AuthContext.Provider value={{ ...state, retry: () => { setState({ status: 'loading' }); setAttempt(value => value + 1); }, recoverSession, completeOnboarding, signIn, signOut }}>{children}</AuthContext.Provider>;
+}
+
+/** #124: 로그인한 계정 ID. 로그인 전이거나 AuthProvider 밖이면 undefined다. */
+export function useSignedInUserId(): string | undefined {
+    const value = useContext(AuthContext);
+    return value?.status === 'signedIn' ? value.userId : undefined;
 }
 
 export function useAuth(): AuthContextValue {
