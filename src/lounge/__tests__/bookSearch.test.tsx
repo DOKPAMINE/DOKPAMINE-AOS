@@ -24,7 +24,7 @@ jest.mock('../../auth/AuthProvider', () => ({ useSignedInUserId: jest.fn() }));
 jest.mock('expo-sqlite/kv-store');
 
 // 루트 __mocks__의 메모리 기기 저장소(expo-sqlite/kv-store).
-const kv = jest.requireMock<{ __reset: () => void; __store: Map<string, string> }>('expo-sqlite/kv-store');
+const kv = jest.requireMock<{ __reset: () => void; __store: Map<string, string>; default: { getItemAsync: jest.Mock } }>('expo-sqlite/kv-store');
 
 const review: FeedItem = {
     id: 'review-1', userBookId: 'user-book-1', nickname: '독자', bookTitle: '데미안', bookAuthor: '헤르만 헤세', genre: '소설',
@@ -123,6 +123,23 @@ describe('#124 FR-16 S-70 S-71 책 이름 자동완성', () => {
         expect(await screen.findByRole('button', { name: suggestionName(2) })).toBeOnTheScreen();
         expect(firstSignal?.aborted).toBe(true);
         expect(within(screen.getByTestId('book-suggestions')).getAllByRole('button')).toHaveLength(1);
+    });
+
+    test('이전 검색어의 요청이 늦게 끝나도 마지막 검색어의 목록을 바꾸지 않아요', async () => {
+        let finishFirst!: (value: BookReviewSearchResponse) => void;
+        jest.mocked(searchBookReviews).mockImplementation(query => query === '데미'
+            ? new Promise(done => { finishFirst = done; })
+            : Promise.resolve([groups[1]]));
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        await screen.findByLabelText('책 이름');
+        await typeInto('데미');
+        await waitFor(() => expect(searchBookReviews).toHaveBeenCalledWith('데미', expect.any(AbortSignal)));
+        await typeInto('데미안');
+        expect(await screen.findByRole('button', { name: suggestionName(2) })).toBeOnTheScreen();
+        await act(async () => { finishFirst(groups); });
+        expect(within(screen.getByTestId('book-suggestions')).getAllByRole('button').map(item => item.props.accessibilityLabel))
+            .toEqual([suggestionName(2)]);
+        expect(client.getQueryData(['lounge', 'book-suggestions', '데미안'])).toMatchObject({ term: '데미안', groups: [groups[1]] });
     });
 
     test('검색창을 모두 지우거나 검색창 밖을 눌러 포커스가 빠지면 목록을 닫아요', async () => {
@@ -330,5 +347,129 @@ describe('#124 최근 고른 책', () => {
         await typeInto('');
         await fireEvent.press(await screen.findByRole('button', { name: '데미안 1, 헤르만 헤세' }));
         expect(await screen.findByText('아직 공개된 감상이 없어요')).toBeOnTheScreen();
+    });
+});
+
+describe('#124 검색어 지우기(X) 버튼', () => {
+    test.each([['S-70', '/lounge'], ['S-71', s71('text:book-1', '데미안 1')]])(
+        '%s 글자가 있을 때만 보이고, 누르면 글자를 모두 지우고 자동완성을 닫으며 포커스를 둔 채 최근 고른 책을 열어요', async (_screen, initialUrl) => {
+            seedRecent('user-a', [recent(2)]);
+            await renderRouter(routes, { initialUrl });
+            await screen.findAllByLabelText('책 이름');
+            await typeInto('');
+            expect(screen.queryByTestId('book-search-clear')).toBeNull();
+            await fireEvent.changeText(searchInput(), '데미');
+            await screen.findByTestId('book-suggestions');
+            const clear = screen.getByRole('button', { name: '검색어 지우기' });
+            expect(clear).toHaveProp('testID', 'book-search-clear');
+            expect(styleOf(clear).width).toBeGreaterThanOrEqual(44);
+            expect(styleOf(clear)).toMatchObject({ minHeight: 44 });
+            await fireEvent.press(clear);
+            expect(searchInput()).toHaveProp('value', '');
+            expect(screen.queryByTestId('book-suggestions')).toBeNull();
+            expect(screen.queryByTestId('book-search-clear')).toBeNull();
+            // 포커스가 남아 있으므로 빈 검색창의 최근 고른 책이 열린다.
+            const list = await screen.findByTestId('recent-books');
+            expect(within(list).getByRole('button', { name: '데미안 2, 헤르만 헤세' })).toBeOnTheScreen();
+        },
+    );
+});
+
+describe('#124 검색창 밖을 누르거나 화면을 옮기면 검색창 닫기', () => {
+    test('S-70 독서왕 랭킹·감상 박스를 누르기 시작하면 자동완성과 안내를 닫아요', async () => {
+        jest.mocked(feedList).mockResolvedValue([review]);
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        await screen.findByLabelText('책 이름');
+        await typeInto('데미안');
+        await screen.findByTestId('book-suggestions');
+        await fireEvent(searchInput(), 'submitEditing');
+        expect(screen.getByTestId('book-search-hint')).toBeOnTheScreen();
+        await fireEvent(screen.getByRole('button', { name: '독서왕 랭킹' }), 'touchStart');
+        expect(screen.queryByTestId('book-suggestions')).toBeNull();
+        expect(screen.queryByTestId('book-search-hint')).toBeNull();
+        // 다시 검색창을 누르면 열리고, 감상 박스를 누르기 시작하면 또 닫힌다.
+        await typeInto('데미안');
+        await screen.findByTestId('book-suggestions');
+        await fireEvent(await screen.findByText('나를 돌아보는 책'), 'touchStart');
+        expect(screen.queryByTestId('book-suggestions')).toBeNull();
+    });
+
+    test('S-71 정렬 버튼·라운지로 돌아가기를 누르기 시작하면 자동완성을 닫아요', async () => {
+        await renderRouter(routes, { initialUrl: s71('text:book-1', '데미안 1') });
+        await screen.findByRole('header', { name: '데미안 1' });
+        await typeInto('데미');
+        await screen.findByTestId('book-suggestions');
+        await fireEvent(screen.getByRole('radio', { name: '좋아요 많은 순' }), 'touchStart');
+        expect(screen.queryByTestId('book-suggestions')).toBeNull();
+        await typeInto('데미안');
+        await screen.findByTestId('book-suggestions');
+        await fireEvent(screen.getByRole('button', { name: '라운지로 돌아가기' }), 'touchStart');
+        expect(screen.queryByTestId('book-suggestions')).toBeNull();
+    });
+
+    test('검색창은 닫기 영역 밖에 있고, 닫기 영역은 Screen 내용 간격을 그대로 써서 배치가 바뀌지 않아요', async () => {
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        await screen.findByLabelText('책 이름');
+        const area = screen.getByTestId('search-dismiss-area');
+        expect(within(area).queryByLabelText('책 이름')).toBeNull();
+        expect(styleOf(area)).toEqual({ gap: 16 });
+    });
+
+    test('S-70에서 목록을 연 채 다른 화면으로 갔다가 돌아오면 목록이 닫혀 있어요', async () => {
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        await screen.findByLabelText('책 이름');
+        await typeInto('데미');
+        await screen.findByTestId('book-suggestions');
+        await act(async () => router.push(s71('text:book-1', '데미안 1')));
+        await screen.findByRole('header', { name: '데미안 1' });
+        await act(async () => router.back());
+        await screen.findByText('최근 공개 감상');
+        // 라운지 탭은 화면과 입력한 글자가 남아 있지만 목록은 닫혀 있다.
+        expect(searchInput()).toHaveProp('value', '데미');
+        expect(screen.queryByTestId('book-suggestions')).toBeNull();
+    });
+});
+
+describe('#124 최근 고른 책 읽기 실패', () => {
+    const selectFromLounge = async (query: string, name: string) => {
+        await typeInto(query);
+        await fireEvent.press(await screen.findByRole('button', { name }));
+        await screen.findByTestId('book-group');
+        await act(async () => router.back());
+        await screen.findByText('최근 공개 감상');
+    };
+
+    test('읽지 못하면 빈 목록을 기억하지 않고, 실패가 이어지는 동안 책을 골라도 기기의 목록을 덮어쓰지 않아요', async () => {
+        seedRecent('user-a', [recent(1), recent(2)]);
+        kv.default.getItemAsync.mockRejectedValue(new Error('읽기 실패'));
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        await screen.findByLabelText('책 이름');
+        await typeInto('');
+        await waitFor(() => expect(kv.default.getItemAsync).toHaveBeenCalled());
+        expect(screen.queryByTestId('recent-books')).toBeNull();
+        await selectFromLounge('데미', suggestionName(3));
+        expect(storedRecent('user-a')).toEqual(['text:book-1', 'text:book-2']);
+        // 저장소를 다시 읽을 수 있게 되면 검색창을 다시 누를 때 기존 목록이 보이고, 그 뒤 고른 책은 맨 위에 더해진다.
+        kv.default.getItemAsync.mockImplementation(async (key: string) => kv.__store.get(key) ?? null);
+        await fireEvent.changeText(searchInput(), '');
+        await fireEvent(searchInput(), 'blur');
+        await typeInto('');
+        const list = await screen.findByTestId('recent-books');
+        expect(within(list).getAllByTestId('recent-book').map(book => book.props.accessibilityLabel))
+            .toEqual(['데미안 1, 헤르만 헤세', '데미안 2, 헤르만 헤세']);
+        await selectFromLounge('데미', suggestionName(3));
+        await waitFor(() => expect(storedRecent('user-a')).toEqual(['text:book-3', 'text:book-1', 'text:book-2']));
+    });
+
+    test('한 번 읽지 못한 직후 책을 고르면 다시 읽어 기존 목록 위에 더해요', async () => {
+        seedRecent('user-a', [recent(1), recent(2)]);
+        kv.default.getItemAsync.mockRejectedValueOnce(new Error('읽기 실패'));
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        await screen.findByLabelText('책 이름');
+        await typeInto('');
+        await waitFor(() => expect(kv.default.getItemAsync).toHaveBeenCalledTimes(1));
+        expect(screen.queryByTestId('recent-books')).toBeNull();
+        await selectFromLounge('데미', suggestionName(3));
+        await waitFor(() => expect(storedRecent('user-a')).toEqual(['text:book-3', 'text:book-1', 'text:book-2']));
     });
 });
