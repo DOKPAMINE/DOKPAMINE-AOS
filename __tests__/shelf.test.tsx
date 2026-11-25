@@ -82,27 +82,31 @@ test('FR-04 S-30 빈 책장은 홈 등록 안내를 보여 줘요', async () => 
     expect(await screen.findByText('아직 책장에 책이 없어요. 홈에서 읽는 책이나 읽고 싶은 책을 등록해 주세요.')).toBeOnTheScreen();
 });
 
-test('FR-04 S-30 여러 장르의 책등은 고정 장르 순서와 세 종류 상태 라벨을 보여 줘요', async () => {
+test('FR-04 S-30 장르 전체는 책장 하나에 고정 장르 순서대로 꽂고 세 종류 상태 라벨을 보여 줘요', async () => {
     repository.books.save({ ...book, genre: '과학/IT', status: 'DONE' });
     repository.books.save({ ...book, id: sessionId, title: '읽고 싶은 소설', status: 'WANT' });
     repository.books.save({ ...book, id: reviewId, title: '읽는 소설' });
     await renderRouter(routes, { initialUrl: '/shelf' });
-    await screen.findByRole('header', { name: '소설/시 · 2권' });
+    await screen.findByRole('header', { name: '전체 · 3권' });
+    // 장르 칸 없이 '책장' 제목과 '전체' 제목 두 개만 있어요.
     const headings = screen.getAllByRole('header');
-    expect(headings).toHaveLength(3);
-    expect(headings[1]).toHaveTextContent('소설/시 · 2권');
-    expect(headings[2]).toHaveTextContent('과학/IT · 1권');
+    expect(headings).toHaveLength(2);
+    expect(headings[1]).toHaveTextContent('전체 · 3권');
+    // 책장 하나 안에서 소설/시 책이 과학/IT 책보다 먼저 꽂혀요.
+    const spines = screen.getAllByRole('button', { name: /책 상세 보기$/ }).map(spine => spine.props.accessibilityLabel as string);
+    expect(spines.findIndex(label => label.startsWith('읽는 소설'))).toBeLessThan(spines.findIndex(label => label.startsWith('데미안')));
+    expect(spines.findIndex(label => label.startsWith('읽고 싶은 소설'))).toBeLessThan(spines.findIndex(label => label.startsWith('데미안')));
     expect(screen.getByText('읽고 싶은 책')).toBeOnTheScreen();
     expect(screen.getByText('읽는 중')).toBeOnTheScreen();
     expect(screen.getByText('완독')).toBeOnTheScreen();
 });
 
-test('FR-04 S-30 장르별 책등에서 상세로 이동하고 쪽수·누적 시간·한줄평을 보여 줘요', async () => {
+test('FR-04 S-30 책장 책등에서 상세로 이동하고 쪽수·누적 시간·한줄평을 보여 줘요', async () => {
     repository.books.save(book);
     repository.sessions.save({ id: sessionId, bookId: id, startedAt: 0, endedAt: 61000, activeSeconds: 61, startPage: 0, endPage: 84, source: 'TIMER' });
     repository.reviews.save({ id: reviewId, bookId: id, oneLine: '나를 돌아봤어요.', body: null, visibility: 'PRIVATE', publishedAt: null });
     await renderRouter(routes, { initialUrl: '/shelf' });
-    expect(await screen.findByRole('header', { name: '소설/시 · 1권' })).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '전체 · 1권' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '데미안, 헤르만 헤세, 읽는 중, 책 상세 보기' }));
     expect(await screen.findByRole('progressbar', { name: '독서 진행' })).toHaveAccessibilityValue({ text: '84 / 240쪽' });
     expect(screen.getByText('누적 독서 시간 · 0시간 1분 1초')).toBeOnTheScreen();
