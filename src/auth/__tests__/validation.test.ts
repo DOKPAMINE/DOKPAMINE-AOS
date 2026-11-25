@@ -22,11 +22,11 @@ test.each([8, 64])('FR-10 · S-02/S-03 비밀번호 경계 %i자는 허용해요
     expect(loginSchema.safeParse({ ...valid, password: 'a'.repeat(length) }).success).toBe(true);
 });
 
-test.each(['', '   ', '가'.repeat(31)])('FR-10 · S-03 닉네임 경계 밖 %s는 거절해요', nickname => {
+test.each(['', '   ', '가'.repeat(16)])('FR-10 · S-03 닉네임 경계 밖 %s는 거절해요', nickname => {
     expect(signupSchema.safeParse({ ...valid, nickname }).success).toBe(false);
 });
 
-test.each([1, 30])('FR-10 · S-03 닉네임 경계 %i자는 허용해요', length => {    expect(signupSchema.safeParse({ ...valid, nickname: '가'.repeat(length) }).success).toBe(true);
+test.each([1, 15])('FR-10 · S-03 닉네임 경계 %i자는 허용해요', length => {    expect(signupSchema.safeParse({ ...valid, nickname: '가'.repeat(length) }).success).toBe(true);
 });
 
 test('FR-10 · S-03 아이디와 닉네임은 공백을 정리하고 비밀번호 원문은 보존해요', () => {

@@ -185,7 +185,7 @@ test('FR-10 · S-02 기존 계정은 가입한 이메일을 아이디로 보내 
     expect(login).toHaveBeenCalledWith({ username: 'reader@example.test', password: 'password' }, expect.anything());
 });
 
-test('FR-10 · S-03 닉네임을 검증하고 회원가입 성공 후 바로 홈을 열어요', async () => {
+test('FR-10 · S-03 닉네임은 15자까지 허용하고 회원가입 성공 후 홈을 열어요', async () => {
     seen();
     await renderRouter(routes, { initialUrl: '/signup' });
     await screen.findByRole('header', { name: '독파민 회원가입' });
@@ -193,10 +193,14 @@ test('FR-10 · S-03 닉네임을 검증하고 회원가입 성공 후 바로 홈
     await fireEvent.press(screen.getByRole('button', { name: '가입하고 시작하기' }));
     expect(await screen.findByText('닉네임을 입력해 주세요.')).toBeOnTheScreen();
     expect(signup).not.toHaveBeenCalled();
-    await fireEvent.changeText(screen.getByLabelText('닉네임'), '독자');
+    await fireEvent.changeText(screen.getByLabelText('닉네임'), '가'.repeat(16));
+    await fireEvent.press(screen.getByRole('button', { name: '가입하고 시작하기' }));
+    expect(await screen.findByText('닉네임은 15자 이내로 입력해 주세요.')).toBeOnTheScreen();
+    expect(signup).not.toHaveBeenCalled();
+    await fireEvent.changeText(screen.getByLabelText('닉네임'), '가'.repeat(15));
     await fireEvent.press(screen.getByRole('button', { name: '가입하고 시작하기' }));
     expect(await screen.findByText('인증된 홈')).toBeOnTheScreen();
-    expect(signup).toHaveBeenCalledWith({ username: 'reader_01', password: 'password', nickname: '독자' }, expect.anything());
+    expect(signup).toHaveBeenCalledWith({ username: 'reader_01', password: 'password', nickname: '가'.repeat(15) }, expect.anything());
 });
 
 test('FR-10 · S-03 중복 아이디은 서버의 오류 문구를 그대로 보여 줘요', async () => {
