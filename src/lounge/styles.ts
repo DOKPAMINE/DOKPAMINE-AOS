@@ -4,6 +4,7 @@ import { colors, radii, sizes, spacing, typography } from '../theme';
 export const styles = StyleSheet.create({
     section: { gap: spacing.lg },
     heading: { ...typography.title, color: colors.brand.espresso },
+    titleSmall: { ...typography.titleSmall, color: colors.brand.espresso },
     body: { ...typography.body, color: colors.brand.espresso },
     muted: { ...typography.bodySmall, color: colors.text.muted },
     input: {
@@ -15,6 +16,8 @@ export const styles = StyleSheet.create({
         minHeight: sizes.minTouch, gap: spacing.sm, paddingVertical: spacing.lg,
         borderBottomWidth: 1, borderBottomColor: colors.line.border,
     },
+    card: { alignItems: 'flex-start' },
+    cardLink: { alignSelf: 'stretch', minHeight: sizes.minTouch, gap: spacing.sm },
     like: {
         minHeight: sizes.button, minWidth: sizes.minTouch, padding: spacing.md,
         backgroundColor: colors.surface.chip, borderRadius: radii.button,

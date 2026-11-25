@@ -6,7 +6,7 @@ import { PrimaryButton, Screen, SecondaryButton, StateView } from '../components
 import { colors } from '../theme';
 import { refetchFeed, useFeed } from './queries';
 import { QueryError } from './QueryState';
-import { ReviewRow } from './ReviewRow';
+import { LoungeBox } from './LoungeBox';
 import { styles } from './styles';
 
 export function LoungeScreen() {
@@ -38,7 +38,8 @@ export function LoungeScreen() {
             {feed.isError ? <QueryError error={feed.error} retry={() => { void feed.refetch(); }} />
                 : feed.isPending ? <StateView kind="loading" />
                     : feed.data.length === 0 ? <StateView kind="empty" message="아직 공개된 감상이 없어요" />
-                        : feed.data.map(item => <ReviewRow key={item.id} item={item} />)}
+                        // #113: 박스는 사람의 책 하나다. 순서는 서버가 준 그대로 둔다.
+                        : feed.data.map(item => <LoungeBox key={item.userBookId ?? item.id} item={item} />)}
         </Screen>
     );
 }

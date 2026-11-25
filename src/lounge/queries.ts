@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { useIsMutating, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
-import { feedItem, feedList, likeReview, searchBookReviews, unlikeReview } from '../api/endpoints';
+import { feedItem, feedList, feedUserBook, likeReview, searchBookReviews, unlikeReview } from '../api/endpoints';
 import { subscribeReviewsSynced } from '../sync/runtime';
 import { isOnline } from '../api/connectivity';
 import { ApiError, offlineError } from '../api/errors';
@@ -11,6 +11,7 @@ export const loungeKeys = {
     feed: ['lounge', 'feed'] as const,
     books: (query: string) => ['lounge', 'books', query] as const,
     item: (id: string) => ['lounge', 'item', id] as const,
+    userBook: (userBookId: string) => ['lounge', 'user-book', userBookId] as const,
 };
 
 async function connected<T>(request: () => Promise<T>): Promise<T> {
@@ -39,14 +40,28 @@ export function connectLoungeSyncRefresh(client: QueryClient, subscribe: (listen
     return subscribe(() => { void client.invalidateQueries({ queryKey: loungeKeys.all }); });
 }
 
-/** #91 S-72: 상세가 404면 지워졌거나 비공개로 바뀐 감상이다. 목록·검색에 남은 그 감상을 지우도록 다시 받게 한다. */
-export function invalidateLoungeLists(client: QueryClient) {
-    return client.invalidateQueries({ queryKey: loungeKeys.all, predicate: query => query.queryKey[1] !== 'item' });
+/**
+ * #91 S-72 · #113 S-76: 상세·감상 모음이 404면 지워졌거나 비공개로 바뀐 감상이다. 목록·검색·감상 모음에 남은 그 감상을 지우도록 다시 받게 한다.
+ * keep은 404를 받은 그 조회로, 같은 404를 다시 요청하지 않게 뺀다.
+ */
+export function invalidateLoungeLists(client: QueryClient, keep?: QueryKey) {
+    const kept = keep === undefined ? undefined : JSON.stringify(keep);
+    return client.invalidateQueries({ queryKey: loungeKeys.all,
+        predicate: query => query.queryKey[1] !== 'item' && JSON.stringify(query.queryKey) !== kept });
 }
 
 export function useBookReviews(query: string) {
     return useQuery({ ...options, queryKey: loungeKeys.books(query), enabled: query.trim().length > 0,
         queryFn: () => connected(() => searchBookReviews(query)) });
+}
+/** #113 S-76: 박스(한 사람이 한 책에 쓴 공개 감상) 전부. 서버 순서는 publishedAt 최신순이다. */
+export function useUserBookFeed(userBookId: string) {
+    return useQuery({ ...options, queryKey: loungeKeys.userBook(userBookId), enabled: userBookId.length > 0,
+        queryFn: ({ signal }) => connected(() => feedUserBook(userBookId, signal)) });
+}
+/** #113 S-76: S-72에서 돌아오는 등 화면에 다시 들어올 때 서버에서 다시 받는다. 진행 중인 조회는 기다린다. */
+export function refetchUserBookFeed(client: QueryClient, userBookId: string) {
+    return client.refetchQueries({ queryKey: loungeKeys.userBook(userBookId), exact: true }, { cancelRefetch: false });
 }
 export function useFeedItem(id: string) {
     return useQuery({ ...options, queryKey: loungeKeys.item(id), enabled: id.length > 0,
@@ -55,13 +70,17 @@ export function useFeedItem(id: string) {
 
 function patchLike(key: QueryKey, data: unknown, id: string, value: ReviewLikeResponse): unknown {
     const patch = (item: FeedItem) => item.id === id ? { ...item, ...value } : item;
-    if (key[1] === 'feed') return (data as FeedListResponse | undefined)?.map(patch);
+    if (key[1] === 'feed' || key[1] === 'user-book') return (data as FeedListResponse | undefined)?.map(patch);
     if (key[1] === 'books') return (data as BookReviewSearchResponse | undefined)?.map(group => ({ ...group, reviews: group.reviews.map(patch) }));
     if (key[1] === 'item' && data) return patch(data as FeedItem);
     return data;
 }
 
-export function useReviewLike(id: string) {
+/**
+ * owner는 좋아요를 누른 화면의 조회다(기본은 S-72 상세). 로그아웃·계정 전환으로 그 조회가 캐시에서 바뀌면
+ * 늦게 도착한 결과를 반영하지 않는다. #113 S-76은 감상 모음 조회를 owner로 준다.
+ */
+export function useReviewLike(id: string, owner?: QueryKey) {
     const client = useQueryClient();
     const lock = useRef(false);
     const mutationKey = ['lounge', 'like', id];
@@ -103,9 +122,10 @@ export function useReviewLike(id: string) {
             if (lock.current || client.isMutating({ mutationKey }) > 0) return;
             lock.current = true;
             // 로그아웃/계정 전환으로 캐시가 교체되면 이전 요청의 결과를 반영하지 않는다.
-            const entry = client.getQueryCache().find({ queryKey: loungeKeys.item(item.id), exact: true });
+            const ownerKey = owner ?? loungeKeys.item(item.id);
+            const entry = client.getQueryCache().find({ queryKey: ownerKey, exact: true });
             mutation.mutate({ liked: !item.likedByMe, previous: item,
-                isCurrent: () => entry !== undefined && client.getQueryCache().find({ queryKey: loungeKeys.item(item.id), exact: true }) === entry });
+                isCurrent: () => entry !== undefined && client.getQueryCache().find({ queryKey: ownerKey, exact: true }) === entry });
         },
     };
 }
