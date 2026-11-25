@@ -29,6 +29,7 @@ const quote: QuoteDto = { id: '00000000-0000-4000-8000-000000000005', bookId: bo
     text: '문장', page: null, memo: null, deleted: true, createdAt: timestamp, updatedAt: timestamp };
 const token: TokenResponse = { accessToken: 'unit-test-only-token', expiresAt: timestamp, user };
 const credentials = { username: 'reader_01', password: 'unit-test-only-password' };
+const legacyEmail = 'reader@example.test';
 const newUser = { ...credentials, nickname: user.nickname };
 const catalog: CatalogBook = { isbn: '9788937460449', title: '데미안', totalPages: null, source: 'nlk' };
 const query = '데미안 & 나/책?';
@@ -56,6 +57,7 @@ afterEach(() => {
 test.each([
     { name: 'FR-10 · S-03 회원가입', call: () => signup(newUser), path: '/api/auth/signup', method: 'POST', body: newUser, response: token, auth: false },
     { name: 'FR-10 · S-02 로그인', call: () => login(credentials), path: '/api/auth/login', method: 'POST', body: credentials, response: token, auth: false },
+    { name: 'FR-10 · S-02 기존 이메일 로그인', call: () => login({ ...credentials, username: legacyEmail }), path: '/api/auth/login', method: 'POST', body: { email: legacyEmail, password: credentials.password }, response: token, auth: false },
     { name: 'FR-10 · S-80 내 정보', call: me, path: '/api/me', method: 'GET', body: undefined, response: user, auth: true },
     { name: 'FR-01 · S-22 ISBN 조회', call: () => catalogIsbn(catalog.isbn), path: `/api/catalog/isbn/${catalog.isbn}`, method: 'GET', body: undefined, response: catalog, auth: true },
     { name: 'FR-01 · S-23 장르 목록', call: catalogGenres, path: '/api/catalog/genres', method: 'GET', body: undefined, response: ['소설', '기타'], auth: true },

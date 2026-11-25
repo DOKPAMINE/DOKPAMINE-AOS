@@ -2,7 +2,12 @@ import { apiRequest, type ApiRequestOptions } from './client';
 import type { BookDto, BookReviewSearchResponse, CatalogBook, FeedItem, FeedListResponse, LoginRequest, MeResponse, PatchMeRequest, QuoteDto, ReviewDto, ReviewLikeResponse, SessionDto, SignupRequest, SyncSnapshot, TokenResponse, WeeklyRankingResponse } from './types';
 
 export const signup = (body: SignupRequest, signal?: AbortSignal) => apiRequest<TokenResponse>('/api/auth/signup', { method: 'POST', body, signal, authenticated: false });
-export const login = (body: LoginRequest, signal?: AbortSignal) => apiRequest<TokenResponse>('/api/auth/login', { method: 'POST', body, signal, authenticated: false });
+export const login = (credentials: LoginRequest, signal?: AbortSignal) => {
+    const { username, password } = credentials;
+    // 기존 이메일 계정은 구버전 서버도 읽을 수 있는 필드로 보낸다.
+    const body = username.includes('@') ? { email: username, password } : credentials;
+    return apiRequest<TokenResponse>('/api/auth/login', { method: 'POST', body, signal, authenticated: false });
+};
 export const me = () => apiRequest<MeResponse>('/api/me');
 export const patchMe = (body: PatchMeRequest) => apiRequest<MeResponse>('/api/me', { method: 'PATCH', body });
 export const weeklyRanking = (weekStart?: string, signal?: AbortSignal) => apiRequest<WeeklyRankingResponse>(
