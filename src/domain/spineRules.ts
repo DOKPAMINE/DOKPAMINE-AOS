@@ -122,3 +122,11 @@ export function layoutShelfRow(items: readonly ShelfItem[]): ShelfPlacement[] {
         };
     });
 }
+
+/** 책등 사진으로 볼 수 있는 최대 가로/세로 비율. 실제 책등은 아주 두꺼운 책도 0.25 안팎이다. */
+export const MAX_SPINE_IMAGE_RATIO = 0.35;
+
+/** S-30: 이보다 넓은 사진은 YES24 '이미지 준비중' 같은 대체 그림으로 보고 기본 책등을 쓴다. */
+export function isSpineImageRatio(ratio: number): boolean {
+    return Number.isFinite(ratio) && ratio > 0 && ratio <= MAX_SPINE_IMAGE_RATIO;
+}
