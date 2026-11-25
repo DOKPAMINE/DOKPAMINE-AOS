@@ -1,9 +1,14 @@
 import { kstDate } from './kstDate';
 import { reportHeading } from './reviewRules';
 
-/** #113 S-70: 박스 제목은 "닉네임 · 『책 제목』"이다. */
-export function loungeBoxHeading(nickname: string, bookTitle: string): string {
-    return `${nickname} · 『${bookTitle}』`;
+/** #113 S-70·S-71·S-76: 내가 쓴 박스면 첫 줄 뒤에 "(내 감상)"을 붙인다. */
+export function withMine(text: string, mine: boolean): string {
+    return mine ? `${text} (내 감상)` : text;
+}
+
+/** #113 S-70·S-76: 첫 줄의 책 제목 "『제목』". 내가 쓴 박스면 "『제목』 (내 감상)"이다. */
+export function bookTitleLine(bookTitle: string, mine: boolean): string {
+    return withMine(`『${bookTitle}』`, mine);
 }
 
 /**
@@ -142,15 +147,34 @@ export function previewText(text: string, max = 80): string {
 }
 
 /**
- * #113 S-70·S-71: 박스의 스크린리더 문구. 화면 순서와 같게 닉네임·제목 → 감상 앞부분 → 날짜 순서로 읽는다.
- * 예: "독자 · 『데미안』, 각자의 길을 찾는 이야기, 2026년 11월 25일에 쓴 독후감"
+ * #113 S-70·S-71: 박스의 스크린리더 문구. 화면 순서와 같게 읽는다.
+ * S-70: 『제목』(내 감상) → 닉네임 → 감상 앞부분 → 날짜. 예: "『데미안』, 독자, 각자의 길을 찾는 이야기, 2026년 11월 25일에 쓴 독후감"
+ * S-71: 책 제목은 묶음 제목에서 보여 주므로 bookTitle 없이 닉네임(내 감상) → 감상 앞부분 → 날짜. 예: "독자 (내 감상), 각자의 길을 찾는 이야기"
  */
 export function loungeBoxLabel({ nickname, bookTitle, mine, text, date }: {
-    nickname: string; bookTitle: string; mine: boolean; text: string; date: { label: string } | null;
+    nickname: string; bookTitle?: string; mine: boolean; text: string; date: { label: string } | null;
 }): string {
     return [
-        `${loungeBoxHeading(nickname, bookTitle)}${mine ? ', 내 감상' : ''}`,
+        ...bookTitle === undefined ? [withMine(nickname, mine)] : [bookTitleLine(bookTitle, mine), nickname],
         previewText(text),
         date ? `${date.label}에 쓴 독후감` : '',
     ].filter(Boolean).join(', ');
+}
+
+/**
+ * #113 S-71: 책 묶음 제목 옆 표지. 묶음 감상 중 coverUrl이 있는 첫 감상의 표지이고, 없으면 null(기본 표지)이다.
+ * 기본 표지에 쓰는 장르는 그 감상의 장르, 표지가 없으면 첫 감상의 장르다.
+ */
+export function groupCover(reviews: readonly { coverUrl?: string | null; genre: string }[]): { uri: string | null; genre: string } {
+    const covered = reviews.find(review => typeof review.coverUrl === 'string' && review.coverUrl.trim().length > 0);
+    return { uri: covered?.coverUrl ?? null, genre: (covered ?? reviews[0])?.genre ?? '기타' };
+}
+
+/**
+ * #113 S-70·S-76: Noto Sans KR(Regular·Medium·Bold)의 『는 글자 칸(1em) 왼쪽 0.60em이 비어 있고, 한글은 약 0.03em이다.
+ * 『로 시작하는 첫 줄을 그 차이(0.57em)만큼 왼쪽으로 당겨 아래 줄과 글자 왼쪽 끝을 맞춘다. 큰 글씨 설정(fontScale)만큼 함께 커진다.
+ */
+export const OPENING_BRACKET_INDENT_EM = 0.57;
+export function openingBracketIndent(fontSize: number, fontScale: number): number {
+    return Math.round(OPENING_BRACKET_INDENT_EM * fontSize * fontScale * 10) / 10;
 }

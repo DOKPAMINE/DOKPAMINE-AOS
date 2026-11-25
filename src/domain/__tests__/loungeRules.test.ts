@@ -1,7 +1,8 @@
-import { boxRepresentative, groupReviewBoxes, loungeBoxHeading, loungeBoxLabel, previewText, sortReviewBoxes, splitUserBookReviews, userBookReportHeadings, writtenDate } from '../loungeRules';
+import { bookTitleLine, boxRepresentative, groupCover, groupReviewBoxes, loungeBoxLabel, OPENING_BRACKET_INDENT_EM, openingBracketIndent, previewText, sortReviewBoxes, splitUserBookReviews, userBookReportHeadings, withMine, writtenDate } from '../loungeRules';
 
-test('#113 S-70 박스 제목은 "닉네임 · 『책 제목』"이에요', () => {
-    expect(loungeBoxHeading('독자', '데미안')).toBe('독자 · 『데미안』');
+test('#113 S-70 S-76 첫 줄은 "『책 제목』"이고 내가 쓴 박스면 "(내 감상)"을 붙여요', () => {
+    expect(bookTitleLine('데미안', false)).toBe('『데미안』');
+    expect(bookTitleLine('데미안', true)).toBe('『데미안』 (내 감상)');
 });
 
 test.each([
@@ -105,10 +106,34 @@ test('#113 S-70 S-71 스크린리더용 감상 앞부분은 공백을 한 칸으
     expect(previewText('📚'.repeat(81))).toBe(`${'📚'.repeat(80)}…`);
 });
 
-test('#113 S-70 S-71 박스는 닉네임·제목 → 감상 → 날짜 순서로 읽어요', () => {
+test('#113 S-70 박스는 『제목』 → 닉네임 → 감상 → 날짜 순서로 읽고, 내 박스면 제목 뒤에 "(내 감상)"을 붙여요', () => {
     expect(loungeBoxLabel({ nickname: '독자', bookTitle: '데미안', mine: false, text: '오래 남았어요.', date: { label: '2026년 11월 25일' } }))
-        .toBe('독자 · 『데미안』, 오래 남았어요., 2026년 11월 25일에 쓴 독후감');
+        .toBe('『데미안』, 독자, 오래 남았어요., 2026년 11월 25일에 쓴 독후감');
     expect(loungeBoxLabel({ nickname: '독자', bookTitle: '데미안', mine: true, text: '한줄평', date: null }))
-        .toBe('독자 · 『데미안』, 내 감상, 한줄평');
-    expect(loungeBoxLabel({ nickname: '독자', bookTitle: '데미안', mine: false, text: ' ', date: null })).toBe('독자 · 『데미안』');
+        .toBe('『데미안』 (내 감상), 독자, 한줄평');
+    expect(loungeBoxLabel({ nickname: '독자', bookTitle: '데미안', mine: false, text: ' ', date: null })).toBe('『데미안』, 독자');
 });
+
+test('#113 S-71 박스는 책 제목 없이 닉네임 → 감상 → 날짜 순서로 읽고, 내 박스면 닉네임 뒤에 "(내 감상)"을 붙여요', () => {
+    expect(withMine('독자', false)).toBe('독자');
+    expect(withMine('독자', true)).toBe('독자 (내 감상)');
+    expect(loungeBoxLabel({ nickname: '독자', mine: true, text: '오래 남았어요.', date: { label: '2026년 11월 25일' } }))
+        .toBe('독자 (내 감상), 오래 남았어요., 2026년 11월 25일에 쓴 독후감');
+    expect(loungeBoxLabel({ nickname: '독자', mine: false, text: '한줄평', date: null })).toBe('독자, 한줄평');
+});
+
+test('#113 S-71 묶음 표지는 coverUrl이 있는 첫 감상의 것이고, 없으면 첫 감상 장르의 기본 표지예요', () => {
+    expect(groupCover([
+        { coverUrl: null, genre: '소설' }, { coverUrl: ' ', genre: '시' },
+        { coverUrl: 'https://a.example/1.jpg', genre: '에세이' }, { coverUrl: 'https://a.example/2.jpg', genre: '과학' },
+    ])).toEqual({ uri: 'https://a.example/1.jpg', genre: '에세이' });
+    expect(groupCover([{ genre: '소설' }, { coverUrl: null, genre: '시' }])).toEqual({ uri: null, genre: '소설' });
+    expect(groupCover([])).toEqual({ uri: null, genre: '기타' });
+});
+
+test.each([[16, 1, 9.1], [18, 1, 10.3], [16, 2, 18.2], [18, 1.3, 13.3]])(
+    '#113 S-70 S-76 『 왼쪽 빈 공간 0.57em만큼 첫 줄을 당겨요: %ssp, 글씨 배율 %s → %sdp', (fontSize, fontScale, indent) => {
+        expect(OPENING_BRACKET_INDENT_EM).toBe(0.57);
+        expect(openingBracketIndent(fontSize, fontScale)).toBe(indent);
+    },
+);

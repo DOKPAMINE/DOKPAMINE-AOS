@@ -20,6 +20,16 @@ export const styles = StyleSheet.create({
     row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
     rowText: { flex: 1, minWidth: 0, gap: spacing.sm },
     card: { alignItems: 'flex-start' },
+    // #113 S-71: 감상 박스는 공통 Card와 같은 테두리·배경·반경으로 책 정보와 구분한다.
+    reviewCard: {
+        minHeight: sizes.minTouch, gap: spacing.sm, padding: spacing.lg,
+        borderRadius: radii.card, borderWidth: 1, borderColor: colors.line.border, backgroundColor: colors.surface.card,
+    },
+    groups: { gap: spacing.xxl },
+    divider: { height: 1, backgroundColor: colors.line.border },
+    // 좁은 화면이나 큰 글씨에서 정렬 버튼이 "N명의 감상" 아래 줄로 내려가도록 감싼다.
+    countRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+
     cardLink: { alignSelf: 'stretch', minHeight: sizes.minTouch, gap: spacing.sm },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     chip: {

@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
 import { router, useFocusEffect } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Text, TextInput, View } from 'react-native';
-import { PrimaryButton, Screen, SecondaryButton, StateView } from '../components';
-import { colors } from '../theme';
+import { Text, View } from 'react-native';
+import { Screen, SecondaryButton, StateView } from '../components';
+import { BookSearchField } from './BookSearchField';
 import { refetchFeed, useFeed } from './queries';
 import { QueryError } from './QueryState';
 import { LoungeBox } from './LoungeBox';
@@ -22,9 +22,8 @@ export function LoungeScreen() {
         setRefreshing(true);
         void feed.refetch({ cancelRefetch: false }).finally(() => setRefreshing(false));
     };
-    const search = () => {
-        if (!query.trim()) return;
-        router.push({ pathname: '/lounge/search', params: { query: query.trim() } });
+    const search = (trimmed: string) => {
+        router.push({ pathname: '/lounge/search', params: { query: trimmed } });
         // #113: 라운지 탭은 화면이 남아 있으므로, 결과 화면으로 넘어가면 다음 검색을 위해 검색창을 비운다.
         setQuery('');
     };
@@ -32,9 +31,7 @@ export function LoungeScreen() {
         <Screen title="라운지" refreshing={refreshing} onRefresh={refresh}>
             <View style={styles.section}>
                 <Text style={styles.body}>같은 책을 읽은 사람들의 감상을 찾아보세요.</Text>
-                <TextInput accessibilityRole="search" accessibilityLabel="책 이름" placeholder="책 이름을 입력해 주세요" placeholderTextColor={colors.text.muted}
-                    value={query} onChangeText={setQuery} onSubmitEditing={search} returnKeyType="search" style={styles.input} />
-                <PrimaryButton label="책 감상 검색" disabled={!query.trim()} onPress={search} />
+                <BookSearchField value={query} onChangeText={setQuery} onSearch={search} />
             </View>
             <SecondaryButton label="독서왕 랭킹" onPress={() => router.push('/ranking')} />
             <Text accessibilityRole="header" style={styles.heading}>최근 공개 감상</Text>
