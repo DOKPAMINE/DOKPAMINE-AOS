@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { PrimaryButton, SecondaryButton } from '../Button';
 import { ProgressBar } from '../ProgressBar';
+import { Screen } from '../Screen';
 import { StateView } from '../StateView';
 
 test('FR-03 · S-31 진행 막대는 문구를 접근성에 한 번만 전달하고 퍼센트를 표시하지 않아요', async () => {
@@ -45,4 +46,13 @@ test('NFR-07 · S-10 공통 버튼은 최소 44 크기이며 비활성 상태에
     expect(onPress).not.toHaveBeenCalled();
     await fireEvent.press(primary);
     expect(onPress).toHaveBeenCalledTimes(1);
+});
+
+test('NFR-07 · S-73 AOS#126 스크롤 없는 화면만 아래쪽 안전 영역을 비워 하단 버튼 바에 가리지 않아요', async () => {
+    const edgesOf = () => (screen.toJSON() as { props: { edges?: unknown } }).props.edges;
+    const view = await render(<Screen title="고정 화면" scroll={false} />);
+    expect(edgesOf()).toMatchObject({ top: 'additive', left: 'additive', right: 'additive', bottom: 'additive' });
+    // 스크롤 화면은 기존과 같이 아래쪽을 비우지 않는다.
+    await view.rerender(<Screen title="스크롤 화면" />);
+    expect(edgesOf()).toMatchObject({ top: 'additive', left: 'additive', right: 'additive', bottom: 'off' });
 });
