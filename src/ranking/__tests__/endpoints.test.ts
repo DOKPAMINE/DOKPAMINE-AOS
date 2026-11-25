@@ -8,7 +8,7 @@ jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn() }));
 const fetchMock = jest.fn();
 const originalFetch = globalThis.fetch;
 const originalBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
-const user = { id: 'reader', email: 'reader@example.test', nickname: '책산책', rankingOptIn: true };
+const user = { id: 'reader', username: 'reader_01', nickname: '책산책', rankingOptIn: true };
 const ranking = { weekStart: '2026-11-02', participating: true,
     top: [{ rank: 1, userId: user.id, nickname: user.nickname, seconds: 3600, me: true }], around: [] };
 

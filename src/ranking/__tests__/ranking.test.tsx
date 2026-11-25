@@ -14,7 +14,7 @@ import { rankingKeys } from '../queries';
 jest.mock('../../api/endpoints', () => ({ weeklyRanking: jest.fn(), patchMe: jest.fn(), feedList: jest.fn() }));
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn() } }));
 
-const user: MeResponse = { id: 'reader', email: 'reader@example.test', nickname: '책산책', rankingOptIn: false };
+const user: MeResponse = { id: 'reader', username: 'reader_01', nickname: '책산책', rankingOptIn: false };
 const entry = (rank: number, me = false): RankingEntry => ({ rank, userId: `reader-${rank}`, nickname: me ? user.nickname : `독서가 ${rank}`, seconds: 18000 - rank * 60, me });
 const data: WeeklyRankingResponse = { weekStart: '2026-11-02', participating: true,
     top: Array.from({ length: 30 }, (_, i) => entry(i + 1)),
