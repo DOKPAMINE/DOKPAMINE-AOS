@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type PropsWithChildren, type Ref } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { AccessibilityInfo, Pressable, Text, TextInput, View, useWindowDimensions, type TextInputInstance } from 'react-native';
+import { AccessibilityInfo, Keyboard, Pressable, Text, TextInput, View, useWindowDimensions, type TextInputInstance } from 'react-native';
 import { ApiError } from '../api/errors';
 import { useSignedInUserId } from '../auth/AuthProvider';
 import { bookSuggestionLabel, bookSuggestions, type BookSuggestion } from '../domain/loungeRules';
@@ -47,9 +48,13 @@ export const suggestionMessages = {
  * #124 글자가 있을 때만 오른쪽 안쪽에 돋보기와 같은 색의 지우기(X) 버튼을 둔다. 누르면 글자를 모두 지우고 자동완성을 닫으며,
  * 검색창 포커스는 그대로 둬서(빠져 있었으면 다시 줘서) 바로 다시 칠 수 있고, 빈 검색창이므로 최근 고른 책이 열린다.
  * 누르는 영역은 44dp 이상이고 스크린리더는 "검색어 지우기"로 읽는다. 글자가 버튼과 겹치지 않게 입력칸 오른쪽 여백을 버튼 너비만큼 둔다.
+ * #124 keyboardShouldPersistTaps="handled"에서는 목록 밖의 버튼도 키보드를 닫지 않고 바로 눌리므로, 화면은 검색창 밖 내용을
+ * SearchDismissArea로 감싸 그 안을 누르면 ref의 dismiss()로 키보드를 닫고 포커스를 빼서 목록을 닫는다.
+ * 다른 화면으로 옮기거나 탭을 바꿔 이 화면이 가려질 때도 같은 일을 해서, 돌아왔을 때 목록이 열려 있지 않다.
  */
-export function BookSearchField({ value, onChangeText, onSelectBook }: {
+export function BookSearchField({ value, onChangeText, onSelectBook, ref }: {
     value: string; onChangeText: (value: string) => void; onSelectBook: (book: SelectedBook) => void;
+    ref?: Ref<BookSearchFieldHandle>;
 }) {
     const query = value.trim();
     const input = useRef<TextInputInstance>(null);
@@ -60,7 +65,18 @@ export function BookSearchField({ value, onChangeText, onSelectBook }: {
     // 지우기 버튼은 44dp 이상이고, 큰 글씨로 아이콘이 커지면 그만큼 넓어진다.
     const clearSize = Math.max(sizes.minTouch, iconSize + spacing.md * 2);
     const client = useQueryClient();
-    const recent = useRecentBooks(useSignedInUserId());
+    // 검색창을 누를 때마다 최근 고른 책을 아직 읽지 못했으면(읽기 실패) 다시 읽는다.
+    const recent = useRecentBooks(useSignedInUserId(), focused);
+    const dismiss = useCallback(() => {
+        input.current?.blur();
+        Keyboard.dismiss();
+        // 기기가 blur 이벤트를 보내지 않아도 목록과 안내는 바로 닫는다.
+        setFocused(false);
+        setHint(false);
+    }, []);
+    useImperativeHandle(ref, () => ({ dismiss }), [dismiss]);
+    // 다른 화면으로 옮기거나 탭을 바꾸면 닫는다. 라운지 탭은 화면이 남아 있으므로 돌아와도 목록이 닫혀 있다.
+    useFocusEffect(useCallback(() => dismiss, [dismiss]));
     // 포커스가 없으면 조회하지 않는다. S-71처럼 검색어를 채워 들어와도 검색창을 누르기 전에는 요청하지 않는다.
     const term = useDebouncedValue(focused ? query : '', bookSuggestionDelayMs);
     const suggestion = useBookSuggestions(term);
@@ -133,6 +149,17 @@ export function BookSearchField({ value, onChangeText, onSelectBook }: {
                     : panel === 'suggestions' ? <BookSuggestionList items={items} onSelect={select} /> : null}
         </View>
     );
+}
+
+/** #124: 화면이 검색창을 닫을 때 쓴다. */
+export interface BookSearchFieldHandle { dismiss: () => void }
+
+/**
+ * #124 S-70·S-71: 검색창 밖 내용(버튼·감상 박스·정렬 버튼 등)을 감싼다. 안을 누르기 시작하면 검색창을 닫고, 누른 버튼은 그대로 동작한다.
+ * 스크롤을 시작해도 닫힌다. Screen의 내용 간격(spacing.lg)을 그대로 이어 받아 감싸지 않은 것과 배치가 같다.
+ */
+export function SearchDismissArea({ search, children }: PropsWithChildren<{ search: { current: BookSearchFieldHandle | null } }>) {
+    return <View testID="search-dismiss-area" style={styles.section} onTouchStart={() => search.current?.dismiss()}>{children}</View>;
 }
 
 /** #124 자동완성 목록. 스크린리더에는 목록(list)과 버튼 항목으로 알리고, 열리거나 책 수가 바뀌면 찾은 책 수를 읽어 준다. */

@@ -1,9 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { router, useFocusEffect } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Text, View } from 'react-native';
 import { Screen, SecondaryButton, StateView } from '../components';
-import { BookSearchField, type SelectedBook } from './BookSearchField';
+import { BookSearchField, SearchDismissArea, type BookSearchFieldHandle, type SelectedBook } from './BookSearchField';
 import { refetchFeed, useFeed } from './queries';
 import { QueryError } from './QueryState';
 import { LoungeBox } from './LoungeBox';
@@ -11,6 +11,7 @@ import { styles } from './styles';
 
 export function LoungeScreen() {
     const [query, setQuery] = useState('');
+    const search = useRef<BookSearchFieldHandle>(null);
     const feed = useFeed();
     const client = useQueryClient();
     const [refreshing, setRefreshing] = useState(false);
@@ -32,15 +33,18 @@ export function LoungeScreen() {
         <Screen title="라운지" refreshing={refreshing} onRefresh={refresh} keyboardShouldPersistTaps="handled">
             <View style={styles.section}>
                 <Text style={styles.body}>같은 책을 읽은 사람들의 감상을 찾아보세요.</Text>
-                <BookSearchField value={query} onChangeText={setQuery} onSelectBook={selectBook} />
+                <BookSearchField ref={search} value={query} onChangeText={setQuery} onSelectBook={selectBook} />
             </View>
-            <SecondaryButton label="독서왕 랭킹" onPress={() => router.push('/ranking')} />
-            <Text accessibilityRole="header" style={styles.heading}>최근 공개 감상</Text>
-            {feed.isError ? <QueryError error={feed.error} retry={() => { void feed.refetch(); }} />
-                : feed.isPending ? <StateView kind="loading" />
-                    : feed.data.length === 0 ? <StateView kind="empty" message="아직 공개된 감상이 없어요" />
-                        // #113: 박스는 사람의 책 하나다. 순서는 서버가 준 그대로 둔다.
-                        : feed.data.map(item => <LoungeBox key={item.userBookId ?? item.id} item={item} />)}
+            {/* #124 검색창 밖을 누르면 키보드와 자동완성을 닫는다. */}
+            <SearchDismissArea search={search}>
+                <SecondaryButton label="독서왕 랭킹" onPress={() => router.push('/ranking')} />
+                <Text accessibilityRole="header" style={styles.heading}>최근 공개 감상</Text>
+                {feed.isError ? <QueryError error={feed.error} retry={() => { void feed.refetch(); }} />
+                    : feed.isPending ? <StateView kind="loading" />
+                        : feed.data.length === 0 ? <StateView kind="empty" message="아직 공개된 감상이 없어요" />
+                            // #113: 박스는 사람의 책 하나다. 순서는 서버가 준 그대로 둔다.
+                            : feed.data.map(item => <LoungeBox key={item.userBookId ?? item.id} item={item} />)}
+            </SearchDismissArea>
         </Screen>
     );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState, type Ref } from 'react';
 import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import type { BookReviewGroup } from '../api/types';
@@ -6,7 +6,7 @@ import { Screen, SecondaryButton, StateView } from '../components';
 import { findBookGroup, groupCover, groupReviewBoxes, sortReviewBoxes, type ReviewBoxOrder } from '../domain/loungeRules';
 import { BookCover } from '../shelf/BookCover';
 import { sizes } from '../theme';
-import { BookSearchField, pickBookHint, type SelectedBook } from './BookSearchField';
+import { BookSearchField, SearchDismissArea, pickBookHint, type BookSearchFieldHandle, type SelectedBook } from './BookSearchField';
 import { LoungeBox } from './LoungeBox';
 import { useBookReviews } from './queries';
 import { QueryError } from './QueryState';
@@ -44,18 +44,22 @@ ${bookKey}`;
         else router.setParams({ query: book.query, bookKey: book.bookKey, title: book.bookTitle });
     };
     const group = result.data ? findBookGroup(result.data, bookKey) : undefined;
+    const search = useRef<BookSearchFieldHandle>(null);
     return (
         <Screen title="책별 감상" keyboardShouldPersistTaps="handled">
             <View style={styles.section}>
                 {/* 다른 책을 고르면 key로 검색창을 새로 만들어 그 책의 제목으로 채운다. */}
-                <SearchAgain key={selection} title={title} onSelectBook={selectBook} />
+                <SearchAgain key={selection} ref={search} title={title} onSelectBook={selectBook} />
             </View>
-            <SecondaryButton label="라운지로 돌아가기" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/lounge')} />
-            {!query.trim() || !bookKey ? <StateView kind="empty" message={pickBookHint} />
-                : result.isError ? <QueryError error={result.error} retry={() => { void result.refetch(); }} />
-                    : result.isPending ? <StateView kind="loading" />
-                        : !group ? <StateView kind="empty" message="아직 공개된 감상이 없어요" />
-                            : <BookGroup group={group} order={order} onOrderChange={setOrder} />}
+            {/* #124 검색창 밖(뒤로 가기·정렬 버튼·감상 박스 등)을 누르면 키보드와 자동완성을 닫는다. */}
+            <SearchDismissArea search={search}>
+                <SecondaryButton label="라운지로 돌아가기" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/lounge')} />
+                {!query.trim() || !bookKey ? <StateView kind="empty" message={pickBookHint} />
+                    : result.isError ? <QueryError error={result.error} retry={() => { void result.refetch(); }} />
+                        : result.isPending ? <StateView kind="loading" />
+                            : !group ? <StateView kind="empty" message="아직 공개된 감상이 없어요" />
+                                : <BookGroup group={group} order={order} onOrderChange={setOrder} />}
+            </SearchDismissArea>
         </Screen>
     );
 }
@@ -100,7 +104,7 @@ function BookGroup({ group, order, onOrderChange }: {
 }
 
 /** S-71 맨 위 검색창. 들어올 때(또는 다른 책을 고를 때) 고른 책의 제목으로 채운다. */
-function SearchAgain({ title, onSelectBook }: { title: string; onSelectBook: (book: SelectedBook) => void }) {
+function SearchAgain({ title, onSelectBook, ref }: { title: string; onSelectBook: (book: SelectedBook) => void; ref?: Ref<BookSearchFieldHandle> }) {
     const [input, setInput] = useState(title);
-    return <BookSearchField value={input} onChangeText={setInput} onSelectBook={onSelectBook} />;
+    return <BookSearchField ref={ref} value={input} onChangeText={setInput} onSelectBook={onSelectBook} />;
 }
