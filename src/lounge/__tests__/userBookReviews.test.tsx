@@ -1,6 +1,6 @@
 import { router, Slot, Stack } from 'expo-router';
 import { RefreshControl, type RefreshControlProps } from 'react-native';
-import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import Lounge from '../../../app/(tabs)/lounge';
@@ -292,4 +292,51 @@ test('#113 FR-16 S-70 검색해서 결과 화면으로 넘어가면 라운지 �
     await act(async () => router.back());
     expect(await screen.findByLabelText('책 이름')).toHaveProp('value', '');
     expect(screen.getByRole('button', { name: '책 감상 검색' })).toBeDisabled();
+});
+
+describe('#113 S-70 S-71 S-76 책 표지', () => {
+    const coverUrl = 'https://image.example.com/demian.jpg';
+
+    test('S-70 박스 위쪽에 책 표지를 보여 주고, 표지가 없으면 책장의 기본 표지를 보여 줘요', async () => {
+        jest.mocked(feedList).mockResolvedValue([{ ...reportNew, coverUrl }, { ...otherBox, coverUrl: null }]);
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        const [withCover, withoutCover] = await screen.findAllByRole('button', { name: /감상 모음 보기$/ });
+        expect(within(withCover).getByTestId('book-cover-image')).toHaveProp('source', { uri: coverUrl });
+        expect(within(withCover).queryByTestId('book-cover-default')).toBeNull();
+        expect(within(withoutCover).queryByTestId('book-cover-image')).toBeNull();
+        expect(within(withoutCover).getByTestId('book-cover-default')).toHaveTextContent(otherBox.genre);
+    });
+
+    test('S-70 표지를 불러오지 못하면 기본 표지로 바꿔요', async () => {
+        jest.mocked(feedList).mockResolvedValue([{ ...reportNew, coverUrl }]);
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        const box = await screen.findByRole('button', { name: boxName });
+        await fireEvent(within(box).getByTestId('book-cover-image'), 'error');
+        expect(within(box).queryByTestId('book-cover-image')).toBeNull();
+        expect(within(box).getByTestId('book-cover-default')).toBeOnTheScreen();
+    });
+
+    test('S-71 검색 박스는 대표 감상의 책 표지를 보여 줘요', async () => {
+        jest.mocked(searchBookReviews).mockResolvedValue([{ bookKey: 'isbn:9788937460449', bookTitle: '데미안', bookAuthor: '헤르만 헤세',
+            isbn: '9788937460449', reviews: [{ ...reportNew, coverUrl }, { ...otherBox, userBookId: 'user-book-2' }] }]);
+        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
+        const [withCover, oldServer] = await screen.findAllByRole('button', { name: /감상 모음 보기$/ });
+        expect(within(withCover).getByTestId('book-cover-image')).toHaveProp('source', { uri: coverUrl });
+        // coverUrl을 주지 않는 구버전 서버 응답도 기본 표지로 보여 준다.
+        expect(within(oldServer).getByTestId('book-cover-default')).toBeOnTheScreen();
+    });
+
+    test('S-76 위쪽에 책 표지를 한 번 보여 줘요', async () => {
+        jest.mocked(feedUserBook).mockResolvedValue([{ ...reportNew, coverUrl }, { ...oneLine, coverUrl }]);
+        await renderRouter(routes, { initialUrl: '/lounge/user-books/user-book-1' });
+        expect(await screen.findByTestId('book-cover-image')).toHaveProp('source', { uri: coverUrl });
+        expect(screen.getAllByTestId('book-cover-image')).toHaveLength(1);
+    });
+
+    test('S-76 표지를 주지 않는 구버전 서버면 책장의 기본 표지를 보여 줘요', async () => {
+        jest.mocked(feedUserBook).mockResolvedValue([reportNew, oneLine]);
+        await renderRouter(routes, { initialUrl: '/lounge/user-books/user-book-1' });
+        expect(await screen.findByTestId('book-cover-default')).toHaveTextContent(reportNew.genre);
+        expect(screen.queryByTestId('book-cover-image')).toBeNull();
+    });
 });

@@ -6,6 +6,8 @@ import { ApiError } from '../api/errors';
 import type { FeedItem } from '../api/types';
 import { Screen, SecondaryButton, StateView } from '../components';
 import { loungeBoxHeading, splitUserBookReviews, userBookReportHeadings } from '../domain/loungeRules';
+import { BookCover } from '../shelf/BookCover';
+import { sizes } from '../theme';
 import { LikeButton } from './LikeButton';
 import { invalidateLoungeLists, loungeKeys, refetchUserBookFeed, useReviewLike, useUserBookFeed } from './queries';
 import { QueryError, removedReviewMessage } from './QueryState';
@@ -48,6 +50,8 @@ export function UserBookReviewsScreen({ userBookId }: { userBookId: string }) {
                         : result.isPending ? <StateView kind="loading" />
                             : !first ? <StateView kind="empty" message="아직 공개된 감상이 없어요" /> : (
                                 <View style={styles.section}>
+                                    {/* 표지가 없거나 불러오지 못하면 책장의 기본 표지를 보여 준다. */}
+                                    <BookCover key={first.coverUrl ?? 'none'} uri={first.coverUrl ?? null} genre={first.genre} width={sizes.minTouch * 2} />
                                     <Text accessibilityRole="header" style={styles.heading}>{loungeBoxHeading(first.nickname, first.bookTitle)}</Text>
                                     <Text style={styles.muted}>{first.bookAuthor} · {first.genre}{first.mine ? ' · 내 감상' : ''}</Text>
                                     {oneLines.length > 0 ? <>

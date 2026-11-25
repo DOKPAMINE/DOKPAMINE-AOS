@@ -121,6 +121,8 @@ export interface FeedItem {
     nickname: string;
     bookTitle: string;
     bookAuthor: string;
+    /** #113 감상이 연결된 책의 앞표지 주소. 저장된 표지가 없으면 null이고 구버전 서버는 주지 않는다. */
+    coverUrl?: string | null;
     genre: string;
     oneLine?: string | null;
     body?: string | null;
