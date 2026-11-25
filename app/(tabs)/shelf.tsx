@@ -1,13 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, StateView } from '../../src/components';
 import type { Genre } from '../../src/domain/pageRules';
 import { countShelfGenres, countShelfStatuses, filterShelfBooks, filterShelfGenre, groupShelfBooks, toggleShelfFilter, type ShelfStatus } from '../../src/domain/shelfRules';
 import type { BookRecord } from '../../src/db/schema';
-import { isSpineImageRatio, layoutShelfRow, spineHeightScale, spineThicknessScale, type ShelfPlacement } from '../../src/domain/spineRules';
+import { isSpineImageRatio, packShelfRows, shelfRowWidth, spineHeightScale, spineThicknessScale, type ShelfPlacement } from '../../src/domain/spineRules';
 import { bookStatusIcons, bookStatusLabels } from '../../src/shelf/BookStatus';
 import { useShelfRepository } from '../../src/shelf/useShelfRepository';
 import { shelfStyles } from '../../src/shelf/styles';
@@ -51,13 +51,15 @@ type SpineProps = {
     width: number;
     height: number;
     placement: ShelfPlacement;
+    /** 책장 묶음 안에서 책등 왼쪽 위 위치(dp). 숨긴 책은 null */
+    position: { left: number; top: number } | null;
     hidden: boolean;
     onRatio: (ratio: number) => void;
     onFail: () => void;
 };
 
 /** S-30: 책등 이미지가 있으면 실제 책등을, 없거나 불러오지 못하면 색 책등과 세로 제목을 보여 준다. */
-function ShelfSpine({ book, image, width, height, placement, hidden, onRatio, onFail }: SpineProps) {
+function ShelfSpine({ book, image, width, height, placement, position, hidden, onRatio, onFail }: SpineProps) {
     const label = `${book.title}, ${book.author}, ${bookStatusLabels[book.status]}, 책 상세 보기`;
     const open = () => router.push({ pathname: '/book/[id]', params: { id: book.id } });
     // 접근성: 보이는 폭은 책등만큼, 모자란 터치 영역(44dp)은 hitSlop으로 채운다.
@@ -67,11 +69,11 @@ function ShelfSpine({ book, image, width, height, placement, hidden, onRatio, on
         transform: [{ rotate: `${placement.angle}deg` }],
         transformOrigin: placement.origin === 'right' ? 'right bottom' : 'left bottom',
     };
-    const frame = { width, height, marginLeft: placement.marginLeft };
+    const frame = { width, height, ...(position ?? {}) };
     return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={open} hitSlop={{ left: slop, right: slop }}
         accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
         disabled={hidden} pointerEvents={hidden ? 'none' : 'auto'}
-        style={({ pressed }) => [styles.spineBase, frame, lean, hidden && styles.hiddenSpine, !image && [styles.spine, spineBackground[book.status]], pressed && shelfStyles.pressed]}>
+        style={({ pressed }) => [styles.spineBase, styles.spinePlaced, frame, lean, hidden && styles.hiddenSpine, !image && [styles.spine, spineBackground[book.status]], pressed && shelfStyles.pressed]}>
         {image
             ? <Image testID={`spine-image-${book.id}`} source={{ uri: book.sideCoverUrl ?? undefined }} accessible={false} resizeMode="stretch" fadeDuration={0}
                 onLoad={event => { const { width: w, height: h } = event.nativeEvent.source; if (w > 0 && h > 0) onRatio(w / h); }}
@@ -82,27 +84,22 @@ function ShelfSpine({ book, image, width, height, placement, hidden, onRatio, on
 }
 
 // S-30: 책장 칸 이미지(원본 611px 높이)를 왼쪽·가운데·오른쪽으로 나눠, 가운데만 가로로 늘리거나 줄인다.
-// side*: 잘라 둔 양옆 조각의 폭, frame*: 바깥 옆판 두께(스크롤하는 책이 이 판 뒤로 들어간다),
-// top·bottom·left·right: 처음에 책이 놓이는 바닥 영역까지의 거리(모두 원본 픽셀).
-const SHELF_SOURCE = { height: 611, sideLeft: 100, sideRight: 103, frameLeft: 30, frameRight: 31, top: 43, bottom: 53, left: 70, right: 72 } as const;
+// side*: 잘라 둔 양옆 조각의 폭, top·bottom·left·right: 책이 놓이는 바닥 영역까지의 거리(모두 원본 픽셀).
+const SHELF_SOURCE = { height: 611, sideLeft: 100, sideRight: 103, top: 43, bottom: 53, left: 62, right: 64 } as const;
 const SHELF_HEIGHT = Math.round((SPINE_HEIGHT + spacing.sm) * SHELF_SOURCE.height / (SHELF_SOURCE.height - SHELF_SOURCE.top - SHELF_SOURCE.bottom));
 const shelfPx = (value: number) => Math.round(value * SHELF_HEIGHT / SHELF_SOURCE.height);
 const SHELF_SIDE = { left: shelfPx(SHELF_SOURCE.sideLeft), right: shelfPx(SHELF_SOURCE.sideRight) };
-const SHELF_FRAME = { left: shelfPx(SHELF_SOURCE.frameLeft), right: shelfPx(SHELF_SOURCE.frameRight) };
 const SHELF_INSET = {
     top: shelfPx(SHELF_SOURCE.top), bottom: shelfPx(SHELF_SOURCE.bottom),
     left: shelfPx(SHELF_SOURCE.left), right: shelfPx(SHELF_SOURCE.right),
 };
 
-/** S-30: 사진으로 만든 책장 칸. 양옆 틀은 비율 그대로, 가운데는 가로로만 늘려서 찌그러지지 않게 한다. */
-function ShelfBox({ children }: { children: ReactNode }) {
-    return <View style={styles.shelfUnit}>
-        <View pointerEvents="none" style={styles.shelfImages}>
-            <Image source={shelfLeft} accessible={false} resizeMode="stretch" fadeDuration={0} style={[styles.shelfImage, { width: SHELF_SIDE.left }]} />
-            <Image source={shelfCenter} accessible={false} resizeMode="stretch" fadeDuration={0} style={[styles.shelfImage, styles.shelfCenter]} />
-            <Image source={shelfRight} accessible={false} resizeMode="stretch" fadeDuration={0} style={[styles.shelfImage, { width: SHELF_SIDE.right }]} />
-        </View>
-        <View style={styles.shelfInside}>{children}</View>
+/** S-30: 사진으로 만든 선반 한 층. 양옆 틀은 비율 그대로, 가운데는 가로로만 늘려서 찌그러지지 않게 한다. */
+function ShelfBackground({ top }: { top: number }) {
+    return <View pointerEvents="none" style={[styles.shelfImages, { top, height: SHELF_HEIGHT }]}>
+        <Image source={shelfLeft} accessible={false} resizeMode="stretch" fadeDuration={0} style={[styles.shelfImage, { width: SHELF_SIDE.left }]} />
+        <Image source={shelfCenter} accessible={false} resizeMode="stretch" fadeDuration={0} style={[styles.shelfImage, styles.shelfCenter]} />
+        <Image source={shelfRight} accessible={false} resizeMode="stretch" fadeDuration={0} style={[styles.shelfImage, { width: SHELF_SIDE.right }]} />
     </View>;
 }
 
@@ -111,11 +108,16 @@ function ShelfBox({ children }: { children: ReactNode }) {
 const spineRatios = new Map<string, number>();
 const spineFailures = new Set<string>();
 
-/** S-30: 책장 한 칸. 책마다 크기를 정하고 layoutShelfRow로 기울기·간격을 계산해 꽂는다. 책이 많으면 칸 안에서 가로로 넘긴다. */
 const HIDDEN_PLACEMENT = { angle: 0, origin: 'right', marginLeft: 0 } as const;
-
-function ShelfRow({ books, visibleIds }: { books: readonly BookRecord[]; visibleIds: ReadonlySet<string> }) {
+/** 마지막 층이 아닌 층에서 남는 폭을 책 사이에 나눠 줄 때, 한 틈에 더하는 최대 폭 */
+const MAX_EXTRA_GAP = spacing.xs / 2;
+/**
+ * S-30: 책장. 책마다 크기를 정하고, 선반 폭을 넘으면 아래에 선반을 한 층 더 쌓아 이어서 꽂는다(가로 스크롤 없음).
+ * 책등은 층이 바뀌어도 같은 부모 안에서 위치만 옮겨서, 다시 그리며 사진을 불러오지 않는다(깜빡임 방지).
+ */
+function ShelfStack({ books, visibleIds }: { books: readonly BookRecord[]; visibleIds: ReadonlySet<string> }) {
     const [, setVersion] = useState(0);
+    const [rowWidth, setRowWidth] = useState(0);
     const items = books.map(book => {
         const height = Math.round(SPINE_HEIGHT * spineHeightScale(book.id));
         const url = book.sideCoverUrl;
@@ -134,15 +136,44 @@ function ShelfRow({ books, visibleIds }: { books: readonly BookRecord[]; visible
         }
         setVersion(version => version + 1);
     };
-    // 필터에 맞지 않는 책은 지우지 않고 숨겨 두고(사진을 다시 불러오지 않게), 보이는 책만으로 배치를 계산한다.
+    // 필터에 맞지 않는 책은 지우지 않고 숨겨 두고(사진을 다시 불러오지 않게), 보이는 책만으로 층과 배치를 계산한다.
     const visible = items.filter(item => visibleIds.has(item.book.id));
-    const placements = new Map(layoutShelfRow(visible.map(({ book, width, height }) => ({ id: book.id, width, height })))
-        .map(placement => [placement.id, placement]));
-    return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.books}>
-        {items.map(item => <ShelfSpine key={item.book.id} {...item} hidden={!visibleIds.has(item.book.id)}
-            placement={placements.get(item.book.id) ?? { id: item.book.id, ...HIDDEN_PLACEMENT }}
-            onRatio={ratio => remember(item.book.sideCoverUrl, isSpineImageRatio(ratio) ? ratio : null)}            onFail={() => remember(item.book.sideCoverUrl, null)} />)}
-    </ScrollView>;
+    // 폭을 재기 전에는 한 층에 모두 두고, 잰 뒤에는 선반 폭에 맞춰 층을 나눈다.
+    const maxWidth = rowWidth > 0 ? rowWidth : Infinity;
+    const toShelfItem = ({ book, width, height }: typeof items[number]) => ({ id: book.id, width, height });
+    const rows = packShelfRows(visible.map(toShelfItem), maxWidth);
+    const placed = new Map<string, { placement: ShelfPlacement; position: { left: number; top: number } }>();
+    rows.forEach((row, r) => {
+        const floor = (r + 1) * SHELF_HEIGHT - SHELF_INSET.bottom;
+        // 마지막 층이 아니면 남는 폭을 똑바로 선 책 사이에 조금씩 나눠 줄 끝까지 차 보이게 한다.
+        // 기댄 책과 받침 사이(맞닿아야 하는 곳)는 건드리지 않는다.
+        const joints = row.placements.filter((placement, k) => k > 0 && row.placements[k - 1].angle <= 0 && placement.angle >= 0).length;
+        const slack = r < rows.length - 1 && Number.isFinite(maxWidth) ? Math.max(0, maxWidth - shelfRowWidth(row.placements, row.items)) : 0;
+        const extra = joints > 0 ? Math.min(MAX_EXTRA_GAP, slack / joints) : 0;
+        let x = SHELF_INSET.left;
+        row.items.forEach((item, k) => {
+            const placement = row.placements[k];
+            const joint = k > 0 && row.placements[k - 1].angle <= 0 && placement.angle >= 0;
+            x += placement.marginLeft + (joint ? extra : 0);
+            placed.set(item.id, { placement, position: { left: x, top: floor - item.height } });
+            x += item.width;
+        });
+    });
+    const floors = Math.max(1, rows.length);
+    // 선반 사진은 모든 책을 꽂을 때 필요한 층 수만큼 늘 그려 두고, 지금 필요한 층까지만 보이게 자른다.
+    // 필터를 바꿔 층 수가 줄었다 늘어도 선반 사진을 새로 불러오지 않아서 깜빡이지 않는다.
+    const builtFloors = Math.max(floors, packShelfRows(items.map(toShelfItem), maxWidth).length);
+    return <View style={[styles.stack, { height: floors * SHELF_HEIGHT }]}
+        onLayout={event => setRowWidth(event.nativeEvent.layout.width - SHELF_INSET.left - SHELF_INSET.right)}>
+        {Array.from({ length: builtFloors }, (_, r) => <ShelfBackground key={`floor-${r}`} top={r * SHELF_HEIGHT} />)}
+        {items.map(item => {
+            const spot = placed.get(item.book.id);
+            return <ShelfSpine key={item.book.id} {...item} hidden={!spot}
+                placement={spot?.placement ?? { id: item.book.id, ...HIDDEN_PLACEMENT }} position={spot?.position ?? null}
+                onRatio={ratio => remember(item.book.sideCoverUrl, isSpineImageRatio(ratio) ? ratio : null)}
+                onFail={() => remember(item.book.sideCoverUrl, null)} />;
+        })}
+    </View>;
 }
 
 /** S-30: 고른 상태·장르에 맞는 책이 없을 때 보여 줄 안내 문구 */
@@ -170,14 +201,11 @@ export default function ShelfScreen() {
         ...genreCounts,
     ];
     const groups = groupShelfBooks(filterShelfGenre(statusBooks, genre));
-    // S-30: 필터를 바꿔도 장르 책장을 지우지 않고 숨기기만 해서, 다시 보일 때 깜빡이지 않게 한다.
-    const allGroups = groupShelfBooks(books);
+    // S-30: 책장은 하나다. 모든 책을 장르끼리 이어서 꽂아 두고, 상태·장르 필터는 보일 책만 고른다.
+    // 필터를 바꿔도 책장과 책등을 다시 그리지 않아서 깜빡이지 않는다.
+    const shelfBooks = groupShelfBooks(books).flatMap(group => group.books);
     const visibleIds = new Set(groups.flatMap(group => group.books.map(book => book.id)));
-    const visibleCounts = new Map(groups.map(group => [group.genre, group.books.length]));
-    const shelfGroups = [
-        ...groups.map(group => allGroups.find(all => all.genre === group.genre) ?? group),
-        ...allGroups.filter(all => !visibleCounts.has(all.genre)),
-    ];
+    const visibleCount = visibleIds.size;
     const genreLabel = genre ?? '전체';
 
     const chooseGenre = (next: Genre | null) => {
@@ -218,14 +246,12 @@ export default function ShelfScreen() {
         </Pressable>
 
         {(filter !== null || genre !== null) && groups.length === 0 && <StateView kind="empty" message={emptyMessage(filter, genre)} />}
-        {shelfGroups.map(group => {
-            const count = visibleCounts.get(group.genre) ?? 0;
-            return <View key={group.genre} style={[shelfStyles.section, count === 0 && styles.hiddenSection]}
-                pointerEvents={count === 0 ? 'none' : 'auto'} accessibilityElementsHidden={count === 0} importantForAccessibility={count === 0 ? 'no-hide-descendants' : 'auto'}>
-                {count > 0 && <Text accessibilityRole="header" style={shelfStyles.title}>{group.genre} · {count}권</Text>}
-                <ShelfBox><ShelfRow books={group.books} visibleIds={visibleIds} /></ShelfBox>
-            </View>;
-        })}
+        <View style={[shelfStyles.section, visibleCount === 0 && styles.hiddenSection]}
+            pointerEvents={visibleCount === 0 ? 'none' : 'auto'} accessibilityElementsHidden={visibleCount === 0}
+            importantForAccessibility={visibleCount === 0 ? 'no-hide-descendants' : 'auto'}>
+            {visibleCount > 0 && <Text accessibilityRole="header" style={shelfStyles.title}>{genreLabel} · {visibleCount}권</Text>}
+            <ShelfStack books={shelfBooks} visibleIds={visibleIds} />
+        </View>
 
         <Modal visible={genreSheetOpen} transparent animationType="slide" onRequestClose={() => setGenreSheetOpen(false)}>
             <View style={styles.sheetRoot}>
@@ -266,20 +292,16 @@ const styles = StyleSheet.create({
     filterTextSelected: { fontFamily: typography.heading.fontFamily },
     genreButton: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.sm },
     genreButtonText: { ...typography.label, color: colors.brand.espresso },
-    // S-30: 사진 책장 칸. 책은 윗판·바닥·양옆 틀 안쪽에만 꽂히고, 칸 안에서 가로로 넘겨 본다.
-    shelfUnit: { height: SHELF_HEIGHT },
+    // S-30: 사진 선반을 층 수만큼 쌓고, 책등은 그 위에 절대 위치로 놓는다.
+    stack: { overflow: 'hidden' },
     // 숨김은 display: 'none'을 쓰지 않는다. 새 아키텍처(Fabric)는 display: 'none'인 뷰의 네이티브 뷰를 없애서,
     // 다시 보일 때 책장·책등 사진을 처음부터 다시 불러오며 깜빡인다. 투명 + 절대 위치로 자리만 비키고 뷰는 그대로 둔다.
     hiddenSpine: { position: 'absolute', left: 0, bottom: 0, opacity: 0 },
     hiddenSection: { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0 },
-    shelfImages: { ...StyleSheet.absoluteFill, flexDirection: 'row' },
+    shelfImages: { position: 'absolute', left: 0, right: 0, flexDirection: 'row' },
     shelfImage: { height: '100%' },
     shelfCenter: { flex: 1 },
-    shelfInside: {
-        flex: 1, justifyContent: 'flex-end', overflow: 'hidden',
-        marginTop: SHELF_INSET.top, marginBottom: SHELF_INSET.bottom, marginLeft: SHELF_FRAME.left, marginRight: SHELF_FRAME.right,
-    },
-    books: { alignItems: 'flex-end', paddingLeft: SHELF_INSET.left - SHELF_FRAME.left, paddingRight: SHELF_INSET.right - SHELF_FRAME.right },
+    spinePlaced: { position: 'absolute' },
     spineBase: { overflow: 'hidden', borderTopLeftRadius: radii.small, borderTopRightRadius: radii.small },
     spine: { paddingVertical: spacing.sm, alignItems: 'center', borderWidth: 1, borderBottomWidth: 0, borderColor: colors.line.border },
     spineTitle: { ...typography.caption, textAlign: 'center' },
