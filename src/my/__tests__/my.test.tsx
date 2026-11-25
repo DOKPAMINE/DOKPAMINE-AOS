@@ -178,10 +178,20 @@ test.each([false, true])('FR-15 S-81 참여 상태=%s 스위치는 확인 화면
     await screen.findByRole('button', { name: confirm });
     expect(patchMe).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByRole('button', { name: confirm }));
-    expect(await screen.findByText('독서왕 랭킹 화면')).toBeOnTheScreen();
-    expect(patchMe).toHaveBeenCalledWith({ rankingOptIn: !participating });
-    await act(async () => router.dismissTo('/settings'));
+    // AOS#126: 확인 후에는 랭킹이 아니라 설정으로 돌아와 바뀐 참여 상태를 보여 준다.
     expect(await screen.findByText(participating ? '참여하지 않고 있어요' : '참여 중이에요')).toBeOnTheScreen();
+    expect(screen).toHavePathname('/settings');
+    expect(patchMe).toHaveBeenCalledWith({ rankingOptIn: !participating });
+});
+
+test.each(['consent', 'withdraw'])('FR-15 S-74 S-75 AOS#126 %s에서 설정으로 돌아가면 참여를 변경하지 않아요', async route => {
+    await renderRouter(routes, { initialUrl: '/settings' });
+    await screen.findByText('참여하지 않고 있어요');
+    await act(async () => router.push(`/ranking/${route}`));
+    await fireEvent.press(await screen.findByRole('button', { name: '설정으로 돌아가기' }));
+    expect(await screen.findByText('참여하지 않고 있어요')).toBeOnTheScreen();
+    expect(screen).toHavePathname('/settings');
+    expect(patchMe).not.toHaveBeenCalled();
 });
 
 test('NFR-06 S-81 오프라인 스위치는 1초 안에 안내하고 참여 요청과 화면 이동을 막아요', async () => {

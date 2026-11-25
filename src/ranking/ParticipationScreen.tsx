@@ -5,8 +5,9 @@ import { useParticipation } from './queries';
 import { RankingError } from './RankingError';
 import { styles } from './styles';
 
+// S-74·S-75 · AOS#126: 참여·중단은 설정(S-81)의 랭킹 참여 스위치에서 열고, 끝나면 설정으로 돌아간다.
 export function ParticipationScreen({ optIn }: { optIn: boolean }) {
-    const mutation = useParticipation(() => router.dismissTo('/ranking'));
+    const mutation = useParticipation(() => router.dismissTo('/settings'));
     const confirmLabel = optIn ? '동의하고 참여하기' : '참여 중단하기';
     return <Screen title={optIn ? '랭킹 참여 동의' : '랭킹 참여를 중단할까요?'}>
         <Text style={styles.body}>{optIn
@@ -14,6 +15,6 @@ export function ParticipationScreen({ optIn }: { optIn: boolean }) {
             : '참여를 중단하면 순위에서 즉시 빠지고 독서 시간이 랭킹에 공개되지 않아요. 저장한 개인 독서 기록은 유지돼요.'}</Text>
         {mutation.isError && <RankingError error={mutation.error} />}
         <PrimaryButton label={mutation.pending ? '반영 중이에요' : confirmLabel} disabled={mutation.pending} onPress={() => mutation.submit(optIn)} />
-        <SecondaryButton label="랭킹으로 돌아가기" disabled={mutation.pending} onPress={() => router.dismissTo('/ranking')} />
+        <SecondaryButton label="설정으로 돌아가기" disabled={mutation.pending} onPress={() => router.dismissTo('/settings')} />
     </Screen>;
 }
