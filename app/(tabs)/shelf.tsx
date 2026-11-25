@@ -7,7 +7,7 @@ import { Screen, StateView } from '../../src/components';
 import type { Genre } from '../../src/domain/pageRules';
 import { countShelfGenres, countShelfStatuses, filterShelfBooks, filterShelfGenre, groupShelfBooks, toggleShelfFilter, type ShelfStatus } from '../../src/domain/shelfRules';
 import type { BookRecord } from '../../src/db/schema';
-import { layoutShelfRow, spineHeightScale, spineThicknessScale, type ShelfPlacement } from '../../src/domain/spineRules';
+import { isSpineImageRatio, layoutShelfRow, spineHeightScale, spineThicknessScale, type ShelfPlacement } from '../../src/domain/spineRules';
 import { bookStatusIcons, bookStatusLabels } from '../../src/shelf/BookStatus';
 import { useShelfRepository } from '../../src/shelf/useShelfRepository';
 import { shelfStyles } from '../../src/shelf/styles';
@@ -141,8 +141,7 @@ function ShelfRow({ books, visibleIds }: { books: readonly BookRecord[]; visible
     return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.books}>
         {items.map(item => <ShelfSpine key={item.book.id} {...item} hidden={!visibleIds.has(item.book.id)}
             placement={placements.get(item.book.id) ?? { id: item.book.id, ...HIDDEN_PLACEMENT }}
-            onRatio={ratio => remember(item.book.sideCoverUrl, ratio)}
-            onFail={() => remember(item.book.sideCoverUrl, null)} />)}
+            onRatio={ratio => remember(item.book.sideCoverUrl, isSpineImageRatio(ratio) ? ratio : null)}            onFail={() => remember(item.book.sideCoverUrl, null)} />)}
     </ScrollView>;
 }
 
