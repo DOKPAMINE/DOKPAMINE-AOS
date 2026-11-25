@@ -1,6 +1,6 @@
 import { router, Slot, Tabs } from 'expo-router';
-import { RefreshControl, Text, type RefreshControlProps } from 'react-native';
-import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { RefreshControl, StyleSheet, Text, type RefreshControlProps } from 'react-native';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import Lounge from '../../../app/(tabs)/lounge';
@@ -31,6 +31,7 @@ const routes = {
     '(tabs)/lounge': Lounge,
     'lounge/search': Search,
     'lounge/[id]': Detail,
+    'ranking/index': () => <Text>독서왕 랭킹 화면</Text>,
 };
 const offlineMessage = '인터넷에 연결되어 있지 않아요. 연결되면 다시 시도해 주세요.';
 // #124 S-71은 자동완성에서 고른 책 하나(query·bookKey·title)를 연다.
@@ -49,6 +50,25 @@ beforeEach(() => {
     jest.mocked(unlikeReview).mockResolvedValue({ likeCount: 2, likedByMe: false });
 });
 afterEach(() => { client.clear(); onlineManager.setOnline(true); });
+
+test('FR-15 S-70 #124 독서왕 랭킹은 제목 "라운지" 오른쪽의 트로피 버튼(44dp 이상)으로 열어요', async () => {
+    jest.mocked(feedList).mockResolvedValue([]);
+    await renderRouter(routes, { initialUrl: '/lounge' });
+    const title = await screen.findByRole('header', { name: '라운지' });
+    // 제목과 같은 줄에 있고, 글자 버튼은 없다.
+    const ranking = within(title.parent!).getByRole('button', { name: '독서왕 랭킹' });
+    expect(ranking).toHaveProp('testID', 'lounge-ranking');
+    expect(screen.getAllByRole('button', { name: '독서왕 랭킹' })).toHaveLength(1);
+    expect(screen.queryByText('독서왕 랭킹')).toBeNull();
+    expect(StyleSheet.flatten(ranking.props.style)).toMatchObject({ minWidth: 44, minHeight: 44 });
+    // 아이콘은 앱의 MaterialCommunityIcons 글꼴로 그린 꾸밈이므로 스크린리더는 버튼 이름만 읽는다.
+    const glyph = within(ranking).getByText(/./);
+    expect(glyph).toHaveProp('accessible', false);
+    expect(StyleSheet.flatten(glyph.props.style)).toMatchObject({ fontFamily: 'material-community', fontSize: 24 });
+    await fireEvent.press(ranking);
+    expect(await screen.findByText('독서왕 랭킹 화면')).toBeOnTheScreen();
+    expect(screen).toHavePathname('/ranking');
+});
 
 test('FR-16 FR-08 FR-09 S-70~72 #124 자동완성으로 책 고르기→책 묶음→상세→좋아요·취소가 이어져요', async () => {
     await renderRouter(routes, { initialUrl: '/lounge' });

@@ -376,7 +376,7 @@ describe('#124 검색어 지우기(X) 버튼', () => {
 });
 
 describe('#124 검색창 밖을 누르거나 화면을 옮기면 검색창 닫기', () => {
-    test('S-70 독서왕 랭킹·감상 박스를 누르기 시작하면 자동완성과 안내를 닫아요', async () => {
+    test('S-70 검색창 아래 내용·감상 박스를 누르기 시작하면 자동완성과 안내를 닫아요', async () => {
         jest.mocked(feedList).mockResolvedValue([review]);
         await renderRouter(routes, { initialUrl: '/lounge' });
         await screen.findByLabelText('책 이름');
@@ -384,7 +384,7 @@ describe('#124 검색창 밖을 누르거나 화면을 옮기면 검색창 닫�
         await screen.findByTestId('book-suggestions');
         await fireEvent(searchInput(), 'submitEditing');
         expect(screen.getByTestId('book-search-hint')).toBeOnTheScreen();
-        await fireEvent(screen.getByRole('button', { name: '독서왕 랭킹' }), 'touchStart');
+        await fireEvent(screen.getByRole('header', { name: '최근 공개 감상' }), 'touchStart');
         expect(screen.queryByTestId('book-suggestions')).toBeNull();
         expect(screen.queryByTestId('book-search-hint')).toBeNull();
         // 다시 검색창을 누르면 열리고, 감상 박스를 누르기 시작하면 또 닫힌다.

@@ -1,8 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
 import { router, useFocusEffect } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Text, View } from 'react-native';
-import { Screen, SecondaryButton, StateView } from '../components';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Pressable, Text, View } from 'react-native';
+import { Screen, StateView } from '../components';
+import { colors, sizes } from '../theme';
 import { BookSearchField, SearchDismissArea, type BookSearchFieldHandle, type SelectedBook } from './BookSearchField';
 import { refetchFeed, useFeed } from './queries';
 import { QueryError } from './QueryState';
@@ -29,15 +31,21 @@ export function LoungeScreen() {
         // #113: 라운지 탭은 화면이 남아 있으므로, 결과 화면으로 넘어가면 다음 검색을 위해 검색창을 비운다.
         setQuery('');
     };
+    // #124 S-73 독서왕 랭킹은 제목 오른쪽의 트로피 버튼으로 연다. 누르는 영역은 44dp 이상이다.
+    const ranking = (
+        <Pressable testID="lounge-ranking" accessibilityRole="button" accessibilityLabel="독서왕 랭킹" onPress={() => router.push('/ranking')}
+            style={({ pressed }) => [styles.rankingButton, pressed && styles.suggestionPressed]}>
+            <MaterialCommunityIcons name="trophy-outline" size={sizes.icon} color={colors.brand.espresso} accessible={false} />
+        </Pressable>
+    );
     return (
-        <Screen title="라운지" refreshing={refreshing} onRefresh={refresh} keyboardShouldPersistTaps="handled">
+        <Screen title="라운지" action={ranking} refreshing={refreshing} onRefresh={refresh} keyboardShouldPersistTaps="handled">
             <View style={styles.section}>
                 <Text style={styles.body}>같은 책을 읽은 사람들의 감상을 찾아보세요.</Text>
                 <BookSearchField ref={search} value={query} onChangeText={setQuery} onSelectBook={selectBook} />
             </View>
             {/* #124 검색창 밖을 누르면 키보드와 자동완성을 닫는다. */}
             <SearchDismissArea search={search}>
-                <SecondaryButton label="독서왕 랭킹" onPress={() => router.push('/ranking')} />
                 <Text accessibilityRole="header" style={styles.heading}>최근 공개 감상</Text>
                 {feed.isError ? <QueryError error={feed.error} retry={() => { void feed.refetch(); }} />
                     : feed.isPending ? <StateView kind="loading" />
