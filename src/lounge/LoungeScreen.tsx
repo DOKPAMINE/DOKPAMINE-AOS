@@ -3,7 +3,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Text, View } from 'react-native';
 import { Screen, SecondaryButton, StateView } from '../components';
-import { BookSearchField } from './BookSearchField';
+import { BookSearchField, type SelectedBook } from './BookSearchField';
 import { refetchFeed, useFeed } from './queries';
 import { QueryError } from './QueryState';
 import { LoungeBox } from './LoungeBox';
@@ -22,16 +22,17 @@ export function LoungeScreen() {
         setRefreshing(true);
         void feed.refetch({ cancelRefetch: false }).finally(() => setRefreshing(false));
     };
-    const search = (trimmed: string) => {
-        router.push({ pathname: '/lounge/search', params: { query: trimmed } });
+    // #124: 검색은 자동완성에서 책을 골라서만 한다. 고른 책은 S-71에서 그 책 묶음만 보여 준다.
+    const selectBook = ({ query: term, bookKey, bookTitle }: SelectedBook) => {
+        router.push({ pathname: '/lounge/search', params: { query: term, bookKey, title: bookTitle } });
         // #113: 라운지 탭은 화면이 남아 있으므로, 결과 화면으로 넘어가면 다음 검색을 위해 검색창을 비운다.
         setQuery('');
     };
     return (
-        <Screen title="라운지" refreshing={refreshing} onRefresh={refresh}>
+        <Screen title="라운지" refreshing={refreshing} onRefresh={refresh} keyboardShouldPersistTaps="handled">
             <View style={styles.section}>
                 <Text style={styles.body}>같은 책을 읽은 사람들의 감상을 찾아보세요.</Text>
-                <BookSearchField value={query} onChangeText={setQuery} onSearch={search} />
+                <BookSearchField value={query} onChangeText={setQuery} onSelectBook={selectBook} />
             </View>
             <SecondaryButton label="독서왕 랭킹" onPress={() => router.push('/ranking')} />
             <Text accessibilityRole="header" style={styles.heading}>최근 공개 감상</Text>

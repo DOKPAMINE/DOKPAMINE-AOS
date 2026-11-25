@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { useIsMutating, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
+import { keepPreviousData, useIsMutating, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { feedItem, feedList, feedUserBook, likeReview, searchBookReviews, unlikeReview } from '../api/endpoints';
 import { subscribeReviewsSynced } from '../sync/runtime';
 import { isOnline } from '../api/connectivity';
@@ -10,6 +10,7 @@ export const loungeKeys = {
     all: ['lounge'] as const,
     feed: ['lounge', 'feed'] as const,
     books: (query: string) => ['lounge', 'books', query] as const,
+    bookSuggestions: (term: string) => ['lounge', 'book-suggestions', term] as const,
     item: (id: string) => ['lounge', 'item', id] as const,
     userBook: (userBookId: string) => ['lounge', 'user-book', userBookId] as const,
 };
@@ -52,7 +53,31 @@ export function invalidateLoungeLists(client: QueryClient, keep?: QueryKey) {
 
 export function useBookReviews(query: string) {
     return useQuery({ ...options, queryKey: loungeKeys.books(query), enabled: query.trim().length > 0,
-        queryFn: () => connected(() => searchBookReviews(query)) });
+        queryFn: ({ signal }) => connected(() => searchBookReviews(query, signal)) });
+}
+
+/** #124 S-70·S-71: 글자를 멈추고 이만큼 기다린 뒤 자동완성을 조회한다. */
+export const bookSuggestionDelayMs = 300;
+
+/** #124: 자동완성 결과. 목록을 만든 검색어를 함께 두어, 고른 책을 그 검색어의 S-71 결과에서 찾게 한다. */
+export interface BookSuggestionResult { term: string; groups: BookReviewSearchResponse }
+
+/**
+ * #124 S-70·S-71 책 이름 자동완성. term은 앞뒤 공백을 자른, 0.3초 동안 바뀌지 않은 검색어다(빈 값이면 조회하지 않는다).
+ * S-71의 책별 감상 조회와 키를 나눠, 자동완성 요청을 취소해도 S-71 조회에는 영향이 없다.
+ * 검색어가 바뀌면 이전 검색어의 조회에 남은 화면이 없으므로 Query가 signal로 진행 중인 요청을 취소하고, 마지막 검색어의 결과만 쓴다.
+ * 오프라인이면 connected()가 요청 없이 오류를 내므로 화면은 목록을 띄우지 않는다.
+ */
+export function useBookSuggestions(term: string) {
+    // 다음 검색어의 결과를 기다리는 동안 직전 결과를 둔다. 결과마다 term이 있어 고른 책은 그 결과의 검색어로 찾는다.
+    return useQuery({ ...options, queryKey: loungeKeys.bookSuggestions(term), enabled: term.length > 0, placeholderData: keepPreviousData,
+        queryFn: async ({ signal }): Promise<BookSuggestionResult> =>
+            ({ term, groups: await connected(() => searchBookReviews(term, signal)) }) });
+}
+
+/** #124: 자동완성에서 책을 고르면 S-71이 같은 검색어 결과를 바로 보여 주도록, 비어 있는 책별 감상 캐시만 채운다. S-71은 열면서 다시 받는다. */
+export function primeBookReviews(client: QueryClient, result: BookSuggestionResult) {
+    if (client.getQueryData(loungeKeys.books(result.term)) === undefined) client.setQueryData(loungeKeys.books(result.term), result.groups);
 }
 /** #113 S-76: 박스(한 사람이 한 책에 쓴 공개 감상) 전부. 서버 순서는 publishedAt 최신순이다. */
 export function useUserBookFeed(userBookId: string) {

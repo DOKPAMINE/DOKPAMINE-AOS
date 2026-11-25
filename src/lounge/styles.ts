@@ -12,6 +12,27 @@ export const styles = StyleSheet.create({
         borderWidth: 1, borderColor: colors.line.border, borderRadius: radii.button,
         minHeight: sizes.button, padding: spacing.md,
     },
+    // #124 검색창 아래에 안내와 자동완성 목록을 붙여 둔다.
+    searchBox: { gap: spacing.xs },
+    searchIcon: { position: 'absolute', top: 0, bottom: 0, left: spacing.md, justifyContent: 'center' },
+    suggestions: {
+        backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.line.border,
+        borderRadius: radii.button, overflow: 'hidden',
+    },
+    suggestion: {
+        flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+        minHeight: sizes.minTouch, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    },
+    suggestionDivider: { borderTopWidth: 1, borderTopColor: colors.line.border },
+    suggestionPressed: { backgroundColor: colors.surface.chip },
+    // #124 자동완성 결과 안내(0권·오류·오프라인)는 목록과 같은 자리·테두리에 글만 둔다.
+    suggestionMessage: { minHeight: sizes.minTouch, justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+    // #124 최근 고른 책: 머리(제목·전체 지우기)와 책 줄(책 버튼·지우기 버튼). 버튼은 모두 44dp 이상이다.
+    recentHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingLeft: spacing.md },
+    recentAction: { minHeight: sizes.minTouch, justifyContent: 'center', paddingHorizontal: spacing.md },
+    recentRow: { flexDirection: 'row', alignItems: 'stretch' },
+    recentBook: { flex: 1, minWidth: 0 },
+    recentRemove: { minWidth: sizes.minTouch, minHeight: sizes.minTouch, justifyContent: 'center', alignItems: 'center' },
     review: {
         minHeight: sizes.minTouch, gap: spacing.sm, paddingVertical: spacing.lg,
         borderBottomWidth: 1, borderBottomColor: colors.line.border,
@@ -25,7 +46,6 @@ export const styles = StyleSheet.create({
         minHeight: sizes.minTouch, gap: spacing.sm, padding: spacing.lg,
         borderRadius: radii.card, borderWidth: 1, borderColor: colors.line.border, backgroundColor: colors.surface.card,
     },
-    groups: { gap: spacing.xxl },
     divider: { height: 1, backgroundColor: colors.line.border },
     // 좁은 화면이나 큰 글씨에서 정렬 버튼이 "N명의 감상" 아래 줄로 내려가도록 감싼다.
     countRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },

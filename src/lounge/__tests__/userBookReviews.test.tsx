@@ -19,7 +19,8 @@ jest.mock('../../api/endpoints', () => ({
     feedItem: jest.fn(), feedList: jest.fn(), feedUserBook: jest.fn(), likeReview: jest.fn(), searchBookReviews: jest.fn(), unlikeReview: jest.fn(),
 }));
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn() } }));
-jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), isLoaded: jest.fn() }));
+// #124 isLoaded가 false인 테스트에서도 검색창 돋보기가 글꼴을 불러오지 않게 loadAsync를 대신한다.
+jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), isLoaded: jest.fn(), loadAsync: jest.fn() }));
 
 const base = { nickname: '독자', bookTitle: '데미안', bookAuthor: '헤르만 헤세', genre: '소설', likeCount: 2, likedByMe: false, mine: false };
 const reportNew: FeedItem = { ...base, id: 'review-new', userBookId: 'user-book-1', oneLine: null,
@@ -246,7 +247,12 @@ test('#113 S-76 독후감 카드에 쓴 순서 번호와 날짜를 붙이고 카
     expect(screen.getByRole('button', { name: '독후감 1, 2026년 10월 1일 좋아요' })).toBeOnTheScreen();
 });
 
-describe('#113 FR-16 S-71 책 감상 검색 결과', () => {
+// #124 S-71은 자동완성에서 고른 책 하나(query: 목록을 만든 검색어, bookKey, title)를 연다.
+const s71 = (bookKey: string, title = '데미안', query = '데미안') =>
+    `/lounge/search?query=${encodeURIComponent(query)}&bookKey=${encodeURIComponent(bookKey)}&title=${encodeURIComponent(title)}`;
+const demianKey = 'isbn:9788937460449';
+
+describe('#113 #124 FR-16 S-71 고른 책 묶음', () => {
     const coverUrl = 'https://image.example.com/demian.jpg';
     const r1 = { ...reportNew, publishedAt: '2026-11-24T15:30:00Z' };
     const r2: FeedItem = { ...base, id: 'review-walk', userBookId: 'user-book-3', nickname: '산책', oneLine: '산책하며 읽은 책', body: null,
@@ -256,7 +262,7 @@ describe('#113 FR-16 S-71 책 감상 검색 결과', () => {
         publishedAt: '2026-09-01T00:00:00Z', likeCount: 0 };
     const r5 = { ...oneLine, publishedAt: null };
     const groups: BookReviewSearchResponse = [
-        { bookKey: 'isbn:9788937460449', bookTitle: '데미안', bookAuthor: '헤르만 헤세', isbn: '9788937460449', reviews: [r1, r2, r3, r4, r5] },
+        { bookKey: demianKey, bookTitle: '데미안', bookAuthor: '헤르만 헤세', isbn: '9788937460449', reviews: [r1, r2, r3, r4, r5] },
         { bookKey: 'text:other', bookTitle: '데미안', bookAuthor: '다른 저자',
             reviews: [{ ...r2, id: 'review-other-book', userBookId: 'user-book-9', nickname: '다른 독자', likeCount: 99, coverUrl: null }] },
     ];
@@ -274,22 +280,25 @@ describe('#113 FR-16 S-71 책 감상 검색 결과', () => {
     });
     beforeEach(() => { jest.mocked(searchBookReviews).mockResolvedValue(groups); });
 
-    test('책 묶음 정보(표지·제목·저자·ISBN), 구분선, "N명의 감상", 카드 모양 박스 순서로 보여 줘요', async () => {
-        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
-        const [first, second] = await screen.findAllByTestId('book-group');
-        const header = within(first).getByTestId('book-group-header');
+    test('고른 책 묶음 하나만 책 정보(표지·제목·저자·ISBN), 구분선, "N명의 감상", 카드 모양 박스 순서로 보여 줘요', async () => {
+        await renderRouter(routes, { initialUrl: s71(demianKey) });
+        const group = await screen.findByTestId('book-group');
+        expect(screen.getAllByTestId('book-group')).toHaveLength(1);
+        const header = within(group).getByTestId('book-group-header');
         expect(styleOf(header)).toMatchObject({ flexDirection: 'row' });
-        // 묶음 표지는 coverUrl이 있는 첫 감상(산책)의 것이고, 없는 묶음은 책장의 기본 표지다.
+        // 묶음 표지는 coverUrl이 있는 첫 감상(산책)의 것이다.
         expect(within(header).getByTestId('book-cover-image')).toHaveProp('source', { uri: coverUrl });
         expect(styleOf(within(header).getByTestId('book-cover-image'))).toMatchObject({ width: 66, height: 99 });
-        expect(texts(within(first).getByTestId('book-group-header-text')).map(text => text.props.children))
+        expect(texts(within(group).getByTestId('book-group-header-text')).map(text => text.props.children))
             .toEqual(['데미안', ['헤르만 헤세', ' · ISBN 9788937460449']]);
-        expect(within(second).getByTestId('book-cover-default')).toHaveTextContent('소설');
-        expect(styleOf(within(first).getByTestId('book-group-divider'))).toMatchObject({ height: 1, backgroundColor: colors.line.border });
+        expect(styleOf(within(group).getByTestId('book-group-divider'))).toMatchObject({ height: 1, backgroundColor: colors.line.border });
         // N은 박스 수(사람 수)다. 독자의 감상 3개는 한 박스, 산책 1개, 예전 응답 1개 → 3명.
-        expect(within(first).getByRole('header', { name: '3명의 감상' })).toBeOnTheScreen();
-        expect(within(second).getByRole('header', { name: '1명의 감상' })).toBeOnTheScreen();
-        expect(searchRows().map(labelOf)).toEqual([readerBox, walkBox, oldRow, otherBookBox]);
+        expect(within(group).getByRole('header', { name: '3명의 감상' })).toBeOnTheScreen();
+        // 같은 검색어 결과의 다른 책 묶음은 보여 주지 않는다.
+        expect(searchRows().map(labelOf)).toEqual([readerBox, walkBox, oldRow]);
+        expect(screen.queryByText('다른 저자')).toBeNull();
+        // 검색 결과 문구는 두지 않는다.
+        expect(screen.queryByText(/검색 결과/)).toBeNull();
         // 박스에는 표지와 책 제목이 없고, 박스와 예전 응답의 감상은 공통 Card와 같은 카드 모양이다.
         const cardStyle = { borderRadius: radii.card, borderWidth: 1, borderColor: colors.line.border, backgroundColor: colors.surface.card };
         for (const row of searchRows()) {
@@ -304,40 +313,40 @@ describe('#113 FR-16 S-71 책 감상 검색 결과', () => {
         expect(screen.queryByText(r5.oneLine!)).toBeNull();
     });
 
-    test('정렬 버튼은 묶음마다 "N명의 감상" 옆에 있고 기본은 최신순이에요', async () => {
-        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
-        const groupNodes = await screen.findAllByTestId('book-group');
-        for (const group of groupNodes) {
-            const row = within(group).getByTestId('book-group-count-row');
-            // 좁은 화면이나 큰 글씨에서는 버튼이 제목 아래 줄로 내려간다.
-            expect(styleOf(row)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
-            expect(within(row).getByRole('radio', { name: '최신순' })).toBeOnTheScreen();
-            expect(within(row).getByRole('radio', { name: '좋아요 많은 순' })).toBeOnTheScreen();
-        }
-        expect(screen.getAllByLabelText('데미안 감상 정렬')).toHaveLength(2);
-        expect(selectedOrders()).toEqual({ latest: [true, true], likes: [false, false] });
+    test('표지가 없는 책을 고르면 책장의 기본 표지와 그 책의 박스만 보여 줘요', async () => {
+        await renderRouter(routes, { initialUrl: s71('text:other') });
+        const group = await screen.findByTestId('book-group');
+        expect(within(group).getByTestId('book-cover-default')).toHaveTextContent('소설');
+        expect(within(group).getByRole('header', { name: '1명의 감상' })).toBeOnTheScreen();
+        expect(searchRows().map(labelOf)).toEqual([otherBookBox]);
     });
 
-    test('어느 묶음에서 정렬을 바꿔도 모든 묶음의 정렬과 선택 표시가 같이 바뀌고, 정렬은 묶음 안에서만 해요', async () => {
-        jest.mocked(searchBookReviews).mockResolvedValue([groups[0], { ...groups[1], reviews: [
-            { ...groups[1].reviews[0], publishedAt: '2026-11-25T00:00:00Z', likeCount: 0 },
-            { ...groups[1].reviews[0], id: 'review-popular', userBookId: 'user-book-10', nickname: '인기 독자', publishedAt: '2026-11-01T00:00:00Z', likeCount: 50 },
-        ] }]);
-        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
-        await screen.findAllByTestId('book-group');
-        expect(searchRows().map(labelOf)).toEqual([readerBox, walkBox, oldRow, otherBookBox, '인기 독자, 산책하며 읽은 책']);
-        // 두 번째 묶음의 버튼으로 바꿔도 첫 번째 묶음까지 같이 바뀐다.
-        await fireEvent.press(screen.getAllByRole('radio', { name: '좋아요 많은 순' })[1]);
-        expect(selectedOrders()).toEqual({ latest: [false, false], likes: [true, true] });
-        // 산책 9개 > 독자 2+2+2=6개 > 옛 독자 0개, 인기 독자 50개 > 다른 독자 0개. 묶음 순서는 그대로다.
-        expect(searchRows().map(labelOf)).toEqual([walkBox, readerBox, oldRow, '인기 독자, 산책하며 읽은 책', otherBookBox]);
-        await fireEvent.press(screen.getAllByRole('radio', { name: '최신순' })[0]);
-        expect(selectedOrders()).toEqual({ latest: [true, true], likes: [false, false] });
-        expect(searchRows().map(labelOf)).toEqual([readerBox, walkBox, oldRow, otherBookBox, '인기 독자, 산책하며 읽은 책']);
+    test('정렬 버튼은 "N명의 감상" 옆에 있고 기본은 최신순이에요', async () => {
+        await renderRouter(routes, { initialUrl: s71(demianKey) });
+        const row = within(await screen.findByTestId('book-group')).getByTestId('book-group-count-row');
+        // 좁은 화면이나 큰 글씨에서는 버튼이 제목 아래 줄로 내려간다.
+        expect(styleOf(row)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
+        expect(within(row).getByRole('radio', { name: '최신순' })).toBeOnTheScreen();
+        expect(within(row).getByRole('radio', { name: '좋아요 많은 순' })).toBeOnTheScreen();
+        expect(screen.getByLabelText('감상 정렬')).toBeOnTheScreen();
+        expect(selectedOrders()).toEqual({ latest: [true], likes: [false] });
+    });
+
+    test('정렬을 바꾸면 고른 책 묶음 안 박스 순서만 바뀌어요', async () => {
+        await renderRouter(routes, { initialUrl: s71(demianKey) });
+        await screen.findByTestId('book-group');
+        expect(searchRows().map(labelOf)).toEqual([readerBox, walkBox, oldRow]);
+        await fireEvent.press(screen.getByRole('radio', { name: '좋아요 많은 순' }));
+        expect(selectedOrders()).toEqual({ latest: [false], likes: [true] });
+        // 산책 9개 > 독자 2+2+2=6개 > 옛 독자 0개.
+        expect(searchRows().map(labelOf)).toEqual([walkBox, readerBox, oldRow]);
+        await fireEvent.press(screen.getByRole('radio', { name: '최신순' }));
+        expect(selectedOrders()).toEqual({ latest: [true], likes: [false] });
+        expect(searchRows().map(labelOf)).toEqual([readerBox, walkBox, oldRow]);
     });
 
     test('박스는 S-76, userBookId가 없는 예전 감상은 S-72로 가요', async () => {
-        await renderRouter(stackRoutes, { initialUrl: '/lounge/search?query=데미안' });
+        await renderRouter(stackRoutes, { initialUrl: s71(demianKey) });
         await fireEvent.press(await screen.findByRole('button', { name: walkBox }));
         await waitFor(() => expect(feedUserBook).toHaveBeenCalledWith('user-book-3', expect.anything()));
         expect(await screen.findByRole('button', { name: '한줄평 좋아요' })).toBeOnTheScreen();
@@ -349,102 +358,93 @@ describe('#113 FR-16 S-71 책 감상 검색 결과', () => {
 
     test('내가 쓴 박스는 닉네임 뒤에 "(내 감상)"을 붙여요', async () => {
         jest.mocked(searchBookReviews).mockResolvedValue([{ ...groups[0], reviews: [{ ...r1, mine: true }] }]);
-        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
+        await renderRouter(routes, { initialUrl: s71(demianKey) });
         const box = await screen.findByHintText(openBox);
         expect(labelOf(box)).toBe('독자 (내 감상), 두 번째로 읽으니 싱클레어가 다르게 보였어요., 2026년 11월 25일에 쓴 독후감');
         expect(texts(within(box).getByTestId('lounge-box-text'))[0]).toHaveTextContent('독자 (내 감상)');
     });
 });
 
-describe('#113 FR-16 S-71 맨 위 검색창', () => {
-    const searchInputs = () => screen.getAllByLabelText('책 이름');
-
-    test('들어올 때 검색한 단어가 채워져 있고, 고쳐서 검색하면 같은 화면에서 결과만 바뀌며 뒤로 가기는 라운지로 가요', async () => {
-        jest.mocked(searchBookReviews).mockResolvedValue([]);
-        await renderRouter(stackRoutes, { initialUrl: '/lounge' });
-        await fireEvent.changeText(await screen.findByLabelText('책 이름'), '데미안');
-        await fireEvent.press(screen.getByRole('button', { name: '책 감상 검색' }));
-        expect(await screen.findByText('“데미안” 검색 결과')).toBeOnTheScreen();
-        const input = () => searchInputs().find(node => node.props.value !== '')!;
-        expect(input()).toHaveProp('value', '데미안');
-        await fireEvent.changeText(input(), ' 어린왕자 ');
-        await fireEvent(input(), 'submitEditing');
-        expect(await screen.findByText('“어린왕자” 검색 결과')).toBeOnTheScreen();
-        expect(searchBookReviews).toHaveBeenLastCalledWith('어린왕자');
-        expect(input()).toHaveProp('value', '어린왕자');
-        // 다시 검색해도 화면을 쌓지 않으므로 한 번 뒤로 가면 라운지다.
-        await act(async () => router.back());
-        expect(await screen.findByText('최근 공개 감상')).toBeOnTheScreen();
-        expect(screen.queryByText(/검색 결과/)).toBeNull();
-        expect(router.canGoBack()).toBe(false);
-    });
-
-    test('빈 칸이면 검색 버튼을 막고 키보드 검색도 요청하지 않아요', async () => {
-        jest.mocked(searchBookReviews).mockResolvedValue(groupsForEmpty());
-        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
-        await screen.findByText('“데미안” 검색 결과');
-        const input = screen.getByLabelText('책 이름');
-        expect(screen.getByRole('button', { name: '책 감상 검색' })).not.toBeDisabled();
-        await fireEvent.changeText(input, '   ');
-        expect(screen.getByRole('button', { name: '책 감상 검색' })).toBeDisabled();
-        await fireEvent(input, 'submitEditing');
-        expect(searchBookReviews).toHaveBeenCalledTimes(1);
-        expect(screen.getByText('“데미안” 검색 결과')).toBeOnTheScreen();
-    });
-
-    function groupsForEmpty(): BookReviewSearchResponse { return []; }
-
+describe('#113 #124 FR-16 S-71 맨 위 검색창', () => {
+    // 스택에서는 라운지 화면이 남아 있으므로 마지막 검색창이 S-71의 것이다.
+    const s71Input = () => screen.getAllByLabelText('책 이름').at(-1)!;
+    const typeInto = async (input: Node, text: string) => {
+        await fireEvent(input, 'focus');
+        await fireEvent.changeText(input, text);
+    };
     // 최신순이면 최근 독자 → 인기 독자, 좋아요 많은 순이면 인기 독자 → 최근 독자다.
-    const sortGroups: BookReviewSearchResponse = [{ bookKey: 'isbn:9788937460449', bookTitle: '데미안', bookAuthor: '헤르만 헤세', reviews: [
-        { ...oneLine, id: 'review-recent', userBookId: 'user-book-recent', nickname: '최근 독자', publishedAt: '2026-11-24T00:00:00Z', likeCount: 0 },
-        { ...oneLine, id: 'review-popular', userBookId: 'user-book-popular', nickname: '인기 독자', publishedAt: '2026-10-01T00:00:00Z', likeCount: 9 },
-    ] }];
+    const sortGroups: BookReviewSearchResponse = [
+        { bookKey: demianKey, bookTitle: '데미안', bookAuthor: '헤르만 헤세', reviews: [
+            { ...oneLine, id: 'review-recent', userBookId: 'user-book-recent', nickname: '최근 독자', publishedAt: '2026-11-24T00:00:00Z', likeCount: 0 },
+            { ...oneLine, id: 'review-popular', userBookId: 'user-book-popular', nickname: '인기 독자', publishedAt: '2026-10-01T00:00:00Z', likeCount: 9 },
+        ] },
+        { bookKey: 'text:revised', bookTitle: '데미안 개정판', bookAuthor: '헤르만 헤세', reviews: [
+            { ...oneLine, id: 'review-revised-recent', userBookId: 'user-book-r1', nickname: '최근 독자', publishedAt: '2026-11-23T00:00:00Z', likeCount: 0 },
+            { ...oneLine, id: 'review-revised-popular', userBookId: 'user-book-r2', nickname: '인기 독자', publishedAt: '2026-09-01T00:00:00Z', likeCount: 7 },
+        ] },
+    ];
     const boxOrder = () => screen.getAllByHintText(openBox).map(box => texts(within(box).getByTestId('lounge-box-text'))[0].props.children);
     const latestSelected = () => screen.getByRole('radio', { name: '최신순' }).props.accessibilityState?.selected;
 
-    test('같은 검색어로 다시 검색하면 결과를 다시 받아 오고 고른 정렬은 그대로예요', async () => {
+    test('라운지에서 책을 고르면 S-71 검색창이 그 책의 제목으로 채워지고, 여기서 다른 책을 고르면 같은 화면에서 바뀌며 뒤로 가기는 라운지로 가요', async () => {
+        jest.mocked(searchBookReviews).mockResolvedValue(sortGroups);
+        await renderRouter(stackRoutes, { initialUrl: '/lounge' });
+        await typeInto(await screen.findByLabelText('책 이름'), '데미');
+        await fireEvent.press(await screen.findByRole('button', { name: '데미안, 헤르만 헤세, 2명의 감상' }));
+        expect(await screen.findByText('2명의 감상')).toBeOnTheScreen();
+        expect(s71Input()).toHaveProp('value', '데미안');
+        expect(screen.getByRole('header', { name: '데미안' })).toBeOnTheScreen();
+        await typeInto(s71Input(), '데미');
+        await fireEvent.press(await screen.findByRole('button', { name: '데미안 개정판, 헤르만 헤세, 2명의 감상' }));
+        expect(await screen.findByRole('header', { name: '데미안 개정판' })).toBeOnTheScreen();
+        expect(screen.queryByRole('header', { name: '데미안' })).toBeNull();
+        expect(s71Input()).toHaveProp('value', '데미안 개정판');
+        // 다른 책을 골라도 화면을 쌓지 않으므로 한 번 뒤로 가면 라운지다.
+        await act(async () => router.back());
+        expect(await screen.findByText('최근 공개 감상')).toBeOnTheScreen();
+        expect(router.canGoBack()).toBe(false);
+    });
+
+    test('같은 책을 다시 고르면 결과를 다시 받아 오고 고른 정렬은 그대로예요', async () => {
         jest.mocked(searchBookReviews).mockResolvedValueOnce(sortGroups)
             .mockResolvedValue([{ ...sortGroups[0], reviews: [sortGroups[0].reviews[1]] }]);
-        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
+        await renderRouter(routes, { initialUrl: s71(demianKey) });
         await screen.findByText('2명의 감상');
         expect(searchBookReviews).toHaveBeenCalledTimes(1);
         await fireEvent.press(screen.getByRole('radio', { name: '좋아요 많은 순' }));
-        // 앞뒤 공백만 다른 같은 검색어다.
-        await fireEvent.changeText(screen.getByLabelText('책 이름'), ' 데미안 ');
-        await fireEvent.press(screen.getByRole('button', { name: '책 감상 검색' }));
-        await waitFor(() => expect(searchBookReviews).toHaveBeenCalledTimes(2));
-        expect(searchBookReviews).toHaveBeenLastCalledWith('데미안');
+        await typeInto(s71Input(), '데미안');
+        await fireEvent.press(await screen.findByRole('button', { name: '데미안, 헤르만 헤세, 1명의 감상' }));
         expect(await screen.findByText('1명의 감상')).toBeOnTheScreen();
-        expect(screen.getByText('“데미안” 검색 결과')).toBeOnTheScreen();
+        expect(s71Input()).toHaveProp('value', '데미안');
         expect(latestSelected()).toBe(false);
     });
 
-    test('검색어가 바뀌면 정렬을 최신순으로 되돌려요', async () => {
+    test('다른 책을 고르면 정렬을 최신순으로 되돌려요', async () => {
         jest.mocked(searchBookReviews).mockResolvedValue(sortGroups);
-        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
+        await renderRouter(routes, { initialUrl: s71(demianKey) });
         await screen.findByText('2명의 감상');
         expect(boxOrder()).toEqual(['최근 독자', '인기 독자']);
         await fireEvent.press(screen.getByRole('radio', { name: '좋아요 많은 순' }));
         expect(boxOrder()).toEqual(['인기 독자', '최근 독자']);
-        await fireEvent.changeText(screen.getByLabelText('책 이름'), '데미안 개정판');
-        await fireEvent(screen.getByLabelText('책 이름'), 'submitEditing');
-        expect(await screen.findByText('“데미안 개정판” 검색 결과')).toBeOnTheScreen();
-        await screen.findByText('2명의 감상');
+        await typeInto(s71Input(), '데미안 개정');
+        await fireEvent.press(await screen.findByRole('button', { name: '데미안 개정판, 헤르만 헤세, 2명의 감상' }));
+        expect(await screen.findByRole('header', { name: '데미안 개정판' })).toBeOnTheScreen();
         expect(latestSelected()).toBe(true);
         expect(boxOrder()).toEqual(['최근 독자', '인기 독자']);
     });
 });
 
-test('#113 FR-16 S-70 검색해서 결과 화면으로 넘어가면 라운지 검색창을 비워요', async () => {
-    jest.mocked(searchBookReviews).mockResolvedValue([]);
+test('#113 #124 FR-16 S-70 책을 골라 결과 화면으로 넘어가면 라운지 검색창을 비워요', async () => {
+    jest.mocked(searchBookReviews).mockResolvedValue([{ bookKey: demianKey, bookTitle: '데미안', bookAuthor: '헤르만 헤세', reviews: [reportNew] }]);
     await renderRouter(stackRoutes, { initialUrl: '/lounge' });
-    await fireEvent.changeText(await screen.findByLabelText('책 이름'), '데미안');
-    await fireEvent(screen.getByLabelText('책 이름'), 'submitEditing');
-    expect(await screen.findByText('“데미안” 검색 결과')).toBeOnTheScreen();
-    expect(searchBookReviews).toHaveBeenCalledWith('데미안');
+    const input = await screen.findByLabelText('책 이름');
+    await fireEvent(input, 'focus');
+    await fireEvent.changeText(input, '데미안');
+    await fireEvent.press(await screen.findByRole('button', { name: '데미안, 헤르만 헤세, 1명의 감상' }));
+    expect(await screen.findByText('1명의 감상')).toBeOnTheScreen();
     await act(async () => router.back());
     expect(await screen.findByLabelText('책 이름')).toHaveProp('value', '');
-    expect(screen.getByRole('button', { name: '책 감상 검색' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '책 감상 검색' })).toBeNull();
 });
 
 describe('#113 S-70 S-76 책 표지', () => {
@@ -526,7 +526,7 @@ describe('#113 S-70 S-71 S-76 표지 왼쪽·글 오른쪽 배치', () => {
 
     test('S-71 검색 박스는 표지 없이 글 칸만 두고 칸 안에서 줄바꿈하며, 묶음 제목은 2줄까지 보여요', async () => {
         jest.mocked(searchBookReviews).mockResolvedValue([{ bookKey: 'text:long', bookTitle: longTitle, bookAuthor: '헤르만 헤세', reviews: [longItem] }]);
-        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
+        await renderRouter(routes, { initialUrl: s71('text:long', longTitle) });
         const box = await screen.findByHintText(openBox);
         expect(styleOf(box)).toMatchObject({ flexDirection: 'row' });
         const column = within(box).getByTestId('lounge-box-text');

@@ -13,6 +13,8 @@ import { connectLoungeSyncRefresh, loungeKeys, useFeed } from '../queries';
 
 jest.mock('../../api/endpoints', () => ({ feedItem: jest.fn(), feedList: jest.fn(), feedUserBook: jest.fn(), likeReview: jest.fn(), searchBookReviews: jest.fn(), unlikeReview: jest.fn() }));
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn() } }));
+// #124 검색창 돋보기(@expo/vector-icons)가 글꼴을 불러오지 않게 한다.
+jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), isLoaded: () => true, loadAsync: jest.fn() }));
 
 const item: FeedItem = {
     id: 'review-1', nickname: '독자', bookTitle: '데미안', bookAuthor: '헤르만 헤세', genre: '소설',
@@ -31,6 +33,10 @@ const routes = {
     'lounge/[id]': Detail,
 };
 const offlineMessage = '인터넷에 연결되어 있지 않아요. 연결되면 다시 시도해 주세요.';
+// #124 S-71은 자동완성에서 고른 책 하나(query·bookKey·title)를 연다.
+const s71 = (query: string, bookKey: string, title = query) =>
+    `/lounge/search?query=${encodeURIComponent(query)}&bookKey=${encodeURIComponent(bookKey)}&title=${encodeURIComponent(title)}`;
+const demianUrl = s71('데미안', 'isbn:9788937460449');
 beforeEach(() => {
     jest.resetAllMocks();
     client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
@@ -44,16 +50,18 @@ beforeEach(() => {
 });
 afterEach(() => { client.clear(); onlineManager.setOnline(true); });
 
-test('FR-16 FR-08 FR-09 S-70~72 검색→책 묶음→상세→좋아요·취소가 이어져요', async () => {
+test('FR-16 FR-08 FR-09 S-70~72 #124 자동완성으로 책 고르기→책 묶음→상세→좋아요·취소가 이어져요', async () => {
     await renderRouter(routes, { initialUrl: '/lounge' });
     expect(await screen.findByText('최근 공개 감상')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: '독서왕 랭킹' })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: '책 감상 검색' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '책 감상 검색' })).toBeNull();
+    await fireEvent(screen.getByLabelText('책 이름'), 'focus');
     await fireEvent.changeText(screen.getByLabelText('책 이름'), ' 데미안 ');
-    await fireEvent.press(screen.getByRole('button', { name: '책 감상 검색' }));
+    await fireEvent.press(await screen.findByRole('button', { name: '데미안, 헤르만 헤세, 1명의 감상' }));
     expect(await screen.findByText('헤르만 헤세 · ISBN 9788937460449')).toBeOnTheScreen();
-    expect(screen.getByText('다른 저자')).toBeOnTheScreen();
-    expect(searchBookReviews).toHaveBeenCalledWith('데미안');
+    // 고른 책 묶음 하나만 보여 준다.
+    expect(screen.queryByText('다른 저자')).toBeNull();
+    expect(searchBookReviews).toHaveBeenCalledWith('데미안', expect.anything());
     await fireEvent.press(screen.getByRole('button', { name: '데미안 · 독자님의 감상 보기' }));
     expect(await screen.findByText(item.body!)).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '좋아요' }));
@@ -88,7 +96,7 @@ test('FR-09 S-72 낙관적 좋아요는 연속 탭에도 한 번 요청하고 �
     expect(screen.getByRole('alert')).toBeOnTheScreen();
 });
 
-test.each(['/lounge', '/lounge/search?query=데미안', '/lounge/review-1'])(
+test.each(['/lounge', demianUrl, '/lounge/review-1'])(
     'NFR-06 S-70~72 %s 오프라인이면 대기하지 않고 요청 없이 안내해요', async initialUrl => {
         onlineManager.setOnline(false);
         jest.mocked(NetInfo.fetch).mockResolvedValue({ isConnected: false } as NetInfoState);
@@ -102,12 +110,12 @@ test.each(['/lounge', '/lounge/search?query=데미안', '/lounge/review-1'])(
 
 test('NFR-06 S-71 연결 조회가 멈춰도 1초 이내 안내하고 재시도할 수 있어요', async () => {
     jest.mocked(NetInfo.fetch).mockImplementation(() => new Promise(() => {}));
-    await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
+    await renderRouter(routes, { initialUrl: demianUrl });
     expect(await screen.findByText(offlineMessage, {}, { timeout: 900 })).toBeOnTheScreen();
     expect(searchBookReviews).not.toHaveBeenCalled();
     jest.mocked(NetInfo.fetch).mockResolvedValue({ isConnected: true } as NetInfoState);
     await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
-    expect(await screen.findByText('다른 저자')).toBeOnTheScreen();
+    expect(await screen.findByText('헤르만 헤세 · ISBN 9788937460449')).toBeOnTheScreen();
 });
 
 test('NFR-06 FR-09 S-72 상세를 읽던 중 오프라인이면 좋아요 요청 없이 안내해요', async () => {
@@ -132,15 +140,16 @@ test.each(['detail', 'like'])('#91 FR-08 S-72 %s 응답이 404면 감상과 좋�
     expect(screen.queryByRole('button', { name: '좋아요' })).toBeNull();
 });
 
-test('FR-16 S-71 결과가 없으면 빈 상태를 안내해요', async () => {
-    jest.mocked(searchBookReviews).mockResolvedValue([]);
-    await renderRouter(routes, { initialUrl: '/lounge/search?query=없는책' });
+test('FR-16 S-71 #124 고른 책에 이제 공개 감상이 없으면 빈 상태를 안내해요', async () => {
+    jest.mocked(searchBookReviews).mockResolvedValue([groups[1]]);
+    await renderRouter(routes, { initialUrl: demianUrl });
     expect(await screen.findByText('아직 공개된 감상이 없어요')).toBeOnTheScreen();
+    expect(screen.queryByText('다른 저자')).toBeNull();
 });
 
-test('FR-16 S-71 공백 검색은 요청하지 않고 책 이름 입력을 안내해요', async () => {
-    await renderRouter(routes, { initialUrl: '/lounge/search' });
-    expect(screen.getByText('책 이름을 입력해 주세요.')).toBeOnTheScreen();
+test('FR-16 S-71 #124 고른 책 없이 열면 요청하지 않고 목록에서 책을 고르라고 안내해요', async () => {
+    await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
+    expect(screen.getByText('목록에서 책을 골라 주세요')).toBeOnTheScreen();
     expect(searchBookReviews).not.toHaveBeenCalled();
 });
 

@@ -180,3 +180,43 @@ export function openingBracketIndent(fontSize: number, fontScale: number, notoLo
 export function bookTitleLabel(bookTitle: string, mine: boolean): string {
     return mine ? `『${bookTitle}』 내 감상` : `『${bookTitle}』`;
 }
+
+/** #124 S-70·S-71: 자동완성 목록에 보이는 책은 최대 5권이다. */
+export const maxBookSuggestions = 5;
+
+type SuggestionGroup<R> = { bookKey: string; bookTitle: string; bookAuthor: string; reviews: readonly R[] };
+
+/** #124 S-70·S-71: 자동완성 목록의 책 한 권. readerCount는 S-71의 "N명의 감상"과 같은 박스(사람의 책) 수다. */
+export interface BookSuggestion {
+    bookKey: string;
+    bookTitle: string;
+    bookAuthor: string;
+    cover: { uri: string | null; genre: string };
+    readerCount: number;
+}
+
+/**
+ * #124 S-70·S-71: 책별 감상 검색 결과에서 자동완성 목록을 만든다. 서버가 준 묶음 순서 그대로 앞에서 max권까지 둔다.
+ * 표지는 S-71 묶음 머리와 같은 규칙(groupCover)이다.
+ */
+export function bookSuggestions<R extends BoxReview & { coverUrl?: string | null; genre: string }>(
+    groups: readonly SuggestionGroup<R>[], max: number = maxBookSuggestions,
+): BookSuggestion[] {
+    return groups.slice(0, Math.max(0, max)).map(group => ({
+        bookKey: group.bookKey,
+        bookTitle: group.bookTitle,
+        bookAuthor: group.bookAuthor,
+        cover: groupCover(group.reviews),
+        readerCount: groupReviewBoxes(group.reviews).length,
+    }));
+}
+
+/** #124 S-70·S-71: 스크린리더가 읽는 자동완성 항목. 화면 순서와 같게 제목, 저자, N명의 감상으로 읽고 비어 있는 저자는 건너뛴다. */
+export function bookSuggestionLabel(item: Pick<BookSuggestion, 'bookTitle' | 'bookAuthor' | 'readerCount'>): string {
+    return [item.bookTitle.trim(), item.bookAuthor.trim(), `${item.readerCount}명의 감상`].filter(Boolean).join(', ');
+}
+
+/** #124 S-71: 자동완성에서 고른 책(bookKey)의 묶음을 검색 결과에서 찾는다. 없거나 bookKey가 비어 있으면 undefined다. */
+export function findBookGroup<G extends { bookKey: string }>(groups: readonly G[], bookKey: string | null | undefined): G | undefined {
+    return bookKey ? groups.find(group => group.bookKey === bookKey) : undefined;
+}

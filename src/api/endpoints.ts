@@ -21,7 +21,7 @@ export const putSession = (body: SessionDto, options?: SyncRequestOptions) => ap
 export const putReview = (body: ReviewDto, options?: SyncRequestOptions) => apiRequest<ReviewDto>(`/api/reviews/${encodeURIComponent(body.id)}`, { method: 'PUT', body, ...options });
 export const putQuote = (body: QuoteDto, options?: SyncRequestOptions) => apiRequest<QuoteDto>(`/api/quotes/${encodeURIComponent(body.id)}`, { method: 'PUT', body, ...options });
 export const syncSnapshot = (options?: SyncRequestOptions) => apiRequest<SyncSnapshot>('/api/sync/snapshot', options);
-export const searchBookReviews = (query: string) => apiRequest<BookReviewSearchResponse>(`/api/feed/books?query=${encodeURIComponent(query)}`);
+export const searchBookReviews = (query: string, signal?: AbortSignal) => apiRequest<BookReviewSearchResponse>(`/api/feed/books?query=${encodeURIComponent(query)}`, { signal });
 export const feedList = (signal?: AbortSignal) => apiRequest<FeedListResponse>('/api/feed', { signal });
 export const feedUserBook = (userBookId: string, signal?: AbortSignal) => apiRequest<FeedListResponse>(`/api/feed/user-books/${encodeURIComponent(userBookId)}`, { signal });
 export const feedItem = (id: string, signal?: AbortSignal) => apiRequest<FeedItem>(`/api/feed/${encodeURIComponent(id)}`, { signal });
