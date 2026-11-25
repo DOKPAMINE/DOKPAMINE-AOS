@@ -32,7 +32,7 @@ jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn(async () => (
 const stored = new Map<string, string>();
 const validResponse: TokenResponse = {
     accessToken: 'unit-test-token', expiresAt: '2099-01-01T00:00:00Z',
-    user: { id: 'reader-id', email: 'reader@example.test', nickname: '독자', rankingOptIn: false },
+    user: { id: 'reader-id', username: 'reader_01', nickname: '독자', rankingOptIn: false },
 };
 
 function Home() {
@@ -82,8 +82,8 @@ function session(expiresAt = validResponse.expiresAt) {
     stored.set('dokpamine.accessToken', validResponse.accessToken);
     stored.set('dokpamine.authSession', JSON.stringify({ accessToken: validResponse.accessToken, expiresAt, userId: validResponse.user.id }));
 }
-async function fillLogin() {
-    await fireEvent.changeText(screen.getByLabelText('이메일'), 'reader@example.test');
+async function fillLogin(username = 'reader_01') {
+    await fireEvent.changeText(screen.getByLabelText('아이디'), username);
     await fireEvent.changeText(screen.getByLabelText('비밀번호'), 'password');
 }
 
@@ -158,12 +158,12 @@ test('FR-10 · S-02 폼 오류는 서버 호출 없이 표시하고 올바른 �
     await renderRouter(routes, { initialUrl: '/login' });
     await screen.findByRole('header', { name: '독파민 로그인' });
     await fireEvent.press(screen.getByRole('button', { name: '로그인' }));
-    expect(await screen.findByText('올바른 이메일을 입력해 주세요.')).toBeOnTheScreen();
+    expect(await screen.findByText('아이디를 입력해 주세요.')).toBeOnTheScreen();
     expect(login).not.toHaveBeenCalled();
     await fillLogin();
     await fireEvent.press(screen.getByRole('button', { name: '로그인' }));
     expect(await screen.findByText('인증된 홈')).toBeOnTheScreen();
-    expect(login).toHaveBeenCalledWith({ email: 'reader@example.test', password: 'password' }, expect.anything());
+    expect(login).toHaveBeenCalledWith({ username: 'reader_01', password: 'password' }, expect.anything());
     expect(stored.get('dokpamine.accessToken')).toBe(validResponse.accessToken);
     expect(syncAfterLogin).toHaveBeenCalledTimes(1);
     expect(JSON.parse(stored.get('dokpamine.authSession')!)).toMatchObject({ expiresAt: validResponse.expiresAt });
@@ -173,6 +173,16 @@ test('FR-10 · S-02 폼 오류는 서버 호출 없이 표시하고 올바른 �
     expect(stopRecordSync).toHaveBeenCalled();
     expect(stored.has('dokpamine.authSession')).toBe(false);
     expect(stored.get('dokpamine.onboardingSeen')).toBe('true');
+});
+
+test('FR-10 · S-02 기존 계정은 가입한 이메일을 아이디로 보내 로그인해요', async () => {
+    seen();
+    await renderRouter(routes, { initialUrl: '/login' });
+    await screen.findByRole('header', { name: '독파민 로그인' });
+    await fillLogin(' reader@example.test ');
+    await fireEvent.press(screen.getByRole('button', { name: '로그인' }));
+    expect(await screen.findByText('인증된 홈')).toBeOnTheScreen();
+    expect(login).toHaveBeenCalledWith({ username: 'reader@example.test', password: 'password' }, expect.anything());
 });
 
 test('FR-10 · S-03 닉네임을 검증하고 회원가입 성공 후 바로 홈을 열어요', async () => {
@@ -186,18 +196,18 @@ test('FR-10 · S-03 닉네임을 검증하고 회원가입 성공 후 바로 홈
     await fireEvent.changeText(screen.getByLabelText('닉네임'), '독자');
     await fireEvent.press(screen.getByRole('button', { name: '가입하고 시작하기' }));
     expect(await screen.findByText('인증된 홈')).toBeOnTheScreen();
-    expect(signup).toHaveBeenCalledWith({ email: 'reader@example.test', password: 'password', nickname: '독자' }, expect.anything());
+    expect(signup).toHaveBeenCalledWith({ username: 'reader_01', password: 'password', nickname: '독자' }, expect.anything());
 });
 
-test('FR-10 · S-03 중복 이메일은 서버의 오류 문구를 그대로 보여 줘요', async () => {
+test('FR-10 · S-03 중복 아이디은 서버의 오류 문구를 그대로 보여 줘요', async () => {
     seen();
-    jest.mocked(signup).mockRejectedValue(new ApiError('http', 'EMAIL_TAKEN', '이미 가입한 이메일이에요.', 409));
+    jest.mocked(signup).mockRejectedValue(new ApiError('http', 'USERNAME_TAKEN', '이미 사용 중인 아이디예요.', 409));
     await renderRouter(routes, { initialUrl: '/signup' });
     await screen.findByRole('header', { name: '독파민 회원가입' });
     await fillLogin();
     await fireEvent.changeText(screen.getByLabelText('닉네임'), '독자');
     await fireEvent.press(screen.getByRole('button', { name: '가입하고 시작하기' }));
-    expect(await screen.findByText('이미 가입한 이메일이에요.')).toBeOnTheScreen();
+    expect(await screen.findByText('이미 사용 중인 아이디예요.')).toBeOnTheScreen();
 });
 
 test('FR-10 · S-02 보호 API의 401은 토큰을 보존한 채 로그인으로 보내고 재실행도 막아요', async () => {

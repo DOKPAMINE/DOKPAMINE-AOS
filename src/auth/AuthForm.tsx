@@ -17,9 +17,9 @@ import { signupSchema, loginSchema, type SignupValues } from './validation';
 
 /** 로고 원본 비율(1036×572) */
 const LOGO_RATIO = 1036 / 572;
-type FieldName = 'email' | 'password' | 'nickname';
-const icons: Record<FieldName, 'email-outline' | 'lock-outline' | 'account-outline'> = {
-    email: 'email-outline', password: 'lock-outline', nickname: 'account-outline',
+type FieldName = 'username' | 'password' | 'nickname';
+const icons: Record<FieldName, 'card-account-details-outline' | 'lock-outline' | 'account-outline'> = {
+    username: 'card-account-details-outline', password: 'lock-outline', nickname: 'account-outline',
 };
 
 // FR-10 · S-02/S-03: 로그인·회원가입 화면. 가운데 로고 + 아이콘이 들어간 입력 칸 + 화면 전환 링크.
@@ -36,7 +36,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     const mounted = useRef(true);
     const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<SignupValues>({
         resolver: zodResolver(registering ? signupSchema : loginSchema.extend({ nickname: z.string() })),
-        defaultValues: { email: '', password: '', nickname: '' },
+        defaultValues: { username: '', password: '', nickname: '' },
     });
 
     useEffect(() => {
@@ -53,7 +53,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                 const controller = new AbortController();
                 request.current = controller;
                 try {
-                    const credentials = { email: values.email, password: values.password };
+                    const credentials = { username: values.username, password: values.password };
                     const response = registering
                         ? await signup({ ...credentials, nickname: values.nickname }, controller.signal)
                         : await login(credentials, controller.signal);
@@ -75,10 +75,10 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         else if (router.canGoBack()) router.back();
         else router.replace('/(auth)/login');
     };
-    const fields = registering ? ['email', 'password', 'nickname'] as const : ['email', 'password'] as const;
-    const labels = { email: '이메일', password: '비밀번호', nickname: '닉네임' };
+    const fields = registering ? ['username', 'password', 'nickname'] as const : ['username', 'password'] as const;
+    const labels = { username: '아이디', password: '비밀번호', nickname: '닉네임' };
     const hints = {
-        email: registering ? '가입할 이메일을 입력해 주세요.' : '가입한 이메일을 입력해 주세요.',
+        username: registering ? '영문, 숫자, 밑줄을 사용해 4~30자로 입력해 주세요.' : '기존 계정은 가입한 이메일을 입력해 주세요.',
         password: '8자 이상 입력해 주세요.',
         nickname: '1~30자로 입력해 주세요.',
     };
@@ -91,7 +91,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                 <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
                     <View accessible accessibilityRole="header" accessibilityLabel={registering ? '독파민 회원가입' : '독파민 로그인'} style={styles.brand}>
                         <Image source={logo} resizeMode="contain" style={{ width: logoWidth, height: logoWidth / LOGO_RATIO }} />
-                        <Text style={styles.description}>{registering ? '읽은 시간과 마음에 남은 문장을 함께 기록해 보세요.' : '이메일로 로그인하고 독서 기록을 이어 가세요.'}</Text>
+                        <Text style={styles.description}>{registering ? '읽은 시간과 마음에 남은 문장을 함께 기록해 보세요.' : '기존 계정은 가입한 이메일로 로그인해 주세요.'}</Text>
                     </View>
                     {!registering && !error && auth.notice && <StateView kind="error" message={auth.notice} />}
                     {fields.map(name => (
@@ -107,8 +107,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                                         placeholderTextColor={colors.text.muted}
                                         autoCapitalize="none"
                                         autoCorrect={false}
-                                        autoComplete={name === 'email' ? 'email' : name === 'password' ? registering ? 'new-password' : 'current-password' : 'nickname'}
-                                        keyboardType={name === 'email' ? 'email-address' : 'default'}
+                                        autoComplete={name === 'username' ? 'username' : name === 'password' ? registering ? 'new-password' : 'current-password' : 'nickname'}
                                         secureTextEntry={name === 'password' && !passwordVisible}
                                         editable={!isSubmitting}
                                         accessibilityState={{ disabled: isSubmitting }}

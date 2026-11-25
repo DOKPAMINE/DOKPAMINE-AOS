@@ -1,7 +1,7 @@
 /** DOKPAMINE-BE/docs/API.md. 시각은 ISO-8601 UTC, ID는 클라이언트 UUID다. */
 export interface MeResponse {
     id: string;
-    email: string;
+    username?: string;
     nickname: string;
     rankingOptIn: boolean;
 }
@@ -30,7 +30,7 @@ export interface TokenResponse {
 }
 
 export interface LoginRequest {
-    email: string;
+    username: string;
     password: string;
 }
 

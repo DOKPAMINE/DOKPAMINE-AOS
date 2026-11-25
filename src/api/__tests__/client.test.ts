@@ -158,7 +158,7 @@ test.each(['fetch', 'body', 'storage'])('NFR-06 · S-22 %s 대기가 멈춰도 �
 
 test('FR-10 · S-02 잘못된 로그인 401은 세션 만료와 구분하고 서버 문구를 보존해요', async () => {
     fetchMock.mockResolvedValue(response(401, { code: 'INVALID_CREDENTIALS', message: '로그인 정보가 맞지 않아요.' }));
-    await expect(apiRequest('/api/auth/login', { method: 'POST', authenticated: false, body: { email: 'reader@example.test', password: 'wrong-pass' } })).rejects.toMatchObject({ kind: 'credentials', status: 401, message: '로그인 정보가 맞지 않아요.' });
+    await expect(apiRequest('/api/auth/login', { method: 'POST', authenticated: false, body: { username: 'reader_01', password: 'wrong-pass' } })).rejects.toMatchObject({ kind: 'credentials', status: 401, message: '로그인 정보가 맞지 않아요.' });
     expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
 });
 
@@ -201,13 +201,13 @@ test.each(['empty', 'html', 'message-only'])('FR-10 · S-02 code 없는 로그�
         ? { ok: false, status: 401, json: async () => { throw new SyntaxError(); } } as unknown as Response
         : response(401, format === 'message-only' ? { message: '로그인 정보를 확인해 주세요.' } : undefined);
     fetchMock.mockResolvedValue(serverResponse);
-    await expect(apiRequest('/api/auth/login', { method: 'POST', authenticated: false })).rejects.toMatchObject({ kind: 'credentials', status: 401, message: format === 'message-only' ? '로그인 정보를 확인해 주세요.' : '이메일 또는 비밀번호를 확인해 주세요.' });
+    await expect(apiRequest('/api/auth/login', { method: 'POST', authenticated: false })).rejects.toMatchObject({ kind: 'credentials', status: 401, message: format === 'message-only' ? '로그인 정보를 확인해 주세요.' : '아이디 또는 비밀번호를 확인해 주세요.' });
     expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
 });
 
 test.each(['', '   ', 'Internal Server Error'])('FR-10 · S-02 빈 메시지와 영문 메시지 %s는 한국어 기본 안내로 바꿔요', async message => {
     fetchMock.mockResolvedValue(response(401, { code: 'INVALID_CREDENTIALS', message }));
-    await expect(apiRequest('/api/auth/login', { authenticated: false })).rejects.toMatchObject({ message: '이메일 또는 비밀번호를 확인해 주세요.' });
+    await expect(apiRequest('/api/auth/login', { authenticated: false })).rejects.toMatchObject({ message: '아이디 또는 비밀번호를 확인해 주세요.' });
 });
 
 test('FR-10 NFR-05 · S-02 이전 계정 요청은 SecureStore의 새 토큰을 사용하지 않아요', async () => {

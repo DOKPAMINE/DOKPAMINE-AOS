@@ -24,11 +24,11 @@ const review: ReviewDto = {
     id: '00000000-0000-4000-8000-000000000003', bookId: book.id, oneLine: '다시 읽고 싶은 책이에요.', body: null,
     visibility: 'PRIVATE', deleted: true, createdAt: timestamp, updatedAt: timestamp,
 };
-const user: MeResponse = { id: '00000000-0000-4000-8000-000000000004', email: 'reader@example.test', nickname: '독자', rankingOptIn: false };
+const user: MeResponse = { id: '00000000-0000-4000-8000-000000000004', username: 'reader_01', nickname: '독자', rankingOptIn: false };
 const quote: QuoteDto = { id: '00000000-0000-4000-8000-000000000005', bookId: book.id,
     text: '문장', page: null, memo: null, deleted: true, createdAt: timestamp, updatedAt: timestamp };
 const token: TokenResponse = { accessToken: 'unit-test-only-token', expiresAt: timestamp, user };
-const credentials = { email: user.email, password: 'unit-test-only-password' };
+const credentials = { username: 'reader_01', password: 'unit-test-only-password' };
 const newUser = { ...credentials, nickname: user.nickname };
 const catalog: CatalogBook = { isbn: '9788937460449', title: '데미안', totalPages: null, source: 'nlk' };
 const query = '데미안 & 나/책?';
