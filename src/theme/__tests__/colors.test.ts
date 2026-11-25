@@ -22,14 +22,30 @@ test('WCAG 2.x · 대비 계산은 알려진 기준값과 같아요', () => {
 });
 
 test('Figma v1.0 · 색상 토큰은 브라운 밝은안의 11개 역할과 값만 포함해요', () => {
-    expect(colors).toEqual({
+    const { rank: _rank, ...roles } = colors;
+    expect(roles).toEqual({
         brand: { espresso: '#3B2A28', camel: '#C8A86B', sand: '#E6D8BF' },
         surface: { paper: '#FDFBF7', card: '#FFFFFF', sandSoft: '#F4EDE1', chip: '#F6F0E6' },
         line: { border: '#ECE3D4' },
         text: { muted: '#6A4D39' },
         state: { error: '#9D3529', errorBg: '#F8E2DD' },
     });
-    expect(Object.values(colors).flatMap(Object.values)).toHaveLength(11);
+    expect(Object.values(roles).flatMap(Object.values)).toHaveLength(11);
+});
+
+test('S-73 · AOS#126 랭킹 1~3위 보조 토큰은 줄 배경과 순위 칸 6개만 포함해요', () => {
+    expect(colors.rank).toEqual({
+        gold: '#FBEFC4', goldStrong: '#F3DC8E',
+        sky: '#DDEDF7', skyStrong: '#BFDCEE',
+        orange: '#FBE1CB', orangeStrong: '#F4C49B',
+    });
+});
+
+test.each(Object.entries(colors.rank).flatMap(([name, background]) => [
+    [`본문/${name}`, colors.brand.espresso, background],
+    [`보조 글자/${name}`, colors.text.muted, background],
+]))('S-73 · 랭킹 %s의 명도 대비는 4.5:1 이상이에요', (_usage, foreground, background) => {
+    expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5);
 });
 
 test.each([

@@ -23,6 +23,15 @@ export const colors = {
         error: '#9D3529', // 오류 글자
         errorBg: '#F8E2DD', // 오류 배경
     },
+    // S-73 · AOS#126: 독서왕 랭킹 1~3위 줄 전용 보조 토큰(11개 역할 토큰 밖). 줄 배경과 조금 진한 순위 칸 색이다.
+    rank: {
+        gold: '#FBEFC4', // 1위 줄 배경
+        goldStrong: '#F3DC8E', // 1위 순위 칸
+        sky: '#DDEDF7', // 2위 줄 배경
+        skyStrong: '#BFDCEE', // 2위 순위 칸
+        orange: '#FBE1CB', // 3위 줄 배경
+        orangeStrong: '#F4C49B', // 3위 순위 칸
+    },
 } as const;
 
 export const fontFamilies = {
