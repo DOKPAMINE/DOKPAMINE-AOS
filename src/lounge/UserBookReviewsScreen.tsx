@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { ApiError } from '../api/errors';
 import type { FeedItem } from '../api/types';
 import { Screen, SecondaryButton, StateView } from '../components';
-import { loungeBoxHeading, splitUserBookReviews, writtenDate } from '../domain/loungeRules';
+import { loungeBoxHeading, splitUserBookReviews, userBookReportHeadings } from '../domain/loungeRules';
 import { LikeButton } from './LikeButton';
 import { invalidateLoungeLists, loungeKeys, refetchUserBookFeed, useReviewLike, useUserBookFeed } from './queries';
 import { QueryError, removedReviewMessage } from './QueryState';
@@ -36,6 +36,8 @@ export function UserBookReviewsScreen({ userBookId }: { userBookId: string }) {
     } : undefined;
     const items = result.data ?? [];
     const { oneLines, reports } = splitUserBookReviews(items);
+    // 카드는 서버 순서 그대로 두고 번호만 쓴 순서(bodyWrittenAt)로 매긴다.
+    const headings = userBookReportHeadings(reports);
     const first = items[0];
     return (
         <Screen title="감상 모음" refreshing={refreshing} onRefresh={refresh}>
@@ -54,7 +56,7 @@ export function UserBookReviewsScreen({ userBookId }: { userBookId: string }) {
                                     </> : null}
                                     {reports.length > 0 ? <>
                                         <Text accessibilityRole="header" style={styles.heading}>독후감</Text>
-                                        {reports.map(item => <ReviewCard key={item.id} item={item} userBookId={userBookId} kind="report" />)}
+                                        {reports.map(item => <ReviewCard key={item.id} item={item} userBookId={userBookId} kind="report" heading={headings.get(item.id)} />)}
                                     </> : null}
                                 </View>
                             )}
@@ -62,20 +64,21 @@ export function UserBookReviewsScreen({ userBookId }: { userBookId: string }) {
     );
 }
 
-function ReviewCard({ item, userBookId, kind }: { item: FeedItem; userBookId: string; kind: 'oneLine' | 'report' }) {
+function ReviewCard({ item, userBookId, kind, heading }: {
+    item: FeedItem; userBookId: string; kind: 'oneLine' | 'report'; heading?: { text: string; label: string };
+}) {
     const like = useReviewLike(item.id, loungeKeys.userBook(userBookId));
     const client = useQueryClient();
     const likeRemoved = isNotFound(like.error);
     // 좋아요가 404면 그 감상이 지워졌거나 비공개로 바뀌었다. 감상 모음과 라운지 목록을 다시 받아 남은 감상만 보여 준다.
     useEffect(() => { if (likeRemoved) void invalidateLoungeLists(client); }, [likeRemoved, client]);
-    const date = writtenDate(item.bodyWrittenAt);
-    const context = kind === 'oneLine' ? '한줄평' : date ? `${date.label}에 쓴 독후감` : '독후감';
+    const context = kind === 'oneLine' ? '한줄평' : heading?.label ?? '독후감';
     return (
         <View style={[styles.review, styles.card]}>
             {kind === 'oneLine' ? <Text style={styles.body}>{item.oneLine}</Text> : (
                 <Pressable accessibilityRole="button" accessibilityLabel={`${context} 보기`} style={styles.cardLink}
                     onPress={() => router.push({ pathname: '/lounge/[id]', params: { id: item.id } })}>
-                    {date ? <Text style={styles.muted}>{date.text}</Text> : null}
+                    {heading ? <Text style={styles.titleSmall}>{heading.text}</Text> : null}
                     <Text style={styles.body} numberOfLines={6}>{item.body}</Text>
                     {item.oneLine ? <Text style={styles.muted}>한줄평 · {item.oneLine}</Text> : null}
                 </Pressable>

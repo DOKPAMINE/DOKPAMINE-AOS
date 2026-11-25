@@ -18,6 +18,12 @@ export const styles = StyleSheet.create({
     },
     card: { alignItems: 'flex-start' },
     cardLink: { alignSelf: 'stretch', minHeight: sizes.minTouch, gap: spacing.sm },
+    chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    chip: {
+        minHeight: sizes.minTouch, paddingHorizontal: spacing.lg, justifyContent: 'center', alignItems: 'center',
+        backgroundColor: colors.surface.chip, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.line.border,
+    },
+    chipSelected: { borderColor: colors.brand.espresso },
     like: {
         minHeight: sizes.button, minWidth: sizes.minTouch, padding: spacing.md,
         backgroundColor: colors.surface.chip, borderRadius: radii.button,

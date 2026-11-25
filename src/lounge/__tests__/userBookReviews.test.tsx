@@ -79,14 +79,14 @@ test('#113 FR-08 S-70 S-76 S-72 박스를 누르면 그 책의 공개 감상을 
     expect(screen.getAllByRole('header').map(labelOf)).toEqual(['감상 모음', '독자 · 『데미안』', '한줄평', '독후감']);
     expect(screen.getByText('헤르만 헤세 · 소설')).toBeOnTheScreen();
     // 독후감 섹션은 서버 순서를 지키고, 한줄평이 함께 든 예전 감상은 독후감에 한 번만 나오며 한줄평도 함께 보인다.
-    expect(screen.getAllByRole('button', { name: /독후감 보기$/ }).map(labelOf))
-        .toEqual(['2026년 11월 25일에 쓴 독후감 보기', '2026년 10월 1일에 쓴 독후감 보기']);
+    expect(screen.getAllByRole('button', { name: /^독후감 \d.* 보기$/ }).map(labelOf))
+        .toEqual(['독후감 2, 2026년 11월 25일 보기', '독후감 1, 2026년 10월 1일 보기']);
     expect(screen.getByText('한줄평 · 예전 한줄평')).toBeOnTheScreen();
     expect(screen.queryByText('예전 한줄평')).toBeNull();
     expect(screen.getAllByRole('button', { name: /좋아요$/ })).toHaveLength(3);
     // 한줄평은 상세로 가는 버튼이 아니다.
     expect(screen.queryByRole('button', { name: /한줄평 보기/ })).toBeNull();
-    await fireEvent.press(screen.getByRole('button', { name: '2026년 10월 1일에 쓴 독후감 보기' }));
+    await fireEvent.press(screen.getByRole('button', { name: '독후감 1, 2026년 10월 1일 보기' }));
     expect(await screen.findByText('감상 상세')).toBeOnTheScreen();
     expect(feedItem).toHaveBeenCalledWith('review-legacy', expect.anything());
     expect(await screen.findByText(legacy.body!)).toBeOnTheScreen();
@@ -101,7 +101,7 @@ test('#113 FR-09 S-76 좋아요는 감상마다 누르고 취소하며 그 감�
     expect(screen.getAllByText('좋아요 누름 · 3개')).toHaveLength(1);
     expect(screen.getAllByText('좋아요 · 2개')).toHaveLength(2);
     expect(client.getQueryData<FeedItem[]>(loungeKeys.userBook('user-book-1'))?.map(item => item.likeCount)).toEqual([2, 3, 2]);
-    await fireEvent.press(screen.getByRole('button', { name: '2026년 11월 25일에 쓴 독후감 좋아요' }));
+    await fireEvent.press(screen.getByRole('button', { name: '독후감 2, 2026년 11월 25일 좋아요' }));
     await waitFor(() => expect(screen.getAllByText('좋아요 누름 · 3개')).toHaveLength(2));
     expect(likeReview).toHaveBeenLastCalledWith('review-new');
     await fireEvent.press(screen.getByRole('button', { name: '한줄평 좋아요 취소' }));
@@ -159,7 +159,7 @@ describe('#113 #92 S-76 새로고침', () => {
         await renderRouter(stackRoutes, { initialUrl: '/lounge/user-books/user-book-1' });
         expect(await screen.findByText(oneLine.oneLine!)).toBeOnTheScreen();
         expect(feedUserBook).toHaveBeenCalledTimes(1);
-        await fireEvent.press(screen.getByRole('button', { name: '2026년 11월 25일에 쓴 독후감 보기' }));
+        await fireEvent.press(screen.getByRole('button', { name: '독후감 2, 2026년 11월 25일 보기' }));
         expect(await screen.findByText('감상 상세')).toBeOnTheScreen();
         await act(async () => router.back());
         await waitFor(() => expect(feedUserBook).toHaveBeenCalledTimes(2));
@@ -214,13 +214,82 @@ test('#113 NFR-06 S-76 오프라인이면 요청하지 않고 1초 안에 안내
     expect(feedUserBook).not.toHaveBeenCalled();
 });
 
-test('#113 FR-16 S-71 책 감상 검색은 그대로 감상별로 보여 주고 상세로 가요', async () => {
-    jest.mocked(searchBookReviews).mockResolvedValue([
-        { bookKey: 'isbn:9788937460449', bookTitle: '데미안', bookAuthor: '헤르만 헤세', isbn: '9788937460449', reviews: [oneLine] },
-    ]);
-    await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
-    await fireEvent.press(await screen.findByRole('button', { name: '데미안 · 독자님의 감상 보기' }));
-    expect(await screen.findByText('감상 상세')).toBeOnTheScreen();
-    expect(feedItem).toHaveBeenCalledWith('review-one-line', expect.anything());
-    expect(feedUserBook).not.toHaveBeenCalled();
+
+test('#113 S-76 독후감 카드에 쓴 순서 번호와 날짜를 붙이고 카드 순서는 서버 순서 그대로예요', async () => {
+    await renderRouter(routes, { initialUrl: '/lounge/user-books/user-book-1' });
+    expect(await screen.findByText('독후감 2 · 2026. 11. 25.')).toBeOnTheScreen();
+    expect(screen.getByText('독후감 1 · 2026. 10. 1.')).toBeOnTheScreen();
+    expect(screen.getAllByRole('button', { name: /^독후감 \d.* 보기$/ }).map(labelOf))
+        .toEqual(['독후감 2, 2026년 11월 25일 보기', '독후감 1, 2026년 10월 1일 보기']);
+    expect(screen.getByRole('button', { name: '독후감 1, 2026년 10월 1일 좋아요' })).toBeOnTheScreen();
+});
+
+describe('#113 FR-16 S-71 책 감상 검색 박스', () => {
+    const r1 = { ...reportNew, publishedAt: '2026-11-24T15:30:00Z' };
+    const r2: FeedItem = { ...base, id: 'review-walk', userBookId: 'user-book-3', nickname: '산책', oneLine: '산책하며 읽은 책', body: null,
+        bodyWrittenAt: null, publishedAt: '2026-11-20T00:00:00Z', likeCount: 9 };
+    const r3 = { ...legacy, publishedAt: '2026-10-01T00:00:00Z' };
+    const r4: FeedItem = { ...base, id: 'review-old', nickname: '옛 독자', oneLine: null, body: '예전 서버의 감상이에요.',
+        publishedAt: '2026-09-01T00:00:00Z', likeCount: 0 };
+    const r5 = { ...oneLine, publishedAt: null };
+    const boxNames = /(감상 모음 보기|님의 감상 보기)$/;
+    const walkBox = '산책 · 『데미안』, 감상 모음 보기';
+    const otherBookBox = '다른 독자 · 『데미안』, 감상 모음 보기';
+    const oldRow = '데미안 · 옛 독자님의 감상 보기';
+    beforeEach(() => {
+        jest.mocked(searchBookReviews).mockResolvedValue([
+            { bookKey: 'isbn:9788937460449', bookTitle: '데미안', bookAuthor: '헤르만 헤세', isbn: '9788937460449', reviews: [r1, r2, r3, r4, r5] },
+            { bookKey: 'text:other', bookTitle: '데미안', bookAuthor: '다른 저자',
+                reviews: [{ ...r2, id: 'review-other-book', userBookId: 'user-book-9', nickname: '다른 독자', likeCount: 99 }] },
+        ]);
+    });
+
+    test('책 묶음은 그대로 두고 묶음 안 감상을 사람의 책 박스로 묶어 대표 감상을 보여 줘요', async () => {
+        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
+        expect(await screen.findByText('헤르만 헤세 · ISBN 9788937460449')).toBeOnTheScreen();
+        expect(screen.getByText('다른 저자')).toBeOnTheScreen();
+        expect(screen.getAllByRole('button', { name: boxNames }).map(labelOf)).toEqual([boxName, walkBox, oldRow, otherBookBox]);
+        // 독자의 대표는 가장 최근에 쓴 독후감이고, 산책은 독후감이 없어 한줄평이다.
+        expect(screen.getByText(r1.body!)).toBeOnTheScreen();
+        expect(screen.queryByText(r3.body!)).toBeNull();
+        expect(screen.queryByText(r5.oneLine!)).toBeNull();
+        expect(screen.getAllByText(r2.oneLine!)).toHaveLength(2);
+        expect(screen.getByRole('radio', { name: '최신순' })).toBeSelected();
+        expect(screen.getByRole('radio', { name: '좋아요 많은 순' })).not.toBeSelected();
+    });
+
+    test('[좋아요 많은 순]은 박스 안 좋아요 합계로 묶음 안에서만 정렬하고 [최신순]으로 되돌려요', async () => {
+        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
+        await screen.findByText('헤르만 헤세 · ISBN 9788937460449');
+        await fireEvent.press(screen.getByRole('radio', { name: '좋아요 많은 순' }));
+        expect(screen.getByRole('radio', { name: '좋아요 많은 순' })).toBeSelected();
+        expect(screen.getByRole('radio', { name: '최신순' })).not.toBeSelected();
+        // 산책 9개 > 독자 2+2+2=6개 > 옛 독자 0개. 좋아요가 더 많아도 다른 책 묶음은 그 묶음에 남는다.
+        expect(screen.getAllByRole('button', { name: boxNames }).map(labelOf)).toEqual([walkBox, boxName, oldRow, otherBookBox]);
+        await fireEvent.press(screen.getByRole('radio', { name: '최신순' }));
+        expect(screen.getAllByRole('button', { name: boxNames }).map(labelOf)).toEqual([boxName, walkBox, oldRow, otherBookBox]);
+    });
+
+    test('박스는 S-76, userBookId가 없는 예전 감상은 S-72로 가요', async () => {
+        await renderRouter(stackRoutes, { initialUrl: '/lounge/search?query=데미안' });
+        await fireEvent.press(await screen.findByRole('button', { name: walkBox }));
+        await waitFor(() => expect(feedUserBook).toHaveBeenCalledWith('user-book-3', expect.anything()));
+        expect(await screen.findByRole('button', { name: '한줄평 좋아요' })).toBeOnTheScreen();
+        await act(async () => router.back());
+        await fireEvent.press(await screen.findByRole('button', { name: oldRow }));
+        expect(await screen.findByText('감상 상세')).toBeOnTheScreen();
+        expect(feedItem).toHaveBeenCalledWith('review-old', expect.anything());
+    });
+});
+
+test('#113 FR-16 S-70 검색해서 결과 화면으로 넘어가면 라운지 검색창을 비워요', async () => {
+    jest.mocked(searchBookReviews).mockResolvedValue([]);
+    await renderRouter(stackRoutes, { initialUrl: '/lounge' });
+    await fireEvent.changeText(await screen.findByLabelText('책 이름'), '데미안');
+    await fireEvent(screen.getByLabelText('책 이름'), 'submitEditing');
+    expect(await screen.findByText('“데미안” 검색 결과')).toBeOnTheScreen();
+    expect(searchBookReviews).toHaveBeenCalledWith('데미안');
+    await act(async () => router.back());
+    expect(await screen.findByLabelText('책 이름')).toHaveProp('value', '');
+    expect(screen.getByRole('button', { name: '책 감상 검색' })).toBeDisabled();
 });

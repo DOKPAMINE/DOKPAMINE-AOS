@@ -23,7 +23,10 @@ export function LoungeScreen() {
         void feed.refetch({ cancelRefetch: false }).finally(() => setRefreshing(false));
     };
     const search = () => {
-        if (query.trim()) router.push({ pathname: '/lounge/search', params: { query: query.trim() } });
+        if (!query.trim()) return;
+        router.push({ pathname: '/lounge/search', params: { query: query.trim() } });
+        // #113: 라운지 탭은 화면이 남아 있으므로, 결과 화면으로 넘어가면 다음 검색을 위해 검색창을 비운다.
+        setQuery('');
     };
     return (
         <Screen title="라운지" refreshing={refreshing} onRefresh={refresh}>
