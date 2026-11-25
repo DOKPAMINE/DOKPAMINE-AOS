@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { router, useFocusEffect } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { Screen, StateView } from '../components';
 import { colors, sizes } from '../theme';
 import { BookSearchField, SearchDismissArea, type BookSearchFieldHandle, type SelectedBook } from './BookSearchField';
@@ -31,11 +31,14 @@ export function LoungeScreen() {
         // #113: 라운지 탭은 화면이 남아 있으므로, 결과 화면으로 넘어가면 다음 검색을 위해 검색창을 비운다.
         setQuery('');
     };
-    // #124 S-73 독서왕 랭킹은 제목 오른쪽의 트로피 버튼으로 연다. 누르는 영역은 44dp 이상이다.
+    // #124 S-73 독서왕 랭킹은 제목 오른쪽의 [트로피 랭킹] 알약 버튼으로 연다. 보조 버튼과 같은 배경·테두리이고 누르는 영역은 44dp 이상이다.
+    // 스크린리더는 "독서왕 랭킹"으로 읽는다. 큰 글씨에서는 아이콘도 함께 커지고, 버튼은 줄지 않으며 높이가 늘어 글자가 잘리지 않는다.
+    const { fontScale } = useWindowDimensions();
     const ranking = (
         <Pressable testID="lounge-ranking" accessibilityRole="button" accessibilityLabel="독서왕 랭킹" onPress={() => router.push('/ranking')}
-            style={({ pressed }) => [styles.rankingButton, pressed && styles.suggestionPressed]}>
-            <MaterialCommunityIcons name="trophy-outline" size={sizes.icon} color={colors.brand.espresso} accessible={false} />
+            style={({ pressed }) => [styles.rankingButton, pressed && styles.rankingPressed]}>
+            <MaterialCommunityIcons name="trophy-outline" size={Math.round(sizes.icon * 0.75 * fontScale)} color={colors.brand.espresso} accessible={false} />
+            <Text style={styles.likeText}>랭킹</Text>
         </Pressable>
     );
     return (

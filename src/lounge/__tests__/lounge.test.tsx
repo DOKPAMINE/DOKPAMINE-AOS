@@ -1,5 +1,5 @@
 import { router, Slot, Tabs } from 'expo-router';
-import { RefreshControl, StyleSheet, Text, type RefreshControlProps } from 'react-native';
+import { Dimensions, RefreshControl, StyleSheet, Text, type RefreshControlProps } from 'react-native';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
@@ -9,6 +9,7 @@ import Detail from '../../../app/lounge/[id]';
 import { feedItem, feedList, likeReview, searchBookReviews, unlikeReview } from '../../api/endpoints';
 import { ApiError } from '../../api/errors';
 import type { BookReviewSearchResponse, FeedItem, ReviewLikeResponse } from '../../api/types';
+import { colors, radii } from '../../theme';
 import { connectLoungeSyncRefresh, loungeKeys, useFeed } from '../queries';
 
 jest.mock('../../api/endpoints', () => ({ feedItem: jest.fn(), feedList: jest.fn(), feedUserBook: jest.fn(), likeReview: jest.fn(), searchBookReviews: jest.fn(), unlikeReview: jest.fn() }));
@@ -51,23 +52,53 @@ beforeEach(() => {
 });
 afterEach(() => { client.clear(); onlineManager.setOnline(true); });
 
-test('FR-15 S-70 #124 독서왕 랭킹은 제목 "라운지" 오른쪽의 트로피 버튼(44dp 이상)으로 열어요', async () => {
+test('FR-15 S-70 #124 독서왕 랭킹은 제목 "라운지" 오른쪽의 [트로피 랭킹] 알약 버튼(44dp 이상)으로 열어요', async () => {
     jest.mocked(feedList).mockResolvedValue([]);
     await renderRouter(routes, { initialUrl: '/lounge' });
     const title = await screen.findByRole('header', { name: '라운지' });
-    // 제목과 같은 줄에 있고, 글자 버튼은 없다.
+    // 제목과 같은 줄에 하나만 있고, 스크린리더는 "독서왕 랭킹"으로 읽는다.
     const ranking = within(title.parent!).getByRole('button', { name: '독서왕 랭킹' });
     expect(ranking).toHaveProp('testID', 'lounge-ranking');
     expect(screen.getAllByRole('button', { name: '독서왕 랭킹' })).toHaveLength(1);
     expect(screen.queryByText('독서왕 랭킹')).toBeNull();
-    expect(StyleSheet.flatten(ranking.props.style)).toMatchObject({ minWidth: 44, minHeight: 44 });
-    // 아이콘은 앱의 MaterialCommunityIcons 글꼴로 그린 꾸밈이므로 스크린리더는 버튼 이름만 읽는다.
-    const glyph = within(ranking).getByText(/./);
+    // 트로피 아이콘과 "랭킹"을 가로로 나란히 둔 알약 모양이고, 보조 버튼·정렬 칩과 같은 배경·테두리다.
+    expect(StyleSheet.flatten(ranking.props.style)).toMatchObject({
+        flexDirection: 'row', alignItems: 'center', minWidth: 44, minHeight: 44,
+        backgroundColor: colors.surface.chip, borderWidth: 1, borderColor: colors.line.border, borderRadius: radii.pill,
+    });
+    const [glyph, label] = within(ranking).getAllByText(/./);
+    // 아이콘은 앱의 MaterialCommunityIcons 글꼴로 그린 꾸밈이다.
     expect(glyph).toHaveProp('accessible', false);
-    expect(StyleSheet.flatten(glyph.props.style)).toMatchObject({ fontFamily: 'material-community', fontSize: 24 });
+    expect(StyleSheet.flatten(glyph.props.style)).toMatchObject({ fontFamily: 'material-community', color: colors.brand.espresso });
+    expect(label).toHaveTextContent('랭킹');
+    expect(StyleSheet.flatten(label.props.style)).toMatchObject({ color: colors.brand.espresso });
     await fireEvent.press(ranking);
     expect(await screen.findByText('독서왕 랭킹 화면')).toBeOnTheScreen();
     expect(screen).toHavePathname('/ranking');
+});
+
+test('FR-15 S-70 #124 큰 글씨 설정에서도 [랭킹] 버튼 글자가 잘리지 않고 아이콘도 함께 커져요', async () => {
+    jest.mocked(feedList).mockResolvedValue([]);
+    const window = Dimensions.get('window');
+    const iconSize = (scale: number) => Math.round(24 * 0.75 * scale);
+    try {
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        const ranking = await screen.findByRole('button', { name: '독서왕 랭킹' });
+        await act(async () => { Dimensions.set({ window: { ...window, fontScale: window.fontScale * 2 } }); });
+        const [glyph, label] = within(screen.getByTestId('lounge-ranking')).getAllByText(/./);
+        await waitFor(() => expect(StyleSheet.flatten(glyph.props.style)).toMatchObject({ fontSize: iconSize(window.fontScale * 2) }));
+        // 한 줄로 자르거나 글씨 크기를 막지 않는다.
+        expect(label.props.numberOfLines).toBeUndefined();
+        expect(label.props.allowFontScaling).not.toBe(false);
+        // 버튼은 줄지 않고 높이가 고정되지 않아(최소 높이만 있음) 글씨가 커지면 늘어난다. 좁으면 제목이 줄바꿈된다.
+        const style = StyleSheet.flatten(screen.getByTestId('lounge-ranking').props.style);
+        expect(style).toMatchObject({ flexShrink: 0, minHeight: 44 });
+        expect(style.height).toBeUndefined();
+        expect(StyleSheet.flatten(screen.getByRole('header', { name: '라운지' }).props.style)).toMatchObject({ flex: 1 });
+        expect(ranking).toBeOnTheScreen();
+    } finally {
+        await act(async () => { Dimensions.set({ window }); });
+    }
 });
 
 test('FR-16 FR-08 FR-09 S-70~72 #124 자동완성으로 책 고르기→책 묶음→상세→좋아요·취소가 이어져요', async () => {

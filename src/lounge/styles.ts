@@ -15,7 +15,13 @@ export const styles = StyleSheet.create({
     // #124 검색창 아래에 안내와 자동완성 목록을 붙여 둔다.
     searchBox: { gap: spacing.xs },
     // #124 S-70 제목 오른쪽 독서왕 랭킹(트로피) 버튼.
-    rankingButton: { minWidth: sizes.minTouch, minHeight: sizes.minTouch, justifyContent: 'center', alignItems: 'center', borderRadius: radii.button },
+    // 보조 버튼·정렬 칩과 같은 배경(surface.chip)·테두리(line.border)의 알약 모양. 제목이 길거나 글씨가 커지면 제목이 줄바꿈되고 버튼은 줄지 않는다.
+    rankingButton: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, flexShrink: 0,
+        minWidth: sizes.minTouch, minHeight: sizes.minTouch, paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+        backgroundColor: colors.surface.chip, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.line.border,
+    },
+    rankingPressed: { opacity: 0.6 },
     searchIcon: { position: 'absolute', top: 0, bottom: 0, left: spacing.md, justifyContent: 'center' },
     // #124 지우기 버튼은 입력칸 오른쪽 안쪽에서 입력칸 높이만큼(52dp 이상) 차지하고 아이콘을 가운데에 둔다. 너비는 화면에서 44dp 이상으로 준다.
     searchClear: {
