@@ -44,6 +44,9 @@ export const suggestionMessages = {
  * 목록이 화면 스크롤 안에 있으므로, 키보드가 떠 있어도 한 번에 눌리도록 화면은 keyboardShouldPersistTaps="handled"로 둔다.
  * #124 입력칸 왼쪽 안쪽에 안내 문구 색의 돋보기를 둔다. 꾸밈이므로 스크린리더는 건너뛰고, 눌러도 입력칸이 눌린다.
  * 큰 글씨 설정(fontScale)만큼 아이콘을 키우고, 글자가 겹치지 않게 입력칸 왼쪽 여백도 그만큼 늘린다.
+ * #124 글자가 있을 때만 오른쪽 안쪽에 돋보기와 같은 색의 지우기(X) 버튼을 둔다. 누르면 글자를 모두 지우고 자동완성을 닫으며,
+ * 검색창 포커스는 그대로 둬서(빠져 있었으면 다시 줘서) 바로 다시 칠 수 있고, 빈 검색창이므로 최근 고른 책이 열린다.
+ * 누르는 영역은 44dp 이상이고 스크린리더는 "검색어 지우기"로 읽는다. 글자가 버튼과 겹치지 않게 입력칸 오른쪽 여백을 버튼 너비만큼 둔다.
  */
 export function BookSearchField({ value, onChangeText, onSelectBook }: {
     value: string; onChangeText: (value: string) => void; onSelectBook: (book: SelectedBook) => void;
@@ -54,6 +57,8 @@ export function BookSearchField({ value, onChangeText, onSelectBook }: {
     const [hint, setHint] = useState(false);
     const { fontScale } = useWindowDimensions();
     const iconSize = Math.round(sizes.icon * 0.85 * fontScale);
+    // 지우기 버튼은 44dp 이상이고, 큰 글씨로 아이콘이 커지면 그만큼 넓어진다.
+    const clearSize = Math.max(sizes.minTouch, iconSize + spacing.md * 2);
     const client = useQueryClient();
     const recent = useRecentBooks(useSignedInUserId());
     // 포커스가 없으면 조회하지 않는다. S-71처럼 검색어를 채워 들어와도 검색창을 누르기 전에는 요청하지 않는다.
@@ -78,6 +83,10 @@ export function BookSearchField({ value, onChangeText, onSelectBook }: {
     const change = (next: string) => {
         setHint(false);
         onChangeText(next);
+    };
+    const clearInput = () => {
+        change('');
+        input.current?.focus();
     };
     const pick = (book: RecentBook) => {
         input.current?.blur();
@@ -105,12 +114,18 @@ export function BookSearchField({ value, onChangeText, onSelectBook }: {
             <View>
                 <TextInput ref={input} accessibilityRole="search" accessibilityLabel="책 이름" placeholder="책 이름을 입력해 주세요" placeholderTextColor={colors.text.muted}
                     value={value} onChangeText={change} onSubmitEditing={showHint} submitBehavior="submit" returnKeyType="search"
-                    style={[styles.input, { paddingLeft: spacing.md + iconSize + spacing.sm }]}
+                    style={[styles.input, { paddingLeft: spacing.md + iconSize + spacing.sm, paddingRight: value.length > 0 ? clearSize : spacing.md }]}
                     onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} />
                 {/* 입력칸 위에 겹쳐 두되 터치는 입력칸으로 넘기고, 높이가 커져도 세로 가운데에 둔다. */}
                 <View testID="book-search-icon" pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" style={styles.searchIcon}>
                     <MaterialCommunityIcons name="magnify" size={iconSize} color={colors.text.muted} accessible={false} />
                 </View>
+                {value.length > 0 ? (
+                    <Pressable testID="book-search-clear" accessibilityRole="button" accessibilityLabel="검색어 지우기" onPress={clearInput}
+                        style={({ pressed }) => [styles.searchClear, { width: clearSize }, pressed && styles.suggestionPressed]}>
+                        <MaterialCommunityIcons name="close-circle" size={iconSize} color={colors.text.muted} accessible={false} />
+                    </Pressable>
+                ) : null}
             </View>
             {hint ? <Text testID="book-search-hint" style={styles.muted}>{pickBookHint}</Text> : null}
             {panel === 'recent' ? <RecentBookList books={recent.books} onSelect={pick} onRemove={remove} onClear={clear} iconSize={iconSize} />
