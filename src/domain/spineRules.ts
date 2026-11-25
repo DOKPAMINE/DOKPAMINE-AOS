@@ -130,3 +130,32 @@ export const MAX_SPINE_IMAGE_RATIO = 0.35;
 export function isSpineImageRatio(ratio: number): boolean {
     return Number.isFinite(ratio) && ratio > 0 && ratio <= MAX_SPINE_IMAGE_RATIO;
 }
+
+export type ShelfRowLayout = { items: ShelfItem[]; placements: ShelfPlacement[] };
+
+/** 한 층에 꽂힌 책들이 차지하는 전체 폭(간격 + 책 두께) */
+export function shelfRowWidth(placements: readonly ShelfPlacement[], items: readonly ShelfItem[]): number {
+    return placements.reduce((sum, placement, k) => sum + placement.marginLeft + items[k].width, 0);
+}
+
+/**
+ * S-30: 책을 순서대로 꽂다가 선반 폭(maxWidth)을 넘으면 아래 층으로 넘긴다.
+ * 층마다 layoutShelfRow로 다시 배치하므로, 층 끝에서 받침이 없어진 책은 기울지 않고 첫 책은 왼쪽 벽에 기댈 수 있다.
+ * 책 한 권이 선반보다 넓으면 그 책만 따로 한 층에 둔다.
+ */
+export function packShelfRows(items: readonly ShelfItem[], maxWidth: number): ShelfRowLayout[] {
+    const rows: ShelfRowLayout[] = [];
+    let current: ShelfRowLayout = { items: [], placements: [] };
+    for (const item of items) {
+        const candidate = [...current.items, item];
+        const placements = layoutShelfRow(candidate);
+        if (current.items.length === 0 || shelfRowWidth(placements, candidate) <= maxWidth) {
+            current = { items: candidate, placements };
+        } else {
+            rows.push(current);
+            current = { items: [item], placements: layoutShelfRow([item]) };
+        }
+    }
+    if (current.items.length > 0) rows.push(current);
+    return rows;
+}
