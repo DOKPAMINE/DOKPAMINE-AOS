@@ -1,4 +1,4 @@
-import { bookTitleLabel, boxRepresentative, groupCover, groupReviewBoxes, loungeBoxLabel, OPENING_BRACKET_INDENT_EM, openingBracketIndent, previewText, sortReviewBoxes, splitUserBookReviews, userBookReportHeadings, withMine, writtenDate } from '../loungeRules';
+import { bookSuggestionLabel, bookSuggestions, bookTitleLabel, boxRepresentative, findBookGroup, maxBookSuggestions, groupCover, groupReviewBoxes, loungeBoxLabel, OPENING_BRACKET_INDENT_EM, openingBracketIndent, previewText, sortReviewBoxes, splitUserBookReviews, userBookReportHeadings, withMine, writtenDate } from '../loungeRules';
 
 test('#113 S-70 S-76 스크린리더는 『제목』 줄을 "『제목』 내 감상"으로 한 번에 읽어요', () => {
     expect(bookTitleLabel('데미안', false)).toBe('『데미안』');
@@ -141,4 +141,41 @@ test.each([[16, 1, 9.1], [18, 1, 10.3], [16, 2, 18.2], [18, 1.3, 13.3]])(
 test('#113 S-70 S-76 Noto Sans KR을 불러오지 못했으면 『를 당기지 않아요', () => {
     expect(openingBracketIndent(16, 1, false)).toBe(0);
     expect(openingBracketIndent(18, 2, false)).toBe(0);
+});
+
+describe('#124 S-70 S-71 책 이름 자동완성 규칙', () => {
+    const review = { id: 'r1', userBookId: 'ub-1' as string | null, likeCount: 0, genre: '소설', coverUrl: null as string | null };
+    const group = (i: number, reviews: (typeof review)[] = [{ ...review, id: `r${i}`, userBookId: `ub-${i}` }]) =>
+        ({ bookKey: `text:${i}`, bookTitle: `데미안 ${i}`, bookAuthor: '헤르만 헤세', reviews });
+
+    test('서버의 책 묶음 순서 그대로 앞에서 최대 5권이에요', () => {
+        expect(maxBookSuggestions).toBe(5);
+        const items = bookSuggestions([1, 2, 3, 4, 5, 6].map(i => group(i)));
+        expect(items.map(item => item.bookKey)).toEqual(['text:1', 'text:2', 'text:3', 'text:4', 'text:5']);
+        expect(bookSuggestions([group(1)], 0)).toEqual([]);
+    });
+
+    test('"N명의 감상"은 S-71처럼 사람의 책 박스 수이고, 표지는 coverUrl이 있는 첫 감상의 것이에요', () => {
+        const [item] = bookSuggestions([group(1, [
+            { ...review, id: 'a', userBookId: 'ub-1' },
+            { ...review, id: 'b', userBookId: 'ub-1', coverUrl: 'https://image.example.com/1.jpg' },
+            { ...review, id: 'c', userBookId: 'ub-2', genre: '에세이' },
+            { ...review, id: 'd', userBookId: null },
+        ])]);
+        expect(item).toEqual({ bookKey: 'text:1', bookTitle: '데미안 1', bookAuthor: '헤르만 헤세',
+            cover: { uri: 'https://image.example.com/1.jpg', genre: '소설' }, readerCount: 3 });
+    });
+
+    test('스크린리더는 "제목, 저자, N명의 감상"으로 읽고 비어 있는 저자는 건너뛰어요', () => {
+        expect(bookSuggestionLabel({ bookTitle: '데미안', bookAuthor: '헤르만 헤세', readerCount: 2 })).toBe('데미안, 헤르만 헤세, 2명의 감상');
+        expect(bookSuggestionLabel({ bookTitle: '데미안', bookAuthor: '', readerCount: 1 })).toBe('데미안, 1명의 감상');
+    });
+
+    test('S-71은 검색 결과에서 고른 책(bookKey) 묶음 하나만 찾아요', () => {
+        const groups = [group(1), group(2)];
+        expect(findBookGroup(groups, 'text:2')).toBe(groups[1]);
+        expect(findBookGroup(groups, 'text:none')).toBeUndefined();
+        expect(findBookGroup(groups, '')).toBeUndefined();
+        expect(findBookGroup(groups, undefined)).toBeUndefined();
+    });
 });
