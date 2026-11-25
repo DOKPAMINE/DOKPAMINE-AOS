@@ -116,13 +116,19 @@ export interface SyncSnapshot {
 
 export interface FeedItem {
     id: string;
+    /** #113 감상이 연결된 사람의 책(user_books) UUID. 구버전 서버는 주지 않는다. */
+    userBookId?: string | null;
     nickname: string;
     bookTitle: string;
     bookAuthor: string;
+    /** #113 감상이 연결된 책의 앞표지 주소. 저장된 표지가 없으면 null이고 구버전 서버는 주지 않는다. */
+    coverUrl?: string | null;
     genre: string;
     oneLine?: string | null;
     body?: string | null;
     publishedAt?: string | null;
+    /** #113 독후감(body)이 처음 채워진 서버 시각. 독후감이 없던 적만 있으면 null이고 구버전 서버는 주지 않는다. */
+    bodyWrittenAt?: string | null;
     likeCount: number;
     likedByMe: boolean;
     mine: boolean;
