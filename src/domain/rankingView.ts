@@ -30,3 +30,8 @@ export function aroundEntries(data: WeeklyRankingResponse): RankingEntry[] | nul
 export function rankingRowLabel(entry: RankingEntry): string {
     return [`${entry.rank}위`, entry.nickname, rankingTimeLabel(entry.seconds), ...(entry.me ? ['나'] : [])].join(', ');
 }
+
+/** S-73: 고정된 내 순위 줄은 "내 순위"로 시작하므로 끝에 "나"를 다시 붙이지 않는다. */
+export function myRankingLabel(entry: RankingEntry): string {
+    return ['내 순위', `${entry.rank}위`, entry.nickname, rankingTimeLabel(entry.seconds)].join(', ');
+}

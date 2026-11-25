@@ -24,7 +24,8 @@ export function Screen({ title, action, refreshing = false, onRefresh, keyboardS
     );
     const top = action ? <View style={styles.header}>{heading}{action}</View> : heading;
     return (
-        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        // 스크롤 없는 화면은 아래 내용이 Android 하단 버튼 바에 가리지 않도록 아래쪽 안전 영역도 비운다.
+        <SafeAreaView style={styles.safeArea} edges={scroll ? ['top', 'left', 'right'] : ['top', 'left', 'right', 'bottom']}>
             {scroll ? <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps={keyboardShouldPersistTaps} refreshControl={onRefresh
                 ? <RefreshControl accessibilityLabel={`${title} 새로고침`} refreshing={refreshing} onRefresh={onRefresh}
                     colors={[colors.brand.espresso]} tintColor={colors.brand.espresso} progressBackgroundColor={colors.surface.card} />

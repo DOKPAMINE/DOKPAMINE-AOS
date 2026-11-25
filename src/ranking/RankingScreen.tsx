@@ -4,16 +4,17 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { RankingEntry, WeeklyRankingResponse } from '../api/types';
 import { Screen, SecondaryButton, StateView } from '../components';
 import { rankingTimeLabel } from '../domain/rankingTime';
-import { aroundEntries, myRankingEntry, podiumTone, rankingRowLabel } from '../domain/rankingView';
+import { aroundEntries, myRankingEntry, myRankingLabel, podiumTone, rankingRowLabel } from '../domain/rankingView';
 import { useWeeklyRanking } from './queries';
 import { RankingError } from './RankingError';
-import { styles, toneStyles } from './styles';
+import { ribbonMinWidth, styles, toneStyles } from './styles';
 
 type Tab = 'top' | 'around';
 const tabs: { value: Tab; label: string }[] = [{ value: 'top', label: 'Top 30' }, { value: 'around', label: '내 주변' }];
 
 // AOS#126: 참여·중단은 설정(S-81)에서 한다. 랭킹 화면은 순위 보기에 집중한다.
-// 순서: 제목 → [라운지로] → 폴더 탭 → 랭킹판(제목 줄·내 순위 고정, 안쪽 칸의 목록만 스크롤) → 안내 글.
+// 순서: 제목 → [라운지로] → 책갈피 탭 → 랭킹판(제목 줄·내 순위 고정, 안쪽 칸만 스크롤).
+// 안내 글은 안쪽 칸 스크롤 맨 아래에 둬서, 작은 폰·큰 글씨에서도 목록 칸이 자리를 잃지 않는다(AOS#126 리뷰).
 export function RankingScreen() {
     const ranking = useWeeklyRanking();
     const data = ranking.data;
@@ -36,47 +37,58 @@ export function RankingScreen() {
                         <Text style={[styles.columnLabel, styles.timeColumn]}>독서 시간</Text>
                     </View>
                     {data && !ranking.isError && <View style={styles.mine}><MyRank data={data} /></View>}
-                    <View style={styles.well}>
-                        {ranking.isError ? <RankingError error={ranking.error} retry={() => { void ranking.refetch(); }} />
-                            : !data ? <StateView kind="loading" />
-                                : tab === 'top' ? <TopList entries={data.top} /> : <AroundList entries={aroundEntries(data)} />}
+                    <View testID="ranking-well" style={styles.well}>
+                        {/* 상태 안내·다시 시도 버튼·목록·안내 글 모두 이 스크롤 안에 있어 가려지지 않는다. */}
+                        <ScrollView testID="ranking-scroll" style={styles.listScroll} contentContainerStyle={styles.list} nestedScrollEnabled>
+                            {ranking.isError ? <RankingError error={ranking.error} retry={() => { void ranking.refetch(); }} />
+                                : !data ? <StateView kind="loading" />
+                                    : tab === 'top' ? <TopList entries={data.top} /> : <AroundList entries={aroundEntries(data)} />}
+                            <View style={styles.notes}>
+                                <Text style={styles.note}>매주 월요일부터 일요일까지 타이머 독서 시간을 하루 최대 180분 집계해요. 수동 기록은 제외하며, 동점이면 먼저 달성한 분이 앞서요.</Text>
+                                {data && <Text style={styles.note}>{data.weekStart} 시작 주 · 한국 시간</Text>}
+                            </View>
+                        </ScrollView>
                     </View>
                 </View>
             </View>
-        </View>
-        <View style={styles.notes}>
-            <Text style={styles.note}>매주 월요일부터 일요일까지 타이머 독서 시간을 하루 최대 180분 집계해요. 수동 기록은 제외하며, 동점이면 먼저 달성한 분이 앞서요.</Text>
-            {data && <Text style={styles.note}>{data.weekStart} 시작 주 · 한국 시간</Text>}
         </View>
     </Screen>;
 }
 
 function MyRank({ data }: { data: WeeklyRankingResponse }) {
     const mine = myRankingEntry(data);
-    if (mine) return <RankingRow entry={mine} podium={false} label={`내 순위, ${rankingRowLabel(mine)}`} />;
-    if (!data.participating) {
-        const message = '아직 랭킹에 참여하지 않았어요. 눌러서 설정에서 참여할 수 있어요.';
-        return <Pressable accessibilityRole="button" accessibilityLabel={message} accessibilityHint="설정 화면을 열어요"
-            onPress={() => router.push('/settings')} style={({ pressed }) => [styles.notice, pressed && styles.pressed]}>
-            <Text style={styles.noticeText}>{message}</Text>
-        </Pressable>;
-    }
+    if (mine) return <RankingRow entry={mine} podium={false} label={myRankingLabel(mine)} />;
+    if (!data.participating) return <SettingsNotice message="아직 랭킹에 참여하지 않았어요. 눌러서 설정에서 참여할 수 있어요." />;
     return <View style={styles.notice}>
         <Text style={styles.noticeText}>이번 주 집계된 타이머 독서 시간이 생기면 내 순위를 볼 수 있어요.</Text>
     </View>;
+}
+
+/** 참여하지 않은 사람에게 보여 주는 안내. 누르면 설정(S-81)을 연다. */
+function SettingsNotice({ message }: { message: string }) {
+    return <Pressable accessibilityRole="button" accessibilityLabel={message} accessibilityHint="설정 화면을 열어요"
+        onPress={() => router.push('/settings')} style={({ pressed }) => [styles.notice, pressed && styles.pressed]}>
+        <Text style={styles.noticeText}>{message}</Text>
+    </Pressable>;
 }
 
 function RankingTabs({ value, onChange }: { value: Tab; onChange: (tab: Tab) => void }) {
     return <View testID="ranking-tabs" accessibilityRole="tablist" style={styles.ribbons}>
         {tabs.map(tab => {
             const selected = tab.value === value;
-            return <Pressable key={tab.value} accessibilityRole="tab" accessibilityLabel={tab.label} accessibilityState={{ selected }}
-                onPress={() => onChange(tab.value)} style={[styles.ribbon, selected && styles.ribbonSelected]}>
-                <View style={styles.ribbonNotch} />
-                <Text style={[styles.ribbonLabel, selected && styles.ribbonLabelSelected]}>{tab.label}</Text>
-            </Pressable>;
+            return <Ribbon key={tab.value} label={tab.label} selected={selected} onPress={() => onChange(tab.value)} />;
         })}
     </View>;
+}
+
+/** 책갈피 폭은 글자에 맞게 늘어난다. V자 홈은 실제 폭을 재서 가운데에 맞춘다. */
+function Ribbon({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+    const [width, setWidth] = useState<number>(ribbonMinWidth);
+    return <Pressable accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected }} onPress={onPress}
+        onLayout={event => setWidth(event.nativeEvent.layout.width)} style={[styles.ribbon, selected && styles.ribbonSelected]}>
+        <View testID="ranking-ribbon-notch" style={[styles.ribbonNotch, { borderLeftWidth: width / 2, borderRightWidth: width / 2 }]} />
+        <Text style={[styles.ribbonLabel, selected && styles.ribbonLabelSelected]} numberOfLines={1}>{label}</Text>
+    </Pressable>;
 }
 
 function TopList({ entries }: { entries: RankingEntry[] }) {
@@ -85,16 +97,14 @@ function TopList({ entries }: { entries: RankingEntry[] }) {
 }
 
 function AroundList({ entries }: { entries: RankingEntry[] | null }) {
-    if (entries === null) return <StateView kind="empty" message="마이 > 설정에서 랭킹에 참여하면 내 주변 순위를 볼 수 있어요" />;
+    if (entries === null) return <SettingsNotice message="마이 > 설정에서 랭킹에 참여하면 내 주변 순위를 볼 수 있어요." />;
     if (entries.length === 0) return <StateView kind="empty" message="이번 주 집계된 타이머 독서 시간이 생기면 내 주변 순위를 볼 수 있어요." />;
     // 내 주변 탭에서는 1~3위도 색 없이 일반 모양으로 보여 준다.
     return <RankingList entries={entries} podium={false} />;
 }
 
 function RankingList({ entries, podium }: { entries: RankingEntry[]; podium: boolean }) {
-    return <ScrollView style={styles.listScroll} contentContainerStyle={styles.list} nestedScrollEnabled>
-        {entries.map(entry => <RankingRow key={entry.userId} entry={entry} podium={podium} />)}
-    </ScrollView>;
+    return <>{entries.map(entry => <RankingRow key={entry.userId} entry={entry} podium={podium} />)}</>;
 }
 
 /**

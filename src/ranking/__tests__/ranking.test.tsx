@@ -12,6 +12,7 @@ import { ApiError } from '../../api/errors';
 import type { MeResponse, RankingEntry, WeeklyRankingResponse } from '../../api/types';
 import { colors } from '../../theme';
 import { rankingKeys } from '../queries';
+import { ribbonMinWidth, wellMinHeight } from '../styles';
 
 jest.mock('../../api/endpoints', () => ({ weeklyRanking: jest.fn(), patchMe: jest.fn(), feedList: jest.fn() }));
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn() } }));
@@ -67,7 +68,7 @@ test('FR-15 S-70 S-73 AOS#126 라운지에서 열면 Top 30 탭과 위에 고정
     expect(screen.getByRole('tab', { name: '내 주변', selected: false })).toBeOnTheScreen();
     // 두 책갈피는 하나의 탭 목록(tablist) 안에 있다.
     expect(screen.getByTestId('ranking-tabs')).toHaveProp('accessibilityRole', 'tablist');
-    expect(await screen.findByLabelText('내 순위, 45위, 책산책, 4시간 15분, 나')).toBeOnTheScreen();
+    expect(await screen.findByLabelText('내 순위, 45위, 책산책, 4시간 15분')).toBeOnTheScreen();
     // 제목 줄은 화면에 보이지만 스크린리더에서는 건너뛴다(각 줄이 순위·닉네임·시간을 함께 읽는다).
     expect(screen.getByText('순위', { includeHiddenElements: true })).toBeOnTheScreen();
     expect(screen.getByText('닉네임', { includeHiddenElements: true })).toBeOnTheScreen();
@@ -88,7 +89,7 @@ test('FR-15 S-73 AOS#126 순위는 숫자만 보이고 스크린리더는 "위"�
     const first = await screen.findByLabelText('1위, 독서가 1, 4시간 59분');
     expect(within(first).getByText('1')).toBeOnTheScreen();
     expect(within(first).queryByText('1위')).toBeNull();
-    expect(within(screen.getByLabelText('내 순위, 45위, 책산책, 4시간 15분, 나')).getByText('45')).toBeOnTheScreen();
+    expect(within(screen.getByLabelText('내 순위, 45위, 책산책, 4시간 15분')).getByText('45')).toBeOnTheScreen();
 });
 
 test('FR-15 S-73 AOS#126 Top 30 탭의 1~3위는 노랑·하늘색·주황 카드이고 4위부터는 일반 카드예요', async () => {
@@ -105,14 +106,14 @@ test('FR-15 S-73 AOS#126 Top 30 탭의 1~3위는 노랑·하늘색·주황 카�
     const first = card('1위, 독서가 1, 4시간 59분');
     expect([first.minHeight, first.borderWidth, first.borderBottomWidth]).toEqual([fourth.minHeight, fourth.borderWidth, fourth.borderBottomWidth]);
     expect(fourth.borderBottomWidth).toBeGreaterThan(fourth.borderWidth as number);
-    expect(outline('1위, 독서가 1, 4시간 59분').borderWidth).toBe(outline('내 순위, 45위, 책산책, 4시간 15분, 나').borderWidth);
-    expect(halo('1위, 독서가 1, 4시간 59분').borderWidth).toBe(halo('내 순위, 45위, 책산책, 4시간 15분, 나').borderWidth);
+    expect(outline('1위, 독서가 1, 4시간 59분').borderWidth).toBe(outline('내 순위, 45위, 책산책, 4시간 15분').borderWidth);
+    expect(halo('1위, 독서가 1, 4시간 59분').borderWidth).toBe(halo('내 순위, 45위, 책산책, 4시간 15분').borderWidth);
 });
 
 test('FR-15 S-73 AOS#126 31위 이하이면 내 주변 탭에 서버가 준 30명을 보여 주고 내 줄은 밝은 바깥 테두리예요', async () => {
     await renderRouter(routes, { initialUrl: '/ranking' });
-    await screen.findByLabelText('내 순위, 45위, 책산책, 4시간 15분, 나');
-    expectMine('내 순위, 45위, 책산책, 4시간 15분, 나');
+    await screen.findByLabelText('내 순위, 45위, 책산책, 4시간 15분');
+    expectMine('내 순위, 45위, 책산책, 4시간 15분');
     expect(screen.queryByText(/· 나/)).toBeNull();
     await fireEvent.press(await screen.findByRole('tab', { name: '내 주변' }));
     expect(screen.getByRole('tab', { name: '내 주변', selected: true })).toBeOnTheScreen();
@@ -127,7 +128,7 @@ test('FR-15 S-73 AOS#126 31위 이하이면 내 주변 탭에 서버가 준 30�
 test('FR-15 S-73 AOS#126 내가 2위이면 하늘색을 유지한 채 바깥 테두리를 더하고 내 주변 탭은 색 없는 Top 30이에요', async () => {
     jest.mocked(weeklyRanking).mockResolvedValue({ ...data, top: Array.from({ length: 30 }, (_, i) => entry(i + 1, i === 1)), around: [] });
     await renderRouter(routes, { initialUrl: '/ranking' });
-    expect(await screen.findByLabelText('내 순위, 2위, 책산책, 4시간 58분, 나')).toBeOnTheScreen();
+    expect(await screen.findByLabelText('내 순위, 2위, 책산책, 4시간 58분')).toBeOnTheScreen();
     expect(card('2위, 책산책, 4시간 58분, 나')).toMatchObject({ backgroundColor: colors.rank.sky });
     expectMine('2위, 책산책, 4시간 58분, 나');
     await fireEvent.press(screen.getByRole('tab', { name: '내 주변' }));
@@ -140,11 +141,70 @@ test('FR-15 S-73 AOS#126 내가 2위이면 하늘색을 유지한 채 바깥 테
 test('FR-15 S-73 AOS#126 참여하지 않았으면 내 순위 자리 안내를 눌러 설정으로 가고 내 주변 탭은 참여 안내예요', async () => {
     jest.mocked(weeklyRanking).mockResolvedValue({ ...data, participating: false, around: [] });
     await renderRouter(routes, { initialUrl: '/ranking' });
-    await fireEvent.press(await screen.findByRole('tab', { name: '내 주변' }));
-    expect(screen.getByText('마이 > 설정에서 랭킹에 참여하면 내 주변 순위를 볼 수 있어요')).toBeOnTheScreen();
-    await fireEvent.press(screen.getByRole('button', { name: '아직 랭킹에 참여하지 않았어요. 눌러서 설정에서 참여할 수 있어요.' }));
+    await fireEvent.press(await screen.findByRole('button', { name: '아직 랭킹에 참여하지 않았어요. 눌러서 설정에서 참여할 수 있어요.' }));
     expect(await settingsHeader()).toBeOnTheScreen();
     expect(screen).toHavePathname('/settings');
+});
+
+test('FR-15 S-73 AOS#126 리뷰 3 참여하지 않았으면 내 주변 탭 참여 안내도 누르면 설정으로 가요', async () => {
+    jest.mocked(weeklyRanking).mockResolvedValue({ ...data, participating: false, around: [] });
+    await renderRouter(routes, { initialUrl: '/ranking' });
+    await screen.findByLabelText('1위, 독서가 1, 4시간 59분');
+    await fireEvent.press(screen.getByRole('tab', { name: '내 주변' }));
+    await fireEvent.press(screen.getByRole('button', { name: '마이 > 설정에서 랭킹에 참여하면 내 주변 순위를 볼 수 있어요.' }));
+    expect(await settingsHeader()).toBeOnTheScreen();
+    expect(screen).toHavePathname('/settings');
+});
+
+test('FR-15 S-73 AOS#126 리뷰 1 안내 글은 목록 스크롤 맨 아래에 있고 목록 칸은 줄 3개 이상 높이를 지켜요', async () => {
+    await renderRouter(routes, { initialUrl: '/ranking' });
+    await screen.findByLabelText('1위, 독서가 1, 4시간 59분');
+    const scroll = screen.getByTestId('ranking-scroll');
+    const items = within(scroll);
+    expect(items.getByText(/매주 월요일부터 일요일까지/)).toBeOnTheScreen();
+    expect(items.getByText('2026-11-02 시작 주 · 한국 시간')).toBeOnTheScreen();
+    expect(items.getByLabelText('30위, 독서가 30, 4시간 30분')).toBeOnTheScreen();
+    // 안내 글은 스크롤 내용의 마지막에 온다(30위 줄 다음).
+    const texts = items.getAllByText(/./).map(node => ([] as unknown[]).concat(node.props.children).join(''));
+    expect(texts.indexOf('2026-11-02 시작 주 · 한국 시간')).toBe(texts.length - 1);
+    expect(texts.findIndex(text => String(text).startsWith('매주 월요일부터'))).toBeGreaterThan(texts.lastIndexOf('30'));
+    expect(StyleSheet.flatten(screen.getByTestId('ranking-well').props.style).minHeight).toBe(wellMinHeight);
+    expect(wellMinHeight).toBeGreaterThanOrEqual(card('1위, 독서가 1, 4시간 59분').minHeight as number * 3);
+});
+
+test('FR-15 S-73 AOS#126 리뷰 1 오류 안내와 다시 시도 버튼도 목록 스크롤 안에 있어 가려지지 않아요', async () => {
+    jest.mocked(weeklyRanking).mockRejectedValueOnce(new ApiError('http', 'FAIL', '순위를 불러오지 못했어요.', 500));
+    await renderRouter(routes, { initialUrl: '/ranking' });
+    expect(await screen.findByRole('alert')).toHaveTextContent('순위를 불러오지 못했어요.');
+    expect(within(screen.getByTestId('ranking-scroll')).getByRole('button', { name: '다시 시도해 주세요' })).toBeOnTheScreen();
+});
+
+test('FR-15 S-73 AOS#126 리뷰 4 책갈피는 폭을 고정하지 않고 글자에 맞게 늘어나며 고른 책갈피가 더 길어요', async () => {
+    await renderRouter(routes, { initialUrl: '/ranking' });
+    const top = await screen.findByRole('tab', { name: 'Top 30' });
+    const around = screen.getByRole('tab', { name: '내 주변' });
+    const selected = StyleSheet.flatten(top.props.style);
+    const unselected = StyleSheet.flatten(around.props.style);
+    expect(selected.width).toBeUndefined();
+    expect(selected.minWidth).toBe(ribbonMinWidth);
+    expect(within(top).getByText('Top 30')).toHaveProp('numberOfLines', 1);
+    // 큰 글씨로 몸통이 늘어나도 고른 책갈피는 위 여백만큼 더 길다.
+    expect(selected.minHeight as number).toBeGreaterThan(unselected.minHeight as number);
+    expect(selected.paddingTop as number).toBeGreaterThan(unselected.paddingTop as number);
+    expect(unselected.minHeight).toBeGreaterThanOrEqual(44);
+    // V자 홈은 실제 폭에 맞춰 가운데에 온다.
+    await fireEvent(top, 'layout', { nativeEvent: { layout: { width: 120, height: 60 } } });
+    expect(StyleSheet.flatten(within(top).getByTestId('ranking-ribbon-notch').props.style))
+        .toMatchObject({ borderLeftWidth: 60, borderRightWidth: 60 });
+});
+
+test('FR-15 S-73 AOS#126 리뷰 5 고정된 내 순위 줄은 "나"를 두 번 읽지 않아요', async () => {
+    await renderRouter(routes, { initialUrl: '/ranking' });
+    expect(await screen.findByLabelText('내 순위, 45위, 책산책, 4시간 15분')).toBeOnTheScreen();
+    expect(screen.queryByLabelText(/^내 순위, .*, 나$/)).toBeNull();
+    await fireEvent.press(screen.getByRole('tab', { name: '내 주변' }));
+    // 목록 안의 내 줄은 그대로 끝에 "나"를 붙여 읽는다.
+    expect(screen.getByLabelText('45위, 책산책, 4시간 15분, 나')).toBeOnTheScreen();
 });
 
 test('FR-15 S-73 순위가 비었을 때 빈 안내와 기록 없음 안내를 보여 줘요', async () => {
@@ -192,7 +252,7 @@ test.each([false, 'timeout'])('NFR-06 S-73 연결 상태=%s이면 1초 안에 �
     expect(weeklyRanking).not.toHaveBeenCalled();
     jest.mocked(NetInfo.fetch).mockResolvedValue({ isConnected: true } as NetInfoState);
     await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
-    expect(await screen.findByLabelText('내 순위, 45위, 책산책, 4시간 15분, 나')).toBeOnTheScreen();
+    expect(await screen.findByLabelText('내 순위, 45위, 책산책, 4시간 15분')).toBeOnTheScreen();
 });
 
 test.each([{ route: 'consent', label: '동의하고 참여하기' }, { route: 'withdraw', label: '참여 중단하기' }])(
@@ -227,7 +287,7 @@ test('FR-15 S-73 조회 오류 후 재시도하면 순위를 다시 표시해요
     await renderRouter(routes, { initialUrl: '/ranking' });
     expect(await screen.findByRole('alert')).toHaveTextContent('순위를 불러오지 못했어요.');
     await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
-    expect(await screen.findByLabelText('내 순위, 45위, 책산책, 4시간 15분, 나')).toBeOnTheScreen();
+    expect(await screen.findByLabelText('내 순위, 45위, 책산책, 4시간 15분')).toBeOnTheScreen();
 });
 
 test('FR-15 S-74 계정 전환 후 도착한 응답은 새 계정 순위 캐시를 초기화하지 않아요', async () => {

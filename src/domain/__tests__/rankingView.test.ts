@@ -1,5 +1,5 @@
 import type { RankingEntry, WeeklyRankingResponse } from '../../api/types';
-import { aroundEntries, myRankingEntry, podiumTone, rankingRowLabel } from '../rankingView';
+import { aroundEntries, myRankingEntry, myRankingLabel, podiumTone, rankingRowLabel } from '../rankingView';
 
 const entry = (rank: number, me = false): RankingEntry => ({ rank, userId: `u-${rank}`, nickname: `독서가 ${rank}`, seconds: 12000, me });
 const top = (myRank?: number) => Array.from({ length: 30 }, (_, i) => entry(i + 1, i + 1 === myRank));
@@ -39,4 +39,8 @@ test('S-73 AOS#126 38위이면 서버가 준 주변 30명을 보여 줘요', () 
 test('S-73 AOS#126 스크린리더는 순위, 닉네임, 시간, 나 순서로 읽어요', () => {
     expect(rankingRowLabel({ ...entry(1, true), seconds: 12000 })).toBe('1위, 독서가 1, 3시간 20분, 나');
     expect(rankingRowLabel(entry(4))).toBe('4위, 독서가 4, 3시간 20분');
+});
+
+test('S-73 AOS#126 고정된 내 순위 줄은 "내 순위"로 시작하고 "나"를 두 번 읽지 않아요', () => {
+    expect(myRankingLabel({ ...entry(12, true), seconds: 12000 })).toBe('내 순위, 12위, 독서가 12, 3시간 20분');
 });

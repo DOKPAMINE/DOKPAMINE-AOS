@@ -5,10 +5,12 @@ import { colors, radii, sizes, spacing, typography } from '../theme';
 // S-73 · AOS#126 랭킹판 치수. 제목 줄의 칸 위치를 아래 줄과 맞추려고 한곳에서 계산한다.
 const spineWidth = 14; // 책등 두께
 const pageOffset = 4; // 뒤 종이가 비켜 난 거리(한 장마다)
-const ribbonWidth = 76;
+// 책갈피는 최소 폭만 두고 글자에 맞게 늘어난다(큰 글씨에서도 "Top 30"이 한 줄).
+export const ribbonMinWidth = 76;
 const notchDepth = 8; // 책갈피 위 끝 V자 홈 깊이
-const ribbonHeight = 44; // 안 고른 책갈피 높이(짧다)
-const ribbonHeightSelected = 60; // 고른 책갈피 높이(더 길다)
+const ribbonHeight = 44; // 안 고른 책갈피 최소 높이(짧다)
+// 고른 책갈피는 위 여백을 더 줘서 글씨 크기와 관계없이 이만큼 더 길다.
+const ribbonExtra = 16;
 // 줄 바깥 테두리 두 겹. 내 줄이면 두꺼운 하얀 테두리 + 그 바깥 얇은 진한 선으로 강조하고,
 // 다른 줄은 같은 두께의 빈 테두리를 둬서 모든 줄의 크기가 같다.
 const ringWidth = 1; // 바깥 진한 선
@@ -19,6 +21,9 @@ const cardBottom = 3;
 const rankWidth = 56;
 // 내 순위 줄과 목록 줄은 랭킹판 안쪽에서 같은 만큼 들어가 있다: 안쪽 칸 여백 + 바깥 테두리 + 카드 테두리.
 const rowInset = spacing.sm + outlineWidth + cardBorder;
+// 목록 칸 최소 높이: 줄 3개(줄 높이 + 위아래 바깥 테두리)와 줄 사이·칸 여백. 작은 폰·큰 글씨에서도 0이 되지 않는다.
+const rowHeight = sizes.button + outlineWidth * 2;
+export const wellMinHeight = rowHeight * 3 + spacing.sm * 2 + spacing.sm * 2;
 
 export const styles = StyleSheet.create({
     body: { ...typography.body, color: colors.brand.espresso },
@@ -49,15 +54,16 @@ export const styles = StyleSheet.create({
     },
     // 글자는 아래쪽에 둬서 위 끝 홈에 잘리지 않는다.
     ribbon: {
-        width: ribbonWidth, minHeight: ribbonHeight, alignItems: 'center', justifyContent: 'flex-end',
-        paddingTop: notchDepth + spacing.xs, paddingBottom: spacing.sm, paddingHorizontal: spacing.xs,
+        minWidth: ribbonMinWidth, minHeight: ribbonHeight, alignItems: 'center', justifyContent: 'flex-end',
+        paddingTop: notchDepth + spacing.xs, paddingBottom: spacing.sm, paddingHorizontal: spacing.md,
         backgroundColor: colors.brand.sand,
     },
-    ribbonSelected: { minHeight: ribbonHeightSelected, backgroundColor: colors.brand.espresso },
-    // 위 끝 V자 홈: 화면 배경색의 아래로 뾰족한 삼각형으로 가운데를 파낸다.
+    ribbonSelected: {
+        minHeight: ribbonHeight + ribbonExtra, paddingTop: notchDepth + spacing.xs + ribbonExtra, backgroundColor: colors.brand.espresso,
+    },
+    // 위 끝 V자 홈: 화면 배경색의 아래로 뾰족한 삼각형으로 가운데를 파낸다. 좌우 폭은 책갈피 실제 폭의 절반씩이다.
     ribbonNotch: {
-        position: 'absolute', top: 0, left: 0, width: 0, height: 0,
-        borderLeftWidth: ribbonWidth / 2, borderRightWidth: ribbonWidth / 2, borderTopWidth: notchDepth,
+        position: 'absolute', top: 0, left: 0, width: 0, height: 0, borderTopWidth: notchDepth,
         borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: colors.surface.paper,
     },
     // 선택은 색과 함께 굵기로도 구분한다.
@@ -70,7 +76,7 @@ export const styles = StyleSheet.create({
     timeColumn: { paddingRight: spacing.md, textAlign: 'right' },
     mine: { paddingHorizontal: spacing.sm },
     // 한 톤 진한 안쪽 칸. 순위 목록은 이 안에서만 스크롤된다.
-    well: { flex: 1, padding: spacing.sm, borderRadius: radii.button, backgroundColor: colors.surface.sandSoft },
+    well: { flex: 1, minHeight: wellMinHeight, padding: spacing.sm, borderRadius: radii.button, backgroundColor: colors.surface.sandSoft },
     listScroll: { flex: 1 },
     list: { gap: spacing.sm },
     notice: {
@@ -92,7 +98,8 @@ export const styles = StyleSheet.create({
     nickname: { ...typography.body, color: colors.brand.espresso, alignSelf: 'center' },
     myName: { ...typography.titleSmall },
     time: { ...typography.body, color: colors.brand.espresso, alignSelf: 'center', fontVariant: ['tabular-nums'] },
-    notes: { gap: spacing.xs },
+    // 목록 스크롤 맨 아래 안내 글
+    notes: { gap: spacing.xs, marginTop: spacing.sm },
     note: { ...typography.footnote, color: colors.text.muted },
 });
 
