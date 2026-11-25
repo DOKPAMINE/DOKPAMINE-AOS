@@ -6,11 +6,6 @@ export function withMine(text: string, mine: boolean): string {
     return mine ? `${text} (내 감상)` : text;
 }
 
-/** #113 S-70·S-76: 첫 줄의 책 제목 "『제목』". 내가 쓴 박스면 "『제목』 (내 감상)"이다. */
-export function bookTitleLine(bookTitle: string, mine: boolean): string {
-    return withMine(`『${bookTitle}』`, mine);
-}
-
 /**
  * #113 S-70 S-76: 독후감을 쓴 날(서버의 bodyWrittenAt)을 기기 시간대와 관계없이 KST 날짜로 보여 준다.
  * 화면 문구는 "2026. 11. 25.", 스크린리더는 "2026년 11월 25일"로 읽는다. 시각이 없거나 읽을 수 없으면 null이다.
@@ -148,14 +143,14 @@ export function previewText(text: string, max = 80): string {
 
 /**
  * #113 S-70·S-71: 박스의 스크린리더 문구. 화면 순서와 같게 읽는다.
- * S-70: 『제목』(내 감상) → 닉네임 → 감상 앞부분 → 날짜. 예: "『데미안』, 독자, 각자의 길을 찾는 이야기, 2026년 11월 25일에 쓴 독후감"
+ * S-70: 『제목』(내 감상) → 닉네임 → 감상 앞부분 → 날짜. 예: "『데미안』 내 감상, 독자, 각자의 길을 찾는 이야기, 2026년 11월 25일에 쓴 독후감"
  * S-71: 책 제목은 묶음 제목에서 보여 주므로 bookTitle 없이 닉네임(내 감상) → 감상 앞부분 → 날짜. 예: "독자 (내 감상), 각자의 길을 찾는 이야기"
  */
 export function loungeBoxLabel({ nickname, bookTitle, mine, text, date }: {
     nickname: string; bookTitle?: string; mine: boolean; text: string; date: { label: string } | null;
 }): string {
     return [
-        ...bookTitle === undefined ? [withMine(nickname, mine)] : [bookTitleLine(bookTitle, mine), nickname],
+        ...bookTitle === undefined ? [withMine(nickname, mine)] : [bookTitleLabel(bookTitle, mine), nickname],
         previewText(text),
         date ? `${date.label}에 쓴 독후감` : '',
     ].filter(Boolean).join(', ');
@@ -172,9 +167,16 @@ export function groupCover(reviews: readonly { coverUrl?: string | null; genre: 
 
 /**
  * #113 S-70·S-76: Noto Sans KR(Regular·Medium·Bold)의 『는 글자 칸(1em) 왼쪽 0.60em이 비어 있고, 한글은 약 0.03em이다.
- * 『로 시작하는 첫 줄을 그 차이(0.57em)만큼 왼쪽으로 당겨 아래 줄과 글자 왼쪽 끝을 맞춘다. 큰 글씨 설정(fontScale)만큼 함께 커진다.
+ * 『를 그 차이(0.57em)만큼 왼쪽으로 당겨 아래 줄과 글자 왼쪽 끝을 맞춘다. 큰 글씨 설정(fontScale)만큼 함께 커진다.
+ * 이 값은 Noto Sans KR 글꼴의 수치이므로, 글꼴을 불러오지 못해 기본 글꼴로 그릴 때는 당기지 않는다(0).
  */
 export const OPENING_BRACKET_INDENT_EM = 0.57;
-export function openingBracketIndent(fontSize: number, fontScale: number): number {
+export function openingBracketIndent(fontSize: number, fontScale: number, notoLoaded: boolean): number {
+    if (!notoLoaded) return 0;
     return Math.round(OPENING_BRACKET_INDENT_EM * fontSize * fontScale * 10) / 10;
+}
+
+/** #113 S-70·S-76: 『제목』 줄을 스크린리더가 한 번에 읽는 문구. 내가 쓴 박스면 "『데미안』 내 감상"이다. */
+export function bookTitleLabel(bookTitle: string, mine: boolean): string {
+    return mine ? `『${bookTitle}』 내 감상` : `『${bookTitle}』`;
 }

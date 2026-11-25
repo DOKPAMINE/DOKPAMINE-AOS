@@ -3,6 +3,7 @@ import { Dimensions, RefreshControl, StyleSheet, type RefreshControlProps } from
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
+import { isLoaded } from 'expo-font';
 import Lounge from '../../../app/(tabs)/lounge';
 import Search from '../../../app/lounge/search';
 import Detail from '../../../app/lounge/[id]';
@@ -18,6 +19,7 @@ jest.mock('../../api/endpoints', () => ({
     feedItem: jest.fn(), feedList: jest.fn(), feedUserBook: jest.fn(), likeReview: jest.fn(), searchBookReviews: jest.fn(), unlikeReview: jest.fn(),
 }));
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn() } }));
+jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), isLoaded: jest.fn() }));
 
 const base = { nickname: '독자', bookTitle: '데미안', bookAuthor: '헤르만 헤세', genre: '소설', likeCount: 2, likedByMe: false, mine: false };
 const reportNew: FeedItem = { ...base, id: 'review-new', userBookId: 'user-book-1', oneLine: null,
@@ -69,6 +71,8 @@ beforeEach(() => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
     onlineManager.setOnline(true);
     jest.mocked(NetInfo.fetch).mockResolvedValue({ isConnected: true, isInternetReachable: true } as NetInfoState);
+    // 앱은 Noto Sans KR을 불러온 뒤 화면을 그린다.
+    jest.mocked(isLoaded).mockReturnValue(true);
     jest.mocked(feedList).mockResolvedValue([reportNew, otherBox]);
     jest.mocked(feedUserBook).mockResolvedValue([reportNew, oneLine, legacy]);
     jest.mocked(feedItem).mockImplementation(async id => [reportNew, oneLine, legacy, otherBox].find(item => item.id === id)!);
@@ -82,7 +86,7 @@ test('#113 FR-08 S-70 최근 공개 감상은 서버 순서대로 사람의 책 
     const boxes = await screen.findAllByHintText(openBox);
     expect(boxes.map(labelOf)).toEqual([boxName, '『어린 왕자』, 산책, 여우의 말이 오래 남았어요., 2026년 11월 20일에 쓴 독후감']);
     expect(texts(within(boxes[0]).getByTestId('lounge-box-text')).map(text => text.props.children))
-        .toEqual(['『데미안』', '독자', reportNew.body, '2026. 11. 25.']);
+        .toEqual(['『', '데미안', '』', '독자', reportNew.body, '2026. 11. 25.']);
     // 대표 감상에 한줄평이 있어도 박스에는 독후감을 보여 주고, 박스 전체로 오해할 좋아요 수는 보여 주지 않는다.
     expect(screen.getByText(otherBox.body!)).toBeOnTheScreen();
     expect(screen.queryByText(otherBox.oneLine!)).toBeNull();
@@ -389,6 +393,46 @@ describe('#113 FR-16 S-71 맨 위 검색창', () => {
     });
 
     function groupsForEmpty(): BookReviewSearchResponse { return []; }
+
+    // 최신순이면 최근 독자 → 인기 독자, 좋아요 많은 순이면 인기 독자 → 최근 독자다.
+    const sortGroups: BookReviewSearchResponse = [{ bookKey: 'isbn:9788937460449', bookTitle: '데미안', bookAuthor: '헤르만 헤세', reviews: [
+        { ...oneLine, id: 'review-recent', userBookId: 'user-book-recent', nickname: '최근 독자', publishedAt: '2026-11-24T00:00:00Z', likeCount: 0 },
+        { ...oneLine, id: 'review-popular', userBookId: 'user-book-popular', nickname: '인기 독자', publishedAt: '2026-10-01T00:00:00Z', likeCount: 9 },
+    ] }];
+    const boxOrder = () => screen.getAllByHintText(openBox).map(box => texts(within(box).getByTestId('lounge-box-text'))[0].props.children);
+    const latestSelected = () => screen.getByRole('radio', { name: '최신순' }).props.accessibilityState?.selected;
+
+    test('같은 검색어로 다시 검색하면 결과를 다시 받아 오고 고른 정렬은 그대로예요', async () => {
+        jest.mocked(searchBookReviews).mockResolvedValueOnce(sortGroups)
+            .mockResolvedValue([{ ...sortGroups[0], reviews: [sortGroups[0].reviews[1]] }]);
+        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
+        await screen.findByText('2명의 감상');
+        expect(searchBookReviews).toHaveBeenCalledTimes(1);
+        await fireEvent.press(screen.getByRole('radio', { name: '좋아요 많은 순' }));
+        // 앞뒤 공백만 다른 같은 검색어다.
+        await fireEvent.changeText(screen.getByLabelText('책 이름'), ' 데미안 ');
+        await fireEvent.press(screen.getByRole('button', { name: '책 감상 검색' }));
+        await waitFor(() => expect(searchBookReviews).toHaveBeenCalledTimes(2));
+        expect(searchBookReviews).toHaveBeenLastCalledWith('데미안');
+        expect(await screen.findByText('1명의 감상')).toBeOnTheScreen();
+        expect(screen.getByText('“데미안” 검색 결과')).toBeOnTheScreen();
+        expect(latestSelected()).toBe(false);
+    });
+
+    test('검색어가 바뀌면 정렬을 최신순으로 되돌려요', async () => {
+        jest.mocked(searchBookReviews).mockResolvedValue(sortGroups);
+        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
+        await screen.findByText('2명의 감상');
+        expect(boxOrder()).toEqual(['최근 독자', '인기 독자']);
+        await fireEvent.press(screen.getByRole('radio', { name: '좋아요 많은 순' }));
+        expect(boxOrder()).toEqual(['인기 독자', '최근 독자']);
+        await fireEvent.changeText(screen.getByLabelText('책 이름'), '데미안 개정판');
+        await fireEvent(screen.getByLabelText('책 이름'), 'submitEditing');
+        expect(await screen.findByText('“데미안 개정판” 검색 결과')).toBeOnTheScreen();
+        await screen.findByText('2명의 감상');
+        expect(latestSelected()).toBe(true);
+        expect(boxOrder()).toEqual(['최근 독자', '인기 독자']);
+    });
 });
 
 test('#113 FR-16 S-70 검색해서 결과 화면으로 넘어가면 라운지 검색창을 비워요', async () => {
@@ -443,8 +487,6 @@ describe('#113 S-70 S-76 책 표지', () => {
 describe('#113 S-70 S-71 S-76 표지 왼쪽·글 오른쪽 배치', () => {
     const longTitle = '데미안: 에밀 싱클레어의 젊은 날 이야기 완역 개정판';
     const longItem: FeedItem = { ...reportNew, nickname: '아주긴닉네임을가진독자님', bookTitle: longTitle, body: '긴 독후감 '.repeat(200), coverUrl: null };
-    // 『 왼쪽 빈 공간만큼 첫 줄을 당기는 거리. jest의 화면 글씨 배율(fontScale)을 그대로 쓴다.
-    const indentFor = (fontSize: number) => openingBracketIndent(fontSize, Dimensions.get('window').fontScale);
     const expectScalableWrapping = (node: Node) => {
         // 글 칸은 표지 옆 남은 너비만 쓰고(flex 1, minWidth 0) 그 안에서 줄바꿈한다.
         expect(styleOf(node)).toMatchObject({ flex: 1, minWidth: 0 });
@@ -463,16 +505,13 @@ describe('#113 S-70 S-71 S-76 표지 왼쪽·글 오른쪽 배치', () => {
         expect(styleOf(within(box).getByTestId('book-cover-default'))).toMatchObject({ width: 44, height: 66 });
         const column = within(box).getByTestId('lounge-box-text');
         expectScalableWrapping(column);
-        const [title, nickname, preview, date] = texts(column);
-        expect(title).toHaveTextContent(`『${longTitle}』`);
+        const [open, title, close, nickname, preview, date] = texts(column);
+        expect([open, title, close].map(text => text.props.children)).toEqual(['『', longTitle, '』']);
         expect(nickname).toHaveTextContent('아주긴닉네임을가진독자님');
-        // 제목·닉네임·날짜는 줄 수를 제한하지 않아 잘리지 않고, 감상만 앞부분 3줄로 줄인다.
-        for (const text of [title, nickname, date]) expect(text.props.numberOfLines).toBeUndefined();
+        // 닉네임·날짜는 줄 수를 제한하지 않아 잘리지 않고, 감상은 앞부분 3줄로 줄인다.
+        for (const text of [nickname, date]) expect(text.props.numberOfLines).toBeUndefined();
         expect(preview.props.numberOfLines).toBe(3);
         expect(date).toHaveTextContent('2026. 11. 25.');
-        // 『 앞 빈 공간만큼 제목 줄만 왼쪽으로 당겨 아래 줄과 글자 왼쪽 끝을 맞춘다.
-        expect(styleOf(title).marginLeft).toBe(-indentFor(16));
-        for (const text of [nickname, preview, date]) expect(styleOf(text).marginLeft).toBeUndefined();
     });
 
     test('S-70 스크린리더는 『제목』 → 닉네임 → 감상 → 날짜 순서로 읽고, 긴 감상은 앞부분만 읽어요', async () => {
@@ -481,11 +520,11 @@ describe('#113 S-70 S-71 S-76 표지 왼쪽·글 오른쪽 배치', () => {
         const box = await screen.findByHintText(openBox);
         expect(labelOf(box)).toBe(`『${longTitle}』, 아주긴닉네임을가진독자님, ${previewText(longItem.body!)}, 2026년 11월 25일에 쓴 독후감`);
         const mineBox = screen.getByHintText('감상 상세를 열어요');
-        expect(labelOf(mineBox)).toBe(`『데미안』 (내 감상), 독자, ${reportNew.body}, 2026년 11월 25일에 쓴 독후감`);
-        expect(texts(within(mineBox).getByTestId('lounge-box-text'))[0]).toHaveTextContent('『데미안』 (내 감상)');
+        expect(labelOf(mineBox)).toBe(`『데미안』 내 감상, 독자, ${reportNew.body}, 2026년 11월 25일에 쓴 독후감`);
+        expect(within(mineBox).getByTestId('bracket-mine')).toHaveTextContent('(내 감상)');
     });
 
-    test('S-71 검색 박스는 표지 없이 글 칸만 두고 칸 안에서 줄바꿈해요', async () => {
+    test('S-71 검색 박스는 표지 없이 글 칸만 두고 칸 안에서 줄바꿈하며, 묶음 제목은 1줄까지 보여요', async () => {
         jest.mocked(searchBookReviews).mockResolvedValue([{ bookKey: 'text:long', bookTitle: longTitle, bookAuthor: '헤르만 헤세', reviews: [longItem] }]);
         await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
         const box = await screen.findByHintText(openBox);
@@ -493,40 +532,79 @@ describe('#113 S-70 S-71 S-76 표지 왼쪽·글 오른쪽 배치', () => {
         const column = within(box).getByTestId('lounge-box-text');
         expectScalableWrapping(column);
         expect(texts(column)[0]).toHaveTextContent('아주긴닉네임을가진독자님');
-        expectScalableWrapping(screen.getByTestId('book-group-header-text'));
+        const header = screen.getByTestId('book-group-header-text');
+        expectScalableWrapping(header);
+        const [groupTitle] = texts(header);
+        expect(groupTitle).toHaveTextContent(longTitle);
+        expect(groupTitle.props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'tail', accessibilityLabel: longTitle });
     });
 
-    test('S-76 위쪽은 왼쪽 표지, 오른쪽 칸에 『제목』, 닉네임, 저자를 두고 줄바꿈해요', async () => {
+    test('S-76 위쪽은 왼쪽 표지, 오른쪽 칸에 『제목』 (내 감상), 닉네임, 저자를 두고 줄바꿈해요', async () => {
         jest.mocked(feedUserBook).mockResolvedValue([{ ...longItem, mine: true }, oneLine]);
         await renderRouter(routes, { initialUrl: '/lounge/user-books/user-book-1' });
         const column = await screen.findByTestId('user-book-header-text');
         expectScalableWrapping(column);
-        const [title, nickname, author] = texts(column);
-        expect(title).toHaveTextContent(`『${longTitle}』 (내 감상)`);
-        expect(title.props.accessibilityRole).toBe('header');
-        expect(title.props.numberOfLines).toBeUndefined();
-        expect(styleOf(title).marginLeft).toBe(-indentFor(18));
+        const [open, title, close, mine, nickname, author] = texts(column);
+        expect([open, title, close, mine].map(text => text.props.children)).toEqual(['『', longTitle, '』', ' (내 감상)']);
         expect(nickname).toHaveTextContent('아주긴닉네임을가진독자님');
         expect(author).toHaveTextContent('헤르만 헤세');
         expect(styleOf(screen.getByTestId('book-cover-default'))).toMatchObject({ width: 66, height: 99 });
         expect(styleOf(screen.getByTestId('user-book-header'))).toMatchObject({ flexDirection: 'row' });
     });
+});
 
-    test('S-76 제목이 여러 줄이면 첫 줄만 당기고 나머지 줄은 제자리에 두며, 스크린리더는 한 문장으로 읽어요', async () => {
-        jest.mocked(feedUserBook).mockResolvedValue([longItem, oneLine]);
+describe('#113 S-70 S-76 『제목』 줄(BracketTitle)', () => {
+    const longTitle = '데미안: 에밀 싱클레어의 젊은 날 이야기 완역 개정판';
+    const indentFor = (fontSize: number) => openingBracketIndent(fontSize, Dimensions.get('window').fontScale, true);
+    const pieces = (root: Node) => ({
+        row: root,
+        open: within(root).getByTestId('bracket-open'),
+        title: within(root).getByTestId('bracket-title'),
+        close: within(root).getByTestId('bracket-close'),
+        mine: within(root).queryByTestId('bracket-mine'),
+    });
+
+    test('S-70 박스는 한 줄 안에 『, 제목, 』, (내 감상)을 두고 『만 당기며, 제목만 1줄로 줄여요', async () => {
+        jest.mocked(feedList).mockResolvedValue([{ ...reportNew, bookTitle: longTitle, mine: true }]);
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        const box = await screen.findByHintText(openBox);
+        const { row, open, title, close, mine } = pieces(within(box).getByLabelText(`『${longTitle}』 내 감상`));
+        expect(styleOf(row)).toMatchObject({ flexDirection: 'row' });
+        // 『만 Noto Sans KR의 빈 공간만큼 왼쪽으로 당기고, 나머지는 당기지 않는다.
+        expect(styleOf(open).marginLeft).toBe(-indentFor(16));
+        for (const text of [title, close, mine!]) expect(styleOf(text).marginLeft).toBeUndefined();
+        // 제목만 줄어들고 1줄을 넘으면 …으로 줄인다. 』와 (내 감상)은 줄지 않아 항상 보인다.
+        expect(styleOf(title)).toMatchObject({ flexShrink: 1 });
+        expect(title.props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'tail' });
+        for (const text of [open, close, mine!]) {
+            expect(styleOf(text)).toMatchObject({ flexShrink: 0 });
+            expect(text.props.numberOfLines).toBeUndefined();
+        }
+        expect(mine).toHaveTextContent('(내 감상)');
+    });
+
+    test('S-76 위쪽 제목은 2줄까지 보이고, 스크린리더는 "『제목』 내 감상"을 제목으로 한 번에 읽어요', async () => {
+        jest.mocked(feedUserBook).mockResolvedValue([{ ...reportNew, bookTitle: longTitle, mine: true }]);
         await renderRouter(routes, { initialUrl: '/lounge/user-books/user-book-1' });
-        const column = await screen.findByTestId('user-book-header-text');
-        const title = texts(column)[0];
-        // 한 줄이면 나누지 않는다.
-        await fireEvent(title, 'textLayout', { nativeEvent: { lines: [{ text: `『${longTitle}』` }] } });
-        expect(texts(column)[0]).toHaveTextContent(`『${longTitle}』`);
-        await fireEvent(texts(column)[0], 'textLayout', { nativeEvent: { lines: [{ text: '『데미안: 에밀 싱클레어의 ' }, { text: '젊은 날 이야기 완역 개정판』' }] } });
-        const [first, rest, nickname] = texts(column);
-        expect(first).toHaveTextContent('『데미안: 에밀 싱클레어의');
-        expect(styleOf(first).marginLeft).toBe(-indentFor(18));
-        expect(rest).toHaveTextContent('젊은 날 이야기 완역 개정판』');
-        expect(styleOf(rest).marginLeft).toBeUndefined();
-        expect(nickname).toHaveTextContent('아주긴닉네임을가진독자님');
-        expect(screen.getByRole('header', { name: `『${longTitle}』` })).toBeOnTheScreen();
+        const header = await screen.findByRole('header', { name: `『${longTitle}』 내 감상` });
+        expect(header.props.accessible).toBe(true);
+        const { open, title } = pieces(header);
+        expect(title.props).toMatchObject({ numberOfLines: 2, ellipsizeMode: 'tail' });
+        expect(styleOf(open).marginLeft).toBe(-indentFor(18));
+    });
+
+    test('내가 쓴 박스가 아니면 (내 감상)을 두지 않고 스크린리더도 『제목』만 읽어요', async () => {
+        await renderRouter(routes, { initialUrl: '/lounge/user-books/user-book-1' });
+        const header = await screen.findByRole('header', { name: '『데미안』' });
+        expect(pieces(header).mine).toBeNull();
+    });
+
+    test('Noto Sans KR을 불러오지 못했으면 『를 당기지 않아요', async () => {
+        jest.mocked(isLoaded).mockReturnValue(false);
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        const [box] = await screen.findAllByHintText(openBox);
+        expect(styleOf(within(box).getByTestId('bracket-open')).marginLeft).toBe(0);
+        // 박스 제목(16sp Medium) 글꼴로 확인한다.
+        expect(isLoaded).toHaveBeenCalledWith('NotoSansKR_500Medium');
     });
 });

@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import type { FeedItem } from '../api/types';
-import { bookTitleLine, loungeBoxLabel, withMine, writtenDate } from '../domain/loungeRules';
+import { loungeBoxLabel, withMine, writtenDate } from '../domain/loungeRules';
 import { BookCover } from '../shelf/BookCover';
 import { BracketTitle } from './BracketTitle';
 import { styles } from './styles';
@@ -32,7 +32,8 @@ export function LoungeBox({ item, showBook = true }: { item: FeedItem; showBook?
             {showBook ? <BookCover key={item.coverUrl ?? 'none'} uri={item.coverUrl ?? null} genre={item.genre} width={BOX_COVER_WIDTH} /> : null}
             <View testID="lounge-box-text" style={styles.rowText}>
                 {showBook ? <>
-                    <BracketTitle text={bookTitleLine(item.bookTitle, item.mine)} style={styles.titleSmall} />
+                    {/* 제목은 1줄까지 보이고 넘치면 …으로 줄인다. 』와 (내 감상)은 항상 보인다. */}
+                    <BracketTitle title={item.bookTitle} mine={item.mine} style={styles.titleSmall} maxLines={1} />
                     <Text style={styles.muted}>{item.nickname}</Text>
                 </> : <Text style={styles.titleSmall}>{withMine(item.nickname, item.mine)}</Text>}
                 <Text style={styles.body} numberOfLines={3}>{text}</Text>

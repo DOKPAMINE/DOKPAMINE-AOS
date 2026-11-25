@@ -1,8 +1,8 @@
-import { bookTitleLine, boxRepresentative, groupCover, groupReviewBoxes, loungeBoxLabel, OPENING_BRACKET_INDENT_EM, openingBracketIndent, previewText, sortReviewBoxes, splitUserBookReviews, userBookReportHeadings, withMine, writtenDate } from '../loungeRules';
+import { bookTitleLabel, boxRepresentative, groupCover, groupReviewBoxes, loungeBoxLabel, OPENING_BRACKET_INDENT_EM, openingBracketIndent, previewText, sortReviewBoxes, splitUserBookReviews, userBookReportHeadings, withMine, writtenDate } from '../loungeRules';
 
-test('#113 S-70 S-76 첫 줄은 "『책 제목』"이고 내가 쓴 박스면 "(내 감상)"을 붙여요', () => {
-    expect(bookTitleLine('데미안', false)).toBe('『데미안』');
-    expect(bookTitleLine('데미안', true)).toBe('『데미안』 (내 감상)');
+test('#113 S-70 S-76 스크린리더는 『제목』 줄을 "『제목』 내 감상"으로 한 번에 읽어요', () => {
+    expect(bookTitleLabel('데미안', false)).toBe('『데미안』');
+    expect(bookTitleLabel('데미안', true)).toBe('『데미안』 내 감상');
 });
 
 test.each([
@@ -106,11 +106,11 @@ test('#113 S-70 S-71 스크린리더용 감상 앞부분은 공백을 한 칸으
     expect(previewText('📚'.repeat(81))).toBe(`${'📚'.repeat(80)}…`);
 });
 
-test('#113 S-70 박스는 『제목』 → 닉네임 → 감상 → 날짜 순서로 읽고, 내 박스면 제목 뒤에 "(내 감상)"을 붙여요', () => {
+test('#113 S-70 박스는 『제목』 → 닉네임 → 감상 → 날짜 순서로 읽고, 내 박스면 제목 뒤에 "내 감상"을 붙여요', () => {
     expect(loungeBoxLabel({ nickname: '독자', bookTitle: '데미안', mine: false, text: '오래 남았어요.', date: { label: '2026년 11월 25일' } }))
         .toBe('『데미안』, 독자, 오래 남았어요., 2026년 11월 25일에 쓴 독후감');
     expect(loungeBoxLabel({ nickname: '독자', bookTitle: '데미안', mine: true, text: '한줄평', date: null }))
-        .toBe('『데미안』 (내 감상), 독자, 한줄평');
+        .toBe('『데미안』 내 감상, 독자, 한줄평');
     expect(loungeBoxLabel({ nickname: '독자', bookTitle: '데미안', mine: false, text: ' ', date: null })).toBe('『데미안』, 독자');
 });
 
@@ -132,8 +132,13 @@ test('#113 S-71 묶음 표지는 coverUrl이 있는 첫 감상의 것이고, 없
 });
 
 test.each([[16, 1, 9.1], [18, 1, 10.3], [16, 2, 18.2], [18, 1.3, 13.3]])(
-    '#113 S-70 S-76 『 왼쪽 빈 공간 0.57em만큼 첫 줄을 당겨요: %ssp, 글씨 배율 %s → %sdp', (fontSize, fontScale, indent) => {
+    '#113 S-70 S-76 Noto Sans KR이면 『를 왼쪽 빈 공간 0.57em만큼 당겨요: %ssp, 글씨 배율 %s → %sdp', (fontSize, fontScale, indent) => {
         expect(OPENING_BRACKET_INDENT_EM).toBe(0.57);
-        expect(openingBracketIndent(fontSize, fontScale)).toBe(indent);
+        expect(openingBracketIndent(fontSize, fontScale, true)).toBe(indent);
     },
 );
+
+test('#113 S-70 S-76 Noto Sans KR을 불러오지 못했으면 『를 당기지 않아요', () => {
+    expect(openingBracketIndent(16, 1, false)).toBe(0);
+    expect(openingBracketIndent(18, 2, false)).toBe(0);
+});

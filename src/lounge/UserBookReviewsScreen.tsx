@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { ApiError } from '../api/errors';
 import type { FeedItem } from '../api/types';
 import { Screen, SecondaryButton, StateView } from '../components';
-import { bookTitleLine, splitUserBookReviews, userBookReportHeadings } from '../domain/loungeRules';
+import { splitUserBookReviews, userBookReportHeadings } from '../domain/loungeRules';
 import { BookCover } from '../shelf/BookCover';
 import { sizes } from '../theme';
 import { BracketTitle } from './BracketTitle';
@@ -56,7 +56,8 @@ export function UserBookReviewsScreen({ userBookId }: { userBookId: string }) {
                                     <View testID="user-book-header" style={styles.row}>
                                         <BookCover key={first.coverUrl ?? 'none'} uri={first.coverUrl ?? null} genre={first.genre} width={sizes.minTouch * 1.5} />
                                         <View testID="user-book-header-text" style={styles.rowText}>
-                                            <BracketTitle accessibilityRole="header" text={bookTitleLine(first.bookTitle, first.mine)} style={styles.heading} />
+                                            {/* 제목은 2줄까지 보이고 넘치면 …으로 줄인다. */}
+                                            <BracketTitle testID="user-book-title" accessibilityRole="header" title={first.bookTitle} mine={first.mine} style={styles.heading} maxLines={2} />
                                             <Text style={styles.body}>{first.nickname}</Text>
                                             <Text style={styles.muted}>{first.bookAuthor}</Text>
                                         </View>
