@@ -69,8 +69,8 @@ function BookGroup({ group, order, onOrderChange }: {
             <View testID="book-group-header" style={styles.row}>
                 <BookCover key={cover.uri ?? 'none'} uri={cover.uri} genre={cover.genre} width={sizes.minTouch * 1.5} />
                 <View testID="book-group-header-text" style={styles.rowText}>
-                    {/* 책 제목은 1줄까지 보이고 넘치면 …으로 줄인다. 스크린리더는 전체 제목을 읽는다. */}
-                    <Text accessibilityRole="header" accessibilityLabel={group.bookTitle} numberOfLines={1} ellipsizeMode="tail" style={styles.heading}>{group.bookTitle}</Text>
+                    {/* 책 제목은 2줄까지 보이고 넘치면 …으로 줄인다. 스크린리더는 전체 제목을 읽는다. */}
+                    <Text accessibilityRole="header" accessibilityLabel={group.bookTitle} numberOfLines={2} ellipsizeMode="tail" style={styles.heading}>{group.bookTitle}</Text>
                     <Text style={styles.muted}>{group.bookAuthor}{group.isbn ? ` · ISBN ${group.isbn}` : ''}</Text>
                 </View>
             </View>

@@ -524,7 +524,7 @@ describe('#113 S-70 S-71 S-76 표지 왼쪽·글 오른쪽 배치', () => {
         expect(within(mineBox).getByTestId('bracket-mine')).toHaveTextContent('(내 감상)');
     });
 
-    test('S-71 검색 박스는 표지 없이 글 칸만 두고 칸 안에서 줄바꿈하며, 묶음 제목은 1줄까지 보여요', async () => {
+    test('S-71 검색 박스는 표지 없이 글 칸만 두고 칸 안에서 줄바꿈하며, 묶음 제목은 2줄까지 보여요', async () => {
         jest.mocked(searchBookReviews).mockResolvedValue([{ bookKey: 'text:long', bookTitle: longTitle, bookAuthor: '헤르만 헤세', reviews: [longItem] }]);
         await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
         const box = await screen.findByHintText(openBox);
@@ -536,7 +536,7 @@ describe('#113 S-70 S-71 S-76 표지 왼쪽·글 오른쪽 배치', () => {
         expectScalableWrapping(header);
         const [groupTitle] = texts(header);
         expect(groupTitle).toHaveTextContent(longTitle);
-        expect(groupTitle.props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'tail', accessibilityLabel: longTitle });
+        expect(groupTitle.props).toMatchObject({ numberOfLines: 2, ellipsizeMode: 'tail', accessibilityLabel: longTitle });
     });
 
     test('S-76 위쪽은 왼쪽 표지, 오른쪽 칸에 『제목』 (내 감상), 닉네임, 저자를 두고 줄바꿈해요', async () => {
