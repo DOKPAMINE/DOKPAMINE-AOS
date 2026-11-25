@@ -16,6 +16,9 @@ export const styles = StyleSheet.create({
         minHeight: sizes.minTouch, gap: spacing.sm, paddingVertical: spacing.lg,
         borderBottomWidth: 1, borderBottomColor: colors.line.border,
     },
+    // #113 표지 왼쪽·글 오른쪽. 글 칸은 남은 너비만 차지하고 그 안에서 줄바꿈한다.
+    row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+    rowText: { flex: 1, minWidth: 0, gap: spacing.sm },
     card: { alignItems: 'flex-start' },
     cardLink: { alignSelf: 'stretch', minHeight: sizes.minTouch, gap: spacing.sm },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

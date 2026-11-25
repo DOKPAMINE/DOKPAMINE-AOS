@@ -179,7 +179,7 @@ test('FR-08 S-70 조회 오류는 재시도하면 최근 감상을 표시해요'
     await renderRouter(routes, { initialUrl: '/lounge' });
     expect(await screen.findByRole('alert')).toHaveTextContent('서버에 연결하지 못했어요.');
     await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
-    expect(await screen.findByRole('button', { name: '독자 · 『데미안』, 감상 모음 보기' })).toBeOnTheScreen();
+    expect(await screen.findByRole('button', { name: '독자 · 『데미안』, 각자의 길을 찾는 이야기가 오래 남았어요.' })).toBeOnTheScreen();
 });
 
 test('FR-08 FR-09 S-70 S-72 좋아요 전에 취소한 최초 목록 조회는 다시 시작해요', async () => {
@@ -200,7 +200,7 @@ test('FR-08 FR-09 S-70 S-72 좋아요 전에 취소한 최초 목록 조회는 �
 
 describe('#91 라운지 새로고침', () => {
     const removed = { ...item, id: 'review-removed', nickname: '지운 독자' };
-    const removedRow = { name: '지운 독자 · 『데미안』, 감상 모음 보기' };
+    const removedRow = { name: '지운 독자 · 『데미안』, 각자의 길을 찾는 이야기가 오래 남았어요.' };
     const tabRoutes = {
         '(tabs)/_layout': () => <QueryClientProvider client={client}><Tabs>
             <Tabs.Screen name="lounge" /><Tabs.Screen name="shelf" />
@@ -220,7 +220,7 @@ describe('#91 라운지 새로고침', () => {
         await act(async () => router.navigate('/lounge'));
         await waitFor(() => expect(screen.queryByRole('button', removedRow)).toBeNull());
         expect(feedList).toHaveBeenCalledTimes(2);
-        expect(screen.getByRole('button', { name: '독자 · 『데미안』, 감상 모음 보기' })).toBeOnTheScreen();
+        expect(screen.getByRole('button', { name: '독자 · 『데미안』, 각자의 길을 찾는 이야기가 오래 남았어요.' })).toBeOnTheScreen();
     });
 
     test('S-70 목록을 아래로 당기면 서버에서 다시 받아요', async () => {
@@ -267,7 +267,7 @@ test('#91 S-70 다시 받는 중에 아래로 당겨도 진행 중인 요청을 
     jest.mocked(feedList).mockResolvedValueOnce([item, removed])
         .mockImplementationOnce(() => new Promise<FeedItem[]>(done => { resolve = done; }));
     await renderRouter(routes, { initialUrl: '/lounge' });
-    expect(await screen.findByRole('button', { name: '지운 독자 · 『데미안』, 감상 모음 보기' })).toBeOnTheScreen();
+    expect(await screen.findByRole('button', { name: '지운 독자 · 『데미안』, 각자의 길을 찾는 이야기가 오래 남았어요.' })).toBeOnTheScreen();
     // 목록이 있는 상태에서 다시 받는 중(탭 복귀·동기화 후 등)에 당긴다. TanStack Query는 데이터가 있을 때만 진행 중인 요청을 취소한다.
     await act(async () => { void client.refetchQueries({ queryKey: loungeKeys.feed }); });
     await waitFor(() => expect(feedList).toHaveBeenCalledTimes(2));
@@ -276,7 +276,7 @@ test('#91 S-70 다시 받는 중에 아래로 당겨도 진행 중인 요청을 
     expect(pull().refreshing).toBe(true);
     expect(feedList).toHaveBeenCalledTimes(2);
     await act(async () => resolve([item]));
-    await waitFor(() => expect(screen.queryByRole('button', { name: '지운 독자 · 『데미안』, 감상 모음 보기' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('button', { name: '지운 독자 · 『데미안』, 각자의 길을 찾는 이야기가 오래 남았어요.' })).toBeNull());
     await waitFor(() => expect(pull().refreshing).toBe(false));
     expect(feedList).toHaveBeenCalledTimes(2);
 });

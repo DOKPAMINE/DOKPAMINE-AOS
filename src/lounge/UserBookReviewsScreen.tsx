@@ -50,10 +50,14 @@ export function UserBookReviewsScreen({ userBookId }: { userBookId: string }) {
                         : result.isPending ? <StateView kind="loading" />
                             : !first ? <StateView kind="empty" message="아직 공개된 감상이 없어요" /> : (
                                 <View style={styles.section}>
-                                    {/* 표지가 없거나 불러오지 못하면 책장의 기본 표지를 보여 준다. */}
-                                    <BookCover key={first.coverUrl ?? 'none'} uri={first.coverUrl ?? null} genre={first.genre} width={sizes.minTouch * 2} />
-                                    <Text accessibilityRole="header" style={styles.heading}>{loungeBoxHeading(first.nickname, first.bookTitle)}</Text>
-                                    <Text style={styles.muted}>{first.bookAuthor} · {first.genre}{first.mine ? ' · 내 감상' : ''}</Text>
+                                    {/* 박스와 같게 왼쪽에 표지(없거나 불러오지 못하면 책장의 기본 표지), 오른쪽 칸에 닉네임·제목과 저자를 둔다. */}
+                                    <View testID="user-book-header" style={styles.row}>
+                                        <BookCover key={first.coverUrl ?? 'none'} uri={first.coverUrl ?? null} genre={first.genre} width={sizes.minTouch * 1.5} />
+                                        <View testID="user-book-header-text" style={styles.rowText}>
+                                            <Text accessibilityRole="header" style={styles.heading}>{loungeBoxHeading(first.nickname, first.bookTitle)}</Text>
+                                            <Text style={styles.muted}>{first.bookAuthor} · {first.genre}{first.mine ? ' · 내 감상' : ''}</Text>
+                                        </View>
+                                    </View>
                                     {oneLines.length > 0 ? <>
                                         <Text accessibilityRole="header" style={styles.heading}>한줄평</Text>
                                         {oneLines.map(item => <ReviewCard key={item.id} item={item} userBookId={userBookId} kind="oneLine" />)}

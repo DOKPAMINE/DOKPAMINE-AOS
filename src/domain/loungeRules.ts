@@ -133,3 +133,24 @@ export function userBookReportHeadings(reports: readonly Pick<BoxReview, 'id' | 
         return [report.id, time === null ? { text: `독후감 ${number}`, label: `독후감 ${number}` } : reportHeading(number, time)];
     }));
 }
+
+/** #113 S-70·S-71: 스크린리더가 읽는 감상 앞부분. 공백을 한 칸으로 줄이고 max자를 넘으면 줄임표를 붙인다. */
+export function previewText(text: string, max = 80): string {
+    const compact = text.replace(/\s+/g, ' ').trim();
+    const chars = Array.from(compact);
+    return chars.length > max ? `${chars.slice(0, max).join('').trimEnd()}…` : compact;
+}
+
+/**
+ * #113 S-70·S-71: 박스의 스크린리더 문구. 화면 순서와 같게 닉네임·제목 → 감상 앞부분 → 날짜 순서로 읽는다.
+ * 예: "독자 · 『데미안』, 각자의 길을 찾는 이야기, 2026년 11월 25일에 쓴 독후감"
+ */
+export function loungeBoxLabel({ nickname, bookTitle, mine, text, date }: {
+    nickname: string; bookTitle: string; mine: boolean; text: string; date: { label: string } | null;
+}): string {
+    return [
+        `${loungeBoxHeading(nickname, bookTitle)}${mine ? ', 내 감상' : ''}`,
+        previewText(text),
+        date ? `${date.label}에 쓴 독후감` : '',
+    ].filter(Boolean).join(', ');
+}

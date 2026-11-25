@@ -1,5 +1,5 @@
 import { router, Slot, Stack } from 'expo-router';
-import { RefreshControl, type RefreshControlProps } from 'react-native';
+import { RefreshControl, StyleSheet, type RefreshControlProps } from 'react-native';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
@@ -11,6 +11,7 @@ import { feedItem, feedList, feedUserBook, likeReview, searchBookReviews, unlike
 import { ApiError } from '../../api/errors';
 import type { FeedItem } from '../../api/types';
 import { connectLoungeSyncRefresh, loungeKeys } from '../queries';
+import { previewText } from '../../domain/loungeRules';
 
 jest.mock('../../api/endpoints', () => ({
     feedItem: jest.fn(), feedList: jest.fn(), feedUserBook: jest.fn(), likeReview: jest.fn(), searchBookReviews: jest.fn(), unlikeReview: jest.fn(),
@@ -26,7 +27,8 @@ const legacy: FeedItem = { ...base, id: 'review-legacy', userBookId: 'user-book-
 const otherBox: FeedItem = { ...base, id: 'review-other', userBookId: 'user-book-2', nickname: '산책', bookTitle: '어린 왕자',
     bookAuthor: '생텍쥐페리', oneLine: '어른이 되어 다시 읽은 책', body: '여우의 말이 오래 남았어요.', bodyWrittenAt: '2026-11-20T01:00:00Z', likeCount: 9 };
 
-const boxName = '독자 · 『데미안』, 2026년 11월 25일에 쓴 독후감, 감상 모음 보기';
+const boxName = '독자 · 『데미안』, 두 번째로 읽으니 싱클레어가 다르게 보였어요., 2026년 11월 25일에 쓴 독후감';
+const openBox = '감상 모음을 열어요';
 const removedMessage = '삭제됐거나 비공개로 바뀐 감상이에요.';
 const offlineMessage = '인터넷에 연결되어 있지 않아요. 연결되면 다시 시도해 주세요.';
 const notFound = () => new ApiError('http', 'NOT_FOUND', '감상이 없어요.', 404);
@@ -59,8 +61,8 @@ afterEach(() => { client.clear(); onlineManager.setOnline(true); });
 
 test('#113 FR-08 S-70 최근 공개 감상은 서버 순서대로 사람의 책 박스로 보이고 닉네임·책 제목·독후감 앞부분·쓴 날짜를 보여 줘요', async () => {
     await renderRouter(routes, { initialUrl: '/lounge' });
-    const boxes = await screen.findAllByRole('button', { name: /감상 모음 보기$/ });
-    expect(boxes.map(labelOf)).toEqual([boxName, '산책 · 『어린 왕자』, 2026년 11월 20일에 쓴 독후감, 감상 모음 보기']);
+    const boxes = await screen.findAllByHintText(openBox);
+    expect(boxes.map(labelOf)).toEqual([boxName, '산책 · 『어린 왕자』, 여우의 말이 오래 남았어요., 2026년 11월 20일에 쓴 독후감']);
     expect(screen.getByText('독자 · 『데미안』')).toBeOnTheScreen();
     expect(screen.getByText(reportNew.body!)).toBeOnTheScreen();
     // 2026-11-24T15:30Z는 KST로 11월 25일이다.
@@ -113,7 +115,7 @@ test('#113 FR-09 S-76 좋아요는 감상마다 누르고 취소하며 그 감�
 test('#113 FR-08 S-70 userBookId를 주지 않는 구버전 서버의 박스는 대표 감상 상세를 열어요', async () => {
     jest.mocked(feedList).mockResolvedValue([{ ...reportNew, userBookId: undefined, bodyWrittenAt: undefined }]);
     await renderRouter(routes, { initialUrl: '/lounge' });
-    await fireEvent.press(await screen.findByRole('button', { name: '독자 · 『데미안』, 감상 모음 보기' }));
+    await fireEvent.press(await screen.findByRole('button', { name: '독자 · 『데미안』, 두 번째로 읽으니 싱클레어가 다르게 보였어요.' }));
     expect(await screen.findByText('감상 상세')).toBeOnTheScreen();
     expect(feedItem).toHaveBeenCalledWith('review-new', expect.anything());
     expect(feedUserBook).not.toHaveBeenCalled();
@@ -232,9 +234,11 @@ describe('#113 FR-16 S-71 책 감상 검색 박스', () => {
     const r4: FeedItem = { ...base, id: 'review-old', nickname: '옛 독자', oneLine: null, body: '예전 서버의 감상이에요.',
         publishedAt: '2026-09-01T00:00:00Z', likeCount: 0 };
     const r5 = { ...oneLine, publishedAt: null };
-    const boxNames = /(감상 모음 보기|님의 감상 보기)$/;
-    const walkBox = '산책 · 『데미안』, 감상 모음 보기';
-    const otherBookBox = '다른 독자 · 『데미안』, 감상 모음 보기';
+    // 박스(감상 모음을 여는 힌트)와 예전 응답의 감상 한 줄("…님의 감상 보기")을 화면 순서대로 모은다.
+    const searchRows = () => screen.getAllByRole('button').filter(button =>
+        button.props.accessibilityHint === openBox || /님의 감상 보기$/.test(button.props.accessibilityLabel ?? ''));
+    const walkBox = '산책 · 『데미안』, 산책하며 읽은 책';
+    const otherBookBox = '다른 독자 · 『데미안』, 산책하며 읽은 책';
     const oldRow = '데미안 · 옛 독자님의 감상 보기';
     beforeEach(() => {
         jest.mocked(searchBookReviews).mockResolvedValue([
@@ -248,7 +252,7 @@ describe('#113 FR-16 S-71 책 감상 검색 박스', () => {
         await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
         expect(await screen.findByText('헤르만 헤세 · ISBN 9788937460449')).toBeOnTheScreen();
         expect(screen.getByText('다른 저자')).toBeOnTheScreen();
-        expect(screen.getAllByRole('button', { name: boxNames }).map(labelOf)).toEqual([boxName, walkBox, oldRow, otherBookBox]);
+        expect(searchRows().map(labelOf)).toEqual([boxName, walkBox, oldRow, otherBookBox]);
         // 독자의 대표는 가장 최근에 쓴 독후감이고, 산책은 독후감이 없어 한줄평이다.
         expect(screen.getByText(r1.body!)).toBeOnTheScreen();
         expect(screen.queryByText(r3.body!)).toBeNull();
@@ -265,9 +269,9 @@ describe('#113 FR-16 S-71 책 감상 검색 박스', () => {
         expect(screen.getByRole('radio', { name: '좋아요 많은 순' })).toBeSelected();
         expect(screen.getByRole('radio', { name: '최신순' })).not.toBeSelected();
         // 산책 9개 > 독자 2+2+2=6개 > 옛 독자 0개. 좋아요가 더 많아도 다른 책 묶음은 그 묶음에 남는다.
-        expect(screen.getAllByRole('button', { name: boxNames }).map(labelOf)).toEqual([walkBox, boxName, oldRow, otherBookBox]);
+        expect(searchRows().map(labelOf)).toEqual([walkBox, boxName, oldRow, otherBookBox]);
         await fireEvent.press(screen.getByRole('radio', { name: '최신순' }));
-        expect(screen.getAllByRole('button', { name: boxNames }).map(labelOf)).toEqual([boxName, walkBox, oldRow, otherBookBox]);
+        expect(searchRows().map(labelOf)).toEqual([boxName, walkBox, oldRow, otherBookBox]);
     });
 
     test('박스는 S-76, userBookId가 없는 예전 감상은 S-72로 가요', async () => {
@@ -300,7 +304,7 @@ describe('#113 S-70 S-71 S-76 책 표지', () => {
     test('S-70 박스 위쪽에 책 표지를 보여 주고, 표지가 없으면 책장의 기본 표지를 보여 줘요', async () => {
         jest.mocked(feedList).mockResolvedValue([{ ...reportNew, coverUrl }, { ...otherBox, coverUrl: null }]);
         await renderRouter(routes, { initialUrl: '/lounge' });
-        const [withCover, withoutCover] = await screen.findAllByRole('button', { name: /감상 모음 보기$/ });
+        const [withCover, withoutCover] = await screen.findAllByHintText(openBox);
         expect(within(withCover).getByTestId('book-cover-image')).toHaveProp('source', { uri: coverUrl });
         expect(within(withCover).queryByTestId('book-cover-default')).toBeNull();
         expect(within(withoutCover).queryByTestId('book-cover-image')).toBeNull();
@@ -320,7 +324,7 @@ describe('#113 S-70 S-71 S-76 책 표지', () => {
         jest.mocked(searchBookReviews).mockResolvedValue([{ bookKey: 'isbn:9788937460449', bookTitle: '데미안', bookAuthor: '헤르만 헤세',
             isbn: '9788937460449', reviews: [{ ...reportNew, coverUrl }, { ...otherBox, userBookId: 'user-book-2' }] }]);
         await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
-        const [withCover, oldServer] = await screen.findAllByRole('button', { name: /감상 모음 보기$/ });
+        const [withCover, oldServer] = await screen.findAllByHintText(openBox);
         expect(within(withCover).getByTestId('book-cover-image')).toHaveProp('source', { uri: coverUrl });
         // coverUrl을 주지 않는 구버전 서버 응답도 기본 표지로 보여 준다.
         expect(within(oldServer).getByTestId('book-cover-default')).toBeOnTheScreen();
@@ -338,5 +342,81 @@ describe('#113 S-70 S-71 S-76 책 표지', () => {
         await renderRouter(routes, { initialUrl: '/lounge/user-books/user-book-1' });
         expect(await screen.findByTestId('book-cover-default')).toHaveTextContent(reportNew.genre);
         expect(screen.queryByTestId('book-cover-image')).toBeNull();
+    });
+});
+
+describe('#113 S-70 S-71 S-76 표지 왼쪽·글 오른쪽 배치', () => {
+    const longItem: FeedItem = { ...reportNew, nickname: '아주긴닉네임을가진독자님', bookTitle: '데미안: 에밀 싱클레어의 젊은 날 이야기 완역 개정판',
+        body: '긴 독후감 '.repeat(200), coverUrl: null };
+    // 화면에 그려지는 순서대로 칸 안의 글(호스트 Text)을 모은다.
+    type Node = ReturnType<typeof screen.getByTestId>;
+    const texts = (node: Node) => {
+        const found: Node[] = [];
+        const walk = (parent: Node) => {
+            for (const child of parent.children) {
+                if (typeof child === 'string') continue;
+                if (child.type === 'Text') found.push(child);
+                else walk(child);
+            }
+        };
+        walk(node);
+        return found;
+    };
+    const expectScalableWrapping = (node: Node) => {
+        // 글 칸은 표지 옆 남은 너비만 쓰고(flex 1, minWidth 0) 그 안에서 줄바꿈한다.
+        expect(StyleSheet.flatten(node.props.style)).toMatchObject({ flex: 1, minWidth: 0 });
+        for (const text of texts(node)) {
+            // 큰 글씨 설정을 막지 않는다.
+            expect(text.props.allowFontScaling).not.toBe(false);
+            expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+        }
+    };
+
+    test('S-70 박스는 왼쪽 작은 표지(책장 2:3 비율), 오른쪽 칸에 닉네임·제목, 감상, 날짜를 세로로 두고 긴 글도 칸 안에서 줄바꿈해요', async () => {
+        jest.mocked(feedList).mockResolvedValue([longItem]);
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        const box = await screen.findByHintText(openBox);
+        expect(StyleSheet.flatten(box.props.style)).toMatchObject({ flexDirection: 'row' });
+        const cover = within(box).getByTestId('book-cover-default');
+        expect(StyleSheet.flatten(cover.props.style)).toMatchObject({ width: 44, height: 66 });
+        const column = within(box).getByTestId('lounge-box-text');
+        expectScalableWrapping(column);
+        const [heading, preview, date] = texts(column);
+        expect(heading).toHaveTextContent('아주긴닉네임을가진독자님 · 『데미안: 에밀 싱클레어의 젊은 날 이야기 완역 개정판』');
+        // 닉네임·제목과 날짜는 줄 수를 제한하지 않아 잘리지 않고, 감상만 앞부분 3줄로 줄인다.
+        expect(heading.props.numberOfLines).toBeUndefined();
+        expect(preview.props.numberOfLines).toBe(3);
+        expect(date).toHaveTextContent('2026. 11. 25.');
+        expect(date.props.numberOfLines).toBeUndefined();
+    });
+
+    test('S-70 스크린리더는 닉네임·제목 → 감상 → 날짜 순서로 읽고, 긴 감상은 앞부분만 읽어요', async () => {
+        jest.mocked(feedList).mockResolvedValue([longItem, { ...reportNew, userBookId: undefined, mine: true }]);
+        await renderRouter(routes, { initialUrl: '/lounge' });
+        const box = await screen.findByHintText(openBox);
+        expect(labelOf(box)).toBe(`아주긴닉네임을가진독자님 · 『데미안: 에밀 싱클레어의 젊은 날 이야기 완역 개정판』, ${previewText(longItem.body!)}, 2026년 11월 25일에 쓴 독후감`);
+        const legacyBox = screen.getByHintText('감상 상세를 열어요');
+        expect(labelOf(legacyBox)).toBe(`독자 · 『데미안』, 내 감상, ${reportNew.body}, 2026년 11월 25일에 쓴 독후감`);
+    });
+
+    test('S-71 검색 박스도 같은 배치예요', async () => {
+        jest.mocked(searchBookReviews).mockResolvedValue([{ bookKey: 'text:long', bookTitle: longItem.bookTitle, bookAuthor: '헤르만 헤세', reviews: [longItem] }]);
+        await renderRouter(routes, { initialUrl: '/lounge/search?query=데미안' });
+        const box = await screen.findByHintText(openBox);
+        expect(StyleSheet.flatten(box.props.style)).toMatchObject({ flexDirection: 'row' });
+        expectScalableWrapping(within(box).getByTestId('lounge-box-text'));
+    });
+
+    test('S-76 위쪽은 왼쪽 표지, 오른쪽 칸에 닉네임·제목과 저자를 두고 줄바꿈해요', async () => {
+        jest.mocked(feedUserBook).mockResolvedValue([longItem, oneLine]);
+        await renderRouter(routes, { initialUrl: '/lounge/user-books/user-book-1' });
+        const column = await screen.findByTestId('user-book-header-text');
+        expectScalableWrapping(column);
+        const [heading, author] = texts(column);
+        expect(heading).toHaveTextContent('아주긴닉네임을가진독자님 · 『데미안: 에밀 싱클레어의 젊은 날 이야기 완역 개정판』');
+        expect(heading.props.numberOfLines).toBeUndefined();
+        expect(author).toHaveTextContent('헤르만 헤세 · 소설');
+        expect(StyleSheet.flatten(screen.getByTestId('book-cover-default').props.style)).toMatchObject({ width: 66, height: 99 });
+        expect(StyleSheet.flatten(screen.getByTestId('user-book-header').props.style)).toMatchObject({ flexDirection: 'row' });
     });
 });

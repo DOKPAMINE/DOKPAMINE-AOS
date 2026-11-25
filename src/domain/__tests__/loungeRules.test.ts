@@ -1,4 +1,4 @@
-import { boxRepresentative, groupReviewBoxes, loungeBoxHeading, sortReviewBoxes, splitUserBookReviews, userBookReportHeadings, writtenDate } from '../loungeRules';
+import { boxRepresentative, groupReviewBoxes, loungeBoxHeading, loungeBoxLabel, previewText, sortReviewBoxes, splitUserBookReviews, userBookReportHeadings, writtenDate } from '../loungeRules';
 
 test('#113 S-70 박스 제목은 "닉네임 · 『책 제목』"이에요', () => {
     expect(loungeBoxHeading('독자', '데미안')).toBe('독자 · 『데미안』');
@@ -93,4 +93,22 @@ test('#113 S-76 독후감 번호는 쓴 시각이 이른 순, 같으면 ID 순, 
         new: { text: '독후감 3 · 2026. 11. 15.', label: '독후감 3, 2026년 11월 15일' },
         none: { text: '독후감 4', label: '독후감 4' },
     });
+});
+
+test('#113 S-70 S-71 스크린리더용 감상 앞부분은 공백을 한 칸으로 줄이고 80자를 넘으면 줄임표를 붙여요', () => {
+    expect(previewText('  첫 줄\n\n둘째   줄 ')).toBe('첫 줄 둘째 줄');
+    expect(previewText('가'.repeat(80))).toBe('가'.repeat(80));
+    expect(previewText('가'.repeat(81))).toBe(`${'가'.repeat(80)}…`);
+    // 자른 자리 끝의 공백은 지우고 줄임표를 붙인다.
+    expect(previewText(`${'가'.repeat(79)} 나다`)).toBe(`${'가'.repeat(79)}…`);
+    // 이모지처럼 두 코드 단위인 글자를 반으로 자르지 않는다.
+    expect(previewText('📚'.repeat(81))).toBe(`${'📚'.repeat(80)}…`);
+});
+
+test('#113 S-70 S-71 박스는 닉네임·제목 → 감상 → 날짜 순서로 읽어요', () => {
+    expect(loungeBoxLabel({ nickname: '독자', bookTitle: '데미안', mine: false, text: '오래 남았어요.', date: { label: '2026년 11월 25일' } }))
+        .toBe('독자 · 『데미안』, 오래 남았어요., 2026년 11월 25일에 쓴 독후감');
+    expect(loungeBoxLabel({ nickname: '독자', bookTitle: '데미안', mine: true, text: '한줄평', date: null }))
+        .toBe('독자 · 『데미안』, 내 감상, 한줄평');
+    expect(loungeBoxLabel({ nickname: '독자', bookTitle: '데미안', mine: false, text: ' ', date: null })).toBe('독자 · 『데미안』');
 });
