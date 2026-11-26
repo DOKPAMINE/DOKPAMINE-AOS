@@ -1,7 +1,7 @@
 import { booksReadByDate, monthlyStats } from '../calendarRules';
 import { parseStartedAt } from '../kstDate';
 import type { ReadingSession, StatisticsBook } from '../readingTypes';
-import { readingStreak, readingTotals } from '../readingSummary';
+import { MIN_READING_DAY_SECONDS, readingDays, readingStreak, readingTotals } from '../readingSummary';
 
 const at = (day: string, time = '12:00') => parseStartedAt(day, time)!;
 let sequence = 0;
@@ -53,8 +53,10 @@ describe('readingStreak', () => {
         expect(monthlyStats(list, books, '2026-11').readingDayCount).toBe(1);
     });
 
-    test('FR-10 S-80 0초 기록도 캘린더처럼 읽은 날로 세요', () => {
-        expect(readingStreak([session('2026-11-26', { activeSeconds: 0 })], [], '2026-11-26')).toEqual({ current: 1, best: 1 });
+    test('FR-10 S-80 0초 기록만 있는 날은 캘린더에 표시돼도 연속 독서일의 읽은 날이 아니에요', () => {
+        const list = [session('2026-11-26', { activeSeconds: 0 })];
+        expect(readingStreak(list, [], '2026-11-26')).toEqual({ current: 0, best: 0 });
+        expect(monthlyStats(list, [], '2026-11').readingDayCount).toBe(1);
     });
 
     test('FR-10 S-80 기록이 없으면 현재·최고 모두 0이에요', () => {
@@ -73,6 +75,54 @@ describe('readingStreak', () => {
 
     test('FR-10 S-80 잘못된 날짜는 거절해요', () => {
         expect(() => readingStreak([], [], '2026-11-31')).toThrow(RangeError);
+    });
+});
+
+describe('readingDays', () => {
+    test('FR-10 S-80 읽은 날 기준은 하루 합계 10분(600초)이에요', () => {
+        expect(MIN_READING_DAY_SECONDS).toBe(600);
+    });
+
+    test('FR-10 S-80 하루 합계가 9분 59초인 날은 읽은 날이 아니고 10분이면 읽은 날이에요', () => {
+        expect(readingDays([session('2026-11-25', { activeSeconds: 599 })], [])).toEqual(new Set());
+        expect(readingDays([session('2026-11-25', { activeSeconds: 600 })], [])).toEqual(new Set(['2026-11-25']));
+    });
+
+    test('FR-10 S-80 하루 여러 기록의 합이 10분 이상이면 읽은 날이에요', () => {
+        const list = [300, 200, 100].map(activeSeconds => session('2026-11-25', { activeSeconds }));
+        expect(readingDays(list, [])).toEqual(new Set(['2026-11-25']));
+        expect(readingDays(list.slice(0, 2), [])).toEqual(new Set());
+    });
+
+    test('FR-10 S-80 KST 자정을 사이에 둔 기록은 시작한 날마다 따로 합산해요', () => {
+        // 23:55 KST에 시작한 5분과 다음 날 00:00 KST에 시작한 5분은 이어져 있어도 각각 5분이다.
+        const late = session('2026-11-25', { startedAt: at('2026-11-25', '23:55'), activeSeconds: 300 });
+        const early = session('2026-11-26', { startedAt: at('2026-11-26', '00:00'), activeSeconds: 300 });
+        expect(readingDays([late, early], [])).toEqual(new Set());
+        // 23:59 KST에 시작한 긴 기록은 자정을 넘겨도 시작한 날에 전체를 귀속한다.
+        const overnight = session('2026-11-25', { startedAt: at('2026-11-25', '23:59'), activeSeconds: 3600 });
+        expect(readingDays([overnight, early], [])).toEqual(new Set(['2026-11-25']));
+    });
+
+    test('FR-10 S-80 삭제된 세션과 삭제된 책의 세션은 하루 합계에서 빼요', () => {
+        const list = [
+            session('2026-11-25', { activeSeconds: 300 }),
+            session('2026-11-25', { activeSeconds: 300, deleted: true }),
+            session('2026-11-25', { activeSeconds: 300, bookId: 'removed' }),
+        ];
+        const books = [book('book', '소설'), book('removed', '에세이', { deleted: true })];
+        expect(readingDays(list, books)).toEqual(new Set());
+        expect(readingDays(list, [book('book', '소설'), book('removed', '에세이')])).toEqual(new Set(['2026-11-25']));
+    });
+
+    test('FR-10 S-80 9분 59초인 날은 연속을 끊고 현재·최고 연속일을 모두 10분 기준으로 세요', () => {
+        const list = [
+            ...days('2026-11-20', '2026-11-21', '2026-11-22'),
+            session('2026-11-23', { activeSeconds: 599 }),
+            ...days('2026-11-24', '2026-11-25'),
+        ];
+        expect(readingStreak(list, [], '2026-11-26')).toEqual({ current: 2, best: 3 });
+        expect(readingStreak([...list, session('2026-11-23', { activeSeconds: 1 })], [], '2026-11-26')).toEqual({ current: 6, best: 6 });
     });
 });
 

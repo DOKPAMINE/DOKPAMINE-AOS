@@ -101,24 +101,6 @@ function monthSessions(
     return recordedSessions(sessions, books).filter(session => kstDate(session.startedAt).startsWith(`${month}-`));
 }
 
-/** FR-05 / S-10: 하루 합계 1분 이상. 오늘 기록이 없으면 어제까지의 연속일을 센다. */
-export function streakDays(sessions: readonly ReadingSession[], today: string): number {
-    const todayMs = requireDate(today);
-    const secondsByDay = new Map<string, number>();
-    sessions.filter(session => !session.deleted).forEach(session => {
-        const day = kstDate(session.startedAt);
-        secondsByDay.set(day, (secondsByDay.get(day) ?? 0) + session.activeSeconds);
-    });
-    const qualifies = (ms: number) => (secondsByDay.get(new Date(ms).toISOString().slice(0, 10)) ?? 0) >= 60;
-    let day = qualifies(todayMs) ? todayMs : todayMs - DAY_MS;
-    let count = 0;
-    while (qualifies(day)) {
-        count++;
-        day -= DAY_MS;
-    }
-    return count;
-}
-
 /** FR-05 / S-10: KST 월요일부터 오늘까지 개인 독서 시간. MANUAL 포함, 랭킹 상한을 적용하지 않는다. */
 export function thisWeekSeconds(sessions: readonly ReadingSession[], today: string): number {
     const dayMs = requireDate(today);

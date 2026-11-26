@@ -2,7 +2,10 @@ import { genreOf, rankBars, recordedSessions } from './calendarRules';
 import { DAY_MS, kstDate, parseDate } from './kstDate';
 import type { ReadingSession, StatisticsBook } from './readingTypes';
 
-/** S-80 연속 독서일. current는 오늘(없으면 어제)까지 이어진 날 수, best는 전체 기간 중 가장 긴 연속 일수다. */
+/** FR-05·FR-10 팀 결정: 그날(KST) 독서 시간 합계가 10분 이상이어야 연속 독서일의 "읽은 날"이다. */
+export const MIN_READING_DAY_SECONDS = 10 * 60;
+
+/** S-10·S-80 연속 독서일. current는 오늘(없으면 어제)까지 이어진 날 수, best는 전체 기간 중 가장 긴 연속 일수다. */
 export interface ReadingStreak {
     readonly current: number;
     readonly best: number;
@@ -26,16 +29,32 @@ export interface ReadingTotals {
 }
 
 /**
- * FR-10 / S-80: 기록이 있는 날(KST, 시작한 날 기준)을 읽은 날로 보고 연속 일수를 센다.
- * 읽은 날의 기준은 캘린더(recordedSessions: 삭제된 세션·삭제된 책 제외)와 같다.
- * 오늘 기록이 없어도 어제까지 이어졌으면 어제까지의 연속을 유지하고, 어제와 오늘 모두 없으면 0이다.
+ * FR-05·FR-10 / S-10·S-80: 연속 독서일의 "읽은 날"(YYYY-MM-DD) 집합. 홈과 마이가 함께 쓰는 유일한 판단 기준이다.
+ * 세션은 시작한 날(KST)에 전체를 귀속해 하루 합계를 내고, 합계가 MIN_READING_DAY_SECONDS 이상인 날만 읽은 날이다.
+ * 세는 세션은 캘린더와 같은 recordedSessions(삭제된 세션·삭제된 책 제외)다.
+ * 캘린더 날짜 칸·읽은 일수는 기록이 있으면 표시하므로 이 기준을 쓰지 않는다.
+ */
+export function readingDays(
+    sessions: readonly ReadingSession[], books: readonly Pick<StatisticsBook, 'id' | 'deleted'>[],
+): Set<string> {
+    const secondsByDay = new Map<string, number>();
+    recordedSessions(sessions, books).forEach(session => {
+        const day = kstDate(session.startedAt);
+        secondsByDay.set(day, (secondsByDay.get(day) ?? 0) + session.activeSeconds);
+    });
+    return new Set([...secondsByDay].filter(([, seconds]) => seconds >= MIN_READING_DAY_SECONDS).map(([day]) => day));
+}
+
+/**
+ * FR-05·FR-10 / S-10·S-80: 읽은 날(readingDays)이 이어진 일수. 홈 연속 독서일은 current를, 마이는 current·best를 보여 준다.
+ * 오늘 아직 읽은 날이 아니어도 어제까지 이어졌으면 어제까지의 연속을 유지하고, 어제와 오늘 모두 아니면 0이다.
  */
 export function readingStreak(
     sessions: readonly ReadingSession[], books: readonly Pick<StatisticsBook, 'id' | 'deleted'>[], today: string,
 ): ReadingStreak {
     const todayMs = parseDate(today);
     if (todayMs === null) throw new RangeError('날짜는 YYYY-MM-DD 형식의 유효한 날짜여야 해요.');
-    const days = new Set(recordedSessions(sessions, books).map(session => kstDate(session.startedAt)));
+    const days = readingDays(sessions, books);
     const has = (ms: number) => days.has(new Date(ms).toISOString().slice(0, 10));
 
     let current = 0;

@@ -5,8 +5,9 @@ import { AppState } from 'react-native';
 import { initializeDatabase } from '../db/client';
 import type { RecordRepository } from '../db/repository';
 import type { BookRecord, SessionRecord } from '../db/schema';
-import { streakDays, thisWeekSeconds } from '../domain/calendarRules';
+import { thisWeekSeconds } from '../domain/calendarRules';
 import { kstDate } from '../domain/kstDate';
+import { readingStreak } from '../domain/readingSummary';
 
 type HomeRecords =
     | { kind: 'loading' | 'error' }
@@ -54,9 +55,11 @@ export function useHomeRecords() {
 
     const today = kstDate(now);
     const sessions = records.kind === 'ready' ? records.sessions : [];
+    const books = records.kind === 'ready' ? records.books : [];
     return {
         records,
-        streak: streakDays(sessions, today),
+        // FR-05 / S-10: 마이(S-80) 현재 연속일과 같은 함수·기준(하루 합계 10분 이상)을 쓴다.
+        streak: readingStreak(sessions, books, today).current,
         weekSeconds: thisWeekSeconds(sessions, today),
         retry: () => { setRecords({ kind: 'loading' }); setAttempt(value => value + 1); },
     };
