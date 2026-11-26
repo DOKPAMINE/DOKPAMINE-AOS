@@ -10,6 +10,7 @@ import UserBook from '../../../app/lounge/user-books/[userBookId]';
 import { feedUserBook, likedBooks, likeReview, unlikeReview } from '../../api/endpoints';
 import { ApiError } from '../../api/errors';
 import type { FeedItem, LikedBookGroup, LikedBookPage, LikedPerson } from '../../api/types';
+import { removedReviewMessage } from '../../lounge/QueryState';
 import { likedBadRequestMessage } from '../LikedError';
 import { likedBookKeys } from '../likedQueries';
 import { LikedReviewsSection } from '../LikedReviewsSection';
@@ -325,4 +326,34 @@ test('FR-09 S-80 좋아요 요청이 실패하면 좋아요한 감상 조회를 
     expect(client.getQueryState(likedBookKeys.preview)?.isInvalidated).toBe(false);
     expect(client.getQueryState(likedBookKeys.list)?.isInvalidated).toBe(false);
     expect(likedBooks).toHaveBeenCalledTimes(1);
+});
+
+test('FR-09 S-76 좋아요 목록에서 연 감상이 404면 돌아왔을 때 그 줄이 사라져요', async () => {
+    jest.mocked(feedUserBook).mockRejectedValue(new ApiError('http', 'NOT_FOUND', '요청한 주소를 찾을 수 없어요.', 404));
+    await renderRouter(routes, { initialUrl: '/liked-reviews' });
+    jest.mocked(likedBooks).mockResolvedValue(page([group('isbn:prince', '어린 왕자', [star])]));
+    await fireEvent.press(await screen.findByRole('button', { name: '어린 왕자, 하늘님, 좋아요 2개, 감상 보기' }));
+    expect(await screen.findByText(removedReviewMessage)).toBeOnTheScreen();
+    await waitFor(() => expect(callsWithSize(20)).toBe(2));
+    await fireEvent.press(screen.getByRole('button', { name: '돌아가기' }));
+    await waitFor(() => expect(screen.getAllByTestId('liked-person')).toHaveLength(1));
+    expect(screen.getByRole('button', { name: '어린 왕자, 별님, 좋아요 1개, 감상 보기' })).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: /하늘님/ })).toBeNull();
+});
+
+test.each([
+    ['from=lounge', '/lounge/user-books/ub-sky?from=lounge'],
+    ['from=LIKED', '/lounge/user-books/ub-sky?from=LIKED'],
+    ['from 두 번', '/lounge/user-books/ub-sky?from=liked&from=liked'],
+])('FR-08 S-76 잘못된 from 값(%s)이면 아래 버튼은 기본 문구 "라운지로 돌아가기"예요', async (_name, url) => {
+    await renderRouter(routes, { initialUrl: url });
+    expect(await screen.findByRole('button', { name: '라운지로 돌아가기' })).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: '돌아가기' })).toBeNull();
+});
+
+test('FR-09 S-76 좋아요 목록에서 열었는데 이전 화면이 없으면 "돌아가기"는 좋아요한 감상 목록으로 가요', async () => {
+    await renderRouter(routes, { initialUrl: '/lounge/user-books/ub-sky?from=liked' });
+    await fireEvent.press(await screen.findByRole('button', { name: '돌아가기' }));
+    expect(await screen.findByRole('header', { name: '어린 왕자' })).toBeOnTheScreen();
+    expect(screen).toHavePathname('/liked-reviews');
 });

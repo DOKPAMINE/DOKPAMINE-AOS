@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Pressable, Text, View } from 'react-native';
 import { ApiError } from '../api/errors';
 import type { FeedItem } from '../api/types';
 import { Screen, SecondaryButton, StateView } from '../components';
 import { splitUserBookReviews, userBookReportHeadings } from '../domain/loungeRules';
+import { invalidateLikedBooks } from '../my/likedQueries';
 import { BookCover } from '../shelf/BookCover';
 import { sizes } from '../theme';
 import { BracketTitle } from './BracketTitle';
@@ -20,9 +21,13 @@ const isNotFound = (error: unknown) => error instanceof ApiError && error.status
  * #113 S-76 책 감상 모음: S-70 박스를 누르면 그 사람이 그 책에 쓴 공개 감상 전부를 한줄평·독후감으로 나눠 보여 준다.
  * #92 라운지 규칙을 따른다. 화면에 돌아올 때·아래로 당길 때·감상 동기화가 끝났을 때(connectLoungeSyncRefresh) 다시 받고,
  * 404면 삭제됐거나 비공개로 바뀌었다고 알리고 라운지 목록을 다시 받게 한다.
- * backLabel은 아래 버튼 문구다. #132 마이의 좋아요한 감상 목록에서 열면 "돌아가기"이고, 라운지에서 열면 기본값이다.
+ * backLabel은 아래 버튼 문구, backFallback은 돌아갈 이전 화면이 없을 때 갈 곳이다.
+ * #132 마이의 좋아요한 감상 목록에서 열면 "돌아가기"·/liked-reviews이고, 라운지에서 열면 기본값이다.
+ * #132 404면 좋아요한 감상 조회도 무효로 해, 좋아요 목록으로 돌아갔을 때 그 줄이 사라지게 한다.
  */
-export function UserBookReviewsScreen({ userBookId, backLabel = '라운지로 돌아가기' }: { userBookId: string; backLabel?: string }) {
+export function UserBookReviewsScreen({ userBookId, backLabel = '라운지로 돌아가기', backFallback = '/(tabs)/lounge' }: {
+    userBookId: string; backLabel?: string; backFallback?: Href;
+}) {
     const result = useUserBookFeed(userBookId);
     const client = useQueryClient();
     const [refreshing, setRefreshing] = useState(false);
@@ -31,7 +36,9 @@ export function UserBookReviewsScreen({ userBookId, backLabel = '라운지로 �
         if (userBookId) void refetchUserBookFeed(client, userBookId);
     }, [client, userBookId]));
     useEffect(() => {
-        if (removed) void invalidateLoungeLists(client, loungeKeys.userBook(userBookId));
+        if (!removed) return;
+        void invalidateLoungeLists(client, loungeKeys.userBook(userBookId));
+        void invalidateLikedBooks(client);
     }, [removed, client, userBookId]);
     // 진행 중인 조회는 취소하지 않고 그 결과를 기다린다. 실패는 목록 자리에 안내한다.
     const refresh = userBookId ? () => {
@@ -45,7 +52,7 @@ export function UserBookReviewsScreen({ userBookId, backLabel = '라운지로 �
     const first = items[0];
     return (
         <Screen title="감상 모음" refreshing={refreshing} onRefresh={refresh}>
-            <SecondaryButton label={backLabel} onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/lounge')} />
+            <SecondaryButton label={backLabel} onPress={() => router.canGoBack() ? router.back() : router.replace(backFallback)} />
             {!userBookId ? <StateView kind="empty" message="볼 수 없는 감상이에요" />
                 : removed ? <StateView kind="empty" message={removedReviewMessage} />
                     : result.isError ? <QueryError error={result.error} retry={() => { void result.refetch(); }} />
