@@ -146,3 +146,30 @@ export type BookReviewSearchResponse = BookReviewGroup[];
 
 export type FeedListResponse = FeedItem[];
 export type ReviewLikeResponse = Pick<FeedItem, 'likeCount' | 'likedByMe'>;
+
+/** #132 FR-09 S-80 좋아요한 감상: 묶음 안 한 줄. 작성자의 책(userBookId)마다 한 줄이며 내가 좋아요한 공개 감상 수와 마지막 시각을 준다. */
+export interface LikedPerson {
+    authorId: string;
+    nickname: string;
+    userBookId: string;
+    likedCount: number;
+    lastLikedAt: string;
+    mine: boolean;
+}
+
+/** #132 FR-09 S-80 좋아요한 감상 책 묶음. 묶음 규칙과 bookKey는 BookReviewGroup과 같고 people은 lastLikedAt 최신순이다. */
+export interface LikedBookGroup {
+    bookKey: string;
+    isbn?: string | null;
+    bookTitle: string;
+    bookAuthor: string;
+    coverUrl?: string | null;
+    lastLikedAt: string;
+    people: LikedPerson[];
+}
+
+/** #132 nextCursor는 해석하지 않는 문자열이다. 마지막 페이지는 null이다. */
+export interface LikedBookPage {
+    items: LikedBookGroup[];
+    nextCursor?: string | null;
+}
