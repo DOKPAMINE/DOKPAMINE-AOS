@@ -22,7 +22,3 @@ export interface StatisticsBook {
     readonly completedAt: number | null;
     readonly deleted: boolean;
 }
-
-export function pagesRead(session: Pick<ReadingSession, 'startPage' | 'endPage'>): number {
-    return session.endPage === null ? 0 : Math.max(0, session.endPage - session.startPage);
-}
