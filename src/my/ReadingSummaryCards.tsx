@@ -53,16 +53,20 @@ function TotalsSummary({ totals }: { totals: ReadingTotals }) {
     </View>;
 }
 
-/** S-80 장르별 한 줄: 장르 이름 / 막대 / 권수. "소설, 8권"처럼 한 요소로 읽고 막대는 보조 기술에서 숨긴다. */
-function GenreRow({ genre }: { genre: GenreBookCount }) {
+/**
+ * S-80 장르별 한 줄: 장르 이름 / 막대 / 권수. "소설, 8권"처럼 한 요소로 읽고 막대는 보조 기술에서 숨긴다.
+ * 이름 칸과 권수 칸은 모든 줄에서 같은 폭이라 막대의 시작과 끝이 같은 세로선에 맞는다.
+ * 권수 칸은 글자 크기 배율만큼 넓혀 큰 글자에서도 잘리지 않는다(글자 폭을 재지 않는다).
+ */
+function GenreRow({ genre, countWidth }: { genre: GenreBookCount; countWidth: number }) {
     const count = `${genre.books}권`;
     return <View testID="my-genre-row" accessible accessibilityRole="text" accessibilityLabel={`${genre.label}, ${count}`} style={styles.genreRow}>
-        <Text numberOfLines={1} ellipsizeMode="tail" style={styles.genreLabel}>{genre.label}</Text>
+        <Text testID="my-genre-label" numberOfLines={1} ellipsizeMode="tail" style={styles.genreLabel}>{genre.label}</Text>
         <View testID="my-genre-bar-track" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
             style={styles.barTrack}>
             <View testID="my-genre-bar-fill" style={[styles.barFill, { width: `${genre.ratio * 100}%` }]} />
         </View>
-        <Text style={styles.genreValue}>{count}</Text>
+        <Text testID="my-genre-count" numberOfLines={1} style={[styles.genreValue, { width: countWidth }]}>{count}</Text>
     </View>;
 }
 
@@ -72,6 +76,9 @@ function GenreRow({ genre }: { genre: GenreBookCount }) {
  * 새 칸(예: 좋아요한 감상)은 이 카드 안에 <MySection title=… action={…}>…</MySection>을 하나 더 넣으면 된다.
  */
 export function MyReadingCard({ totals }: { totals: ReadingTotals }) {
+    const { fontScale } = useWindowDimensions();
+    // 권수 칸: 기본 글자(typography.label 14)에서 "999권"까지 들어가는 sizes.minTouch(44)를 글자 배율만큼 키운다.
+    const countWidth = Math.ceil(sizes.minTouch * fontScale);
     return <Card>
         <View testID="my-reading" style={styles.readingCard}>
             <Text accessibilityRole="header" style={styles.heading}>나의 독서</Text>
@@ -82,7 +89,7 @@ export function MyReadingCard({ totals }: { totals: ReadingTotals }) {
                 ? <StateView kind="empty" message="아직 독서 기록이 없어요." />
                 : <MySection testID="my-section-genres" title="장르별">
                     <View style={styles.genres}>
-                        {totals.byGenre.map(genre => <GenreRow key={genre.label} genre={genre} />)}
+                        {totals.byGenre.map(genre => <GenreRow key={genre.label} genre={genre} countWidth={countWidth} />)}
                     </View>
                 </MySection>}
         </View>

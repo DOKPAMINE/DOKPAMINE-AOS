@@ -305,6 +305,32 @@ describe('FR-10 S-80 연속 독서일과 장르별 막대', () => {
         expect(screen.queryAllByTestId('my-genre-bar-track')).toHaveLength(0);
     });
 
+    test('FR-10 S-80 장르 줄마다 이름 칸과 권수 칸 폭이 같아 막대의 시작과 끝이 맞아요', async () => {
+        // 이름 길이가 다른 장르(기타·자기계발·소설/시)와 자릿수가 다른 권수(12권·1권)를 섞는다.
+        const genres = [['소설/시', 12], ['자기계발', 1], ['기타', 1]] as const;
+        let index = 0;
+        genres.forEach(([genre, count]) => {
+            for (let n = 0; n < count; n++) {
+                const id = `00000000-0000-4000-8002-${String(++index).padStart(12, '0')}`;
+                addBook(id, `${genre} ${n}`, genre);
+                addSession(id, day('2026-11-20'), 600);
+            }
+        });
+        await renderRouter(routes, { initialUrl: '/my' });
+        const rows = await screen.findAllByTestId('my-genre-row');
+        // 기본 데미안(소설/시)도 기록이 없으므로(softDelete) 소설/시는 12권이다.
+        expect(rows.map(row => row.props.accessibilityLabel)).toEqual(['소설/시, 12권', '기타, 1권', '자기계발, 1권']);
+        const labels = screen.getAllByTestId('my-genre-label').map(label => StyleSheet.flatten(label.props.style));
+        const counts = screen.getAllByTestId('my-genre-count').map(count => StyleSheet.flatten(count.props.style));
+        expect(labels).toHaveLength(3);
+        expect(new Set(labels.map(style => style.width))).toEqual(new Set(['28%']));
+        expect(screen.getAllByTestId('my-genre-label').every(label => label.props.numberOfLines === 1)).toBe(true);
+        expect(new Set(counts.map(style => style.width)).size).toBe(1);
+        expect(counts[0].width).toBeGreaterThanOrEqual(44);
+        expect(counts.every(style => style.textAlign === 'right')).toBe(true);
+        expect(within(rows[0]).getByText('12권')).toBeOnTheScreen();
+    });
+
     test('FR-10 S-80 기록이 하나도 없으면 숫자 0과 "아직 독서 기록이 없어요." 안내를 보여 주고 막대가 없어요', async () => {
         repository.books.softDelete(bookId);
         await renderRouter(routes, { initialUrl: '/my' });

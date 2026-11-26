@@ -27,15 +27,15 @@ export const styles = StyleSheet.create({
     summaryDivider: { width: 1, backgroundColor: colors.line.border },
     summaryValue: { ...typography.heading, color: colors.brand.espresso, textAlign: 'center' },
     summaryLabel: { ...typography.bodySmall, color: colors.text.muted, textAlign: 'center' },
-    // 장르 줄은 터치 대상이 아니라 글자 높이만큼만 쓴다. 이름 칸은 내용에 맞추되 길면 한 줄 말줄임하고,
-    // 막대가 남는 폭을 모두 쓰며 권수는 막대 바로 오른쪽에 붙는다.
+    // 장르 줄은 터치 대상이 아니라 글자 높이만큼만 쓴다. 이름 칸은 캘린더 S-62 장르 줄과 같은 28% 고정 폭에
+    // 한 줄 말줄임이고, 권수 칸은 화면이 정하는 고정 폭에 오른쪽 정렬이며, 막대가 그 사이 남는 폭을 모두 쓴다.
     // 막대 두께·색은 캘린더 S-62 장르 막대와 같은 토큰(두께 spacing.md, 빈 부분 brand.sand, 채움 text.muted)이다.
     genres: { gap: spacing.sm },
     genreRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-    genreLabel: { ...typography.bodySmall, color: colors.brand.espresso, flexShrink: 1, maxWidth: '40%' },
+    genreLabel: { ...typography.bodySmall, color: colors.brand.espresso, width: '28%' },
     barTrack: { flex: 1, height: spacing.md, borderRadius: radii.small, backgroundColor: colors.brand.sand, overflow: 'hidden' },
     barFill: { height: '100%', borderRadius: radii.small, backgroundColor: colors.text.muted },
-    genreValue: { ...typography.label, color: colors.brand.espresso },
+    genreValue: { ...typography.label, color: colors.brand.espresso, textAlign: 'right' },
     // 제목 "마이" 오른쪽 설정 아이콘 버튼. 누르는 영역은 44dp 이상이다.
     settingsButton: { minHeight: sizes.minTouch, minWidth: sizes.minTouch, alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill },
     settingsPressed: { opacity: 0.6 },
