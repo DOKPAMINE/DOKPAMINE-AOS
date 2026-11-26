@@ -153,6 +153,41 @@ test('FR-10 S-80 닉네임과 누적 기록(총 독서시간·읽은 책·완독
     expect(await screen.findByRole('header', { name: '설정' })).toBeOnTheScreen();
 });
 
+test('FR-10 S-80 설정은 제목 오른쪽 아이콘 버튼(44dp 이상, 역할·라벨 "설정")으로 열고 글자 버튼은 없어요', async () => {
+    await renderRouter(routes, { initialUrl: '/my' });
+    await screen.findByRole('header', { name: '지금까지' });
+    const settings = screen.getByRole('button', { name: '설정' });
+    expect(settings).toBe(screen.getByTestId('my-settings'));
+    expect(screen.queryByText('설정')).toBeNull();
+    const style = StyleSheet.flatten(typeof settings.props.style === 'function' ? settings.props.style({ pressed: false }) : settings.props.style);
+    expect(style.minHeight).toBeGreaterThanOrEqual(44);
+    expect(style.minWidth).toBeGreaterThanOrEqual(44);
+    await fireEvent.press(settings);
+    expect(await screen.findByRole('header', { name: '설정' })).toBeOnTheScreen();
+    expect(screen).toHavePathname('/settings');
+});
+
+test('FR-10 S-80 닉네임과 연속 독서일은 한 카드에 있고 연속일은 한 요소로 읽으며 불꽃 아이콘은 숨겨요', async () => {
+    await renderRouter(routes, { initialUrl: '/my' });
+    // 닉네임 글자의 부모가 닉네임 카드다.
+    const card = (await screen.findByText('책산책님')).parent!;
+    const streak = within(card).getByTestId('streak');
+    // 기본 기록: 오늘 5400초를 읽었다.
+    expect(streak).toHaveProp('accessibilityLabel', '1일 연속 독서 중, 최고 기록 1일');
+    expect(within(streak).getByText('1일 연속 독서 중')).toBeOnTheScreen();
+    expect(within(streak).getByText('최고 기록 1일')).toBeOnTheScreen();
+    const icon = screen.getByTestId('streak-icon', hidden);
+    expect(icon).toHaveProp('accessibilityElementsHidden', true);
+    expect(icon).toHaveProp('importantForAccessibility', 'no-hide-descendants');
+});
+
+test('FR-10 S-80 누적 숫자 3개는 각각 한 요소로 읽고 칸 사이에 구분선 2개가 있어요', async () => {
+    await renderRouter(routes, { initialUrl: '/my' });
+    const card = (await screen.findByRole('header', { name: '지금까지' })).parent!;
+    expect(['총 독서시간 1시간 30분', '읽은 책 1권', '완독 1권'].map(label => within(card).getByLabelText(label))).toHaveLength(3);
+    expect(within(card).getAllByTestId('summary-divider', hidden)).toHaveLength(2);
+});
+
 test('FR-10 S-80 "이번 달 독서" 카드와 "전송 대기"·"동기화 상태"는 보이지 않고 동기화 문제가 없으면 경고 카드도 없어요', async () => {
     // 삭제 전송 대기를 포함해 대기 기록(책·세션·문장 tombstone)이 있어도 대기 건수는 표시하지 않는다.
     repository.quotes.save({ id: quoteId, bookId, text: '문장', page: null, memo: null });
@@ -207,7 +242,7 @@ describe('FR-10 S-80 연속 독서일과 장르별 막대', () => {
         addSession(bookId, day('2026-11-25'), 600);
         await renderRouter(routes, { initialUrl: '/my' });
         expect(await screen.findByText('2일 연속 독서 중')).toBeOnTheScreen();
-        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '2일 연속 독서 중, 최고 2일');
+        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '2일 연속 독서 중, 최고 기록 2일');
         expect(screen.queryByText('오늘 읽으면 1일째예요.')).toBeNull();
     });
 
@@ -216,7 +251,7 @@ describe('FR-10 S-80 연속 독서일과 장르별 막대', () => {
         await renderRouter(routes, { initialUrl: '/my' });
         expect(await screen.findByText('연속 독서 0일')).toBeOnTheScreen();
         expect(screen.getByText('오늘 읽으면 1일째예요.')).toBeOnTheScreen();
-        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '연속 독서 0일, 최고 1일, 오늘 읽으면 1일째예요.');
+        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '연속 독서 0일, 최고 기록 1일, 오늘 읽으면 1일째예요.');
     });
 
     test('FR-10 S-80 최고 연속 기록은 전체 기간 중 가장 긴 연속 일수예요', async () => {
@@ -224,8 +259,8 @@ describe('FR-10 S-80 연속 독서일과 장르별 막대', () => {
             .forEach(date => addSession(bookId, day(date), 600));
         await renderRouter(routes, { initialUrl: '/my' });
         expect(await screen.findByText('2일 연속 독서 중')).toBeOnTheScreen();
-        expect(screen.getByText('· 최고 5일')).toBeOnTheScreen();
-        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '2일 연속 독서 중, 최고 5일');
+        expect(screen.getByText('최고 기록 5일')).toBeOnTheScreen();
+        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '2일 연속 독서 중, 최고 기록 5일');
     });
 
     test('FR-10 S-80 소설 3권, 에세이 1권이면 소설 막대가 3배 길이로 먼저 보이고 막대는 보조 기술에서 숨겨요', async () => {
@@ -237,6 +272,8 @@ describe('FR-10 S-80 연속 독서일과 장르별 막대', () => {
         await renderRouter(routes, { initialUrl: '/my' });
         const rows = await screen.findAllByTestId('my-genre-row');
         expect(rows.map(row => row.props.accessibilityLabel)).toEqual(['소설/시, 3권', '에세이, 1권']);
+        // 장르별은 누적 기록과 다른 별도 카드다.
+        expect(screen.getByRole('header', { name: '장르별' }).parent).not.toBe(screen.getByRole('header', { name: '지금까지' }).parent);
         expect(within(rows[0]).getByText('3권')).toBeOnTheScreen();
         expect(within(rows[1]).getByText('1권')).toBeOnTheScreen();
         const widths = screen.getAllByTestId('my-genre-bar-fill', hidden)
@@ -258,7 +295,8 @@ describe('FR-10 S-80 연속 독서일과 장르별 막대', () => {
         expect(screen.getByLabelText('읽은 책 0권')).toBeOnTheScreen();
         expect(screen.getByLabelText('완독 0권')).toBeOnTheScreen();
         expect(screen.queryAllByTestId('my-genre-row', hidden)).toHaveLength(0);
-        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '연속 독서 0일, 최고 0일, 오늘 읽으면 1일째예요.');
+        expect(screen.queryByRole('header', { name: '장르별' })).toBeNull();
+        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '연속 독서 0일, 최고 기록 0일, 오늘 읽으면 1일째예요.');
     });
 });
 
