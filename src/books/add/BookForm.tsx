@@ -81,11 +81,12 @@ export function BookForm({ initialValues, onSave, onLookupIsbn }: {
                             }} value={value} style={[styles.input, errors[name] && styles.invalid]} />
                     )} />
                     {errors[name] && <Text accessibilityRole="alert" style={styles.error}>{errors[name]?.message}</Text>}
-                                       {name === 'isbn' && (lookup?.kind === 'loading'
-                                           ? <StateView kind="loading" message="ISBN으로 책을 찾고 있어요." />
+                    {name === 'isbn' && (lookup?.kind === 'loading'
+                        ? <StateView kind="loading" message="ISBN으로 책을 찾고 있어요." />
                         : <Text accessibilityRole={lookup?.kind === 'failed' ? 'alert' : undefined} accessibilityLiveRegion="polite"
-                            style={lookup?.kind === 'failed' ? styles.error : styles.hint}>                                               {lookup?.message ?? 'ISBN을 입력하면 책 정보를 자동으로 채워요.'}
-                                           </Text>)}
+                            style={lookup?.kind === 'failed' ? styles.error : styles.hint}>
+                            {lookup?.message ?? 'ISBN을 입력하면 책 정보를 자동으로 채워요.'}
+                        </Text>)}
                 </View>
             ))}
             <Text accessibilityRole="header" style={styles.label}>장르 (필수)</Text>
@@ -95,7 +96,7 @@ export function BookForm({ initialValues, onSave, onLookupIsbn }: {
                         <Pressable key={genre} accessibilityRole="radio" accessibilityLabel={genre}
                             accessibilityState={{ checked: value === genre, disabled: isSubmitting }} disabled={isSubmitting}
                             onPress={() => onChange(genre)} style={[styles.genre, value === genre && styles.selected]}>
-                            <Text style={styles.label}>{value === genre ? `선택됨 · ${genre}` : genre}</Text>
+                            <Text style={[styles.label, value === genre && styles.selectedLabel]}>{genre}</Text>
                         </Pressable>
                     ))}
                 </View>
@@ -110,12 +111,15 @@ export function BookForm({ initialValues, onSave, onLookupIsbn }: {
 }
 
 const styles = StyleSheet.create({
-    form: { gap: spacing.lg }, field: { gap: spacing.sm },
+    form: { gap: spacing.md }, field: { gap: spacing.xs },
     label: { ...typography.label, color: colors.brand.espresso },
-    input: { ...typography.body, color: colors.brand.espresso, minHeight: sizes.button, padding: spacing.md, borderWidth: 1, borderColor: colors.line.border, borderRadius: radii.button, backgroundColor: colors.surface.card },
+    input: { ...typography.body, color: colors.brand.espresso, minHeight: sizes.minTouch, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: 1, borderColor: colors.line.border, borderRadius: radii.button, backgroundColor: colors.surface.card },
     invalid: { borderColor: colors.state.error }, error: { ...typography.bodySmall, color: colors.state.error },
     hint: { ...typography.bodySmall, color: colors.text.muted },
     genres: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-    genre: { minHeight: sizes.minTouch, minWidth: sizes.minTouch, justifyContent: 'center', padding: spacing.md, backgroundColor: colors.surface.chip, borderRadius: radii.small },
-    selected: { backgroundColor: colors.brand.sand },
+    // 선택하면 테두리 색만 바뀌어 버튼 크기가 흔들리지 않도록 같은 색 테두리를 미리 둔다.
+    genre: { minHeight: sizes.minTouch, minWidth: sizes.minTouch, justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: 1, borderColor: colors.surface.chip, backgroundColor: colors.surface.chip, borderRadius: radii.small },
+    // 접근성: 색만으로 구분하지 않도록 진한 테두리와 굵은 글씨를 함께 쓴다.
+    selected: { backgroundColor: colors.brand.sand, borderColor: colors.brand.espresso },
+    selectedLabel: { fontFamily: typography.heading.fontFamily },
 });
