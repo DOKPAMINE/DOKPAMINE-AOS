@@ -73,6 +73,22 @@ describe('readingStreak', () => {
         expect(readingStreak(list, [], '2026-11-26')).toEqual({ current: 2, best: 4 });
     });
 
+    test('FR-10 S-80 오늘(KST)보다 뒤 날짜의 기록은 최고 기록에 넣지 않아요', () => {
+        // 오늘 26일까지 2일 연속, 미래 27~29일이 이어 붙어도 최고는 2일이다.
+        const list = days('2026-11-25', '2026-11-26', '2026-11-27', '2026-11-28', '2026-11-29');
+        expect(readingStreak(list, [], '2026-11-26')).toEqual({ current: 2, best: 2 });
+        // 미래 날짜만 따로 길게 이어져 있어도 최고 기록은 늘지 않는다.
+        expect(readingStreak(days('2026-11-20', '2026-12-01', '2026-12-02', '2026-12-03'), [], '2026-11-26')).toEqual({ current: 0, best: 1 });
+        expect(readingStreak(days('2026-11-27'), [], '2026-11-26')).toEqual({ current: 0, best: 0 });
+    });
+
+    test('FR-10 S-80 KST 자정 직후 다음 날 기록은 오늘이 바뀌어야 최고 기록에 들어가요', () => {
+        const next = session('2026-11-27', { startedAt: at('2026-11-27', '00:00') });
+        const list = [...days('2026-11-25', '2026-11-26'), next];
+        expect(readingStreak(list, [], '2026-11-26')).toEqual({ current: 2, best: 2 });
+        expect(readingStreak(list, [], '2026-11-27')).toEqual({ current: 3, best: 3 });
+    });
+
     test('FR-10 S-80 잘못된 날짜는 거절해요', () => {
         expect(() => readingStreak([], [], '2026-11-31')).toThrow(RangeError);
     });

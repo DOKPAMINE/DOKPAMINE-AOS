@@ -5,7 +5,7 @@ import type { ReadingSession, StatisticsBook } from './readingTypes';
 /** FR-05·FR-10 팀 결정: 그날(KST) 독서 시간 합계가 10분 이상이어야 연속 독서일의 "읽은 날"이다. */
 export const MIN_READING_DAY_SECONDS = 10 * 60;
 
-/** S-10·S-80 연속 독서일. current는 오늘(없으면 어제)까지 이어진 날 수, best는 전체 기간 중 가장 긴 연속 일수다. */
+/** S-10·S-80 연속 독서일. current는 오늘(없으면 어제)까지 이어진 날 수, best는 오늘까지 전체 기간 중 가장 긴 연속 일수다. */
 export interface ReadingStreak {
     readonly current: number;
     readonly best: number;
@@ -60,10 +60,11 @@ export function readingStreak(
     let current = 0;
     for (let day = has(todayMs) ? todayMs : todayMs - DAY_MS; has(day); day -= DAY_MS) current++;
 
+    // 기기 시각이 틀려 오늘(KST)보다 뒤에 저장된 읽은 날은 최고 기록에 넣지 않는다.
     let best = 0;
     let run = 0;
     let previous: number | null = null;
-    for (const ms of [...days].map(day => parseDate(day)!).sort((a, b) => a - b)) {
+    for (const ms of [...days].map(day => parseDate(day)!).filter(ms => ms <= todayMs).sort((a, b) => a - b)) {
         run = previous !== null && ms - previous === DAY_MS ? run + 1 : 1;
         best = Math.max(best, run);
         previous = ms;
