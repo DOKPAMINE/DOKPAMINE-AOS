@@ -1,6 +1,8 @@
+import { preloadReactNative } from '../../__tests__/preloadReactNative';
+
 import { router, Slot } from 'expo-router';
-import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
-import { Alert, AppState, Linking, Text, type AppStateStatus } from 'react-native';
+import { act, fireEvent, renderRouter, screen, within } from 'expo-router/testing-library';
+import { Alert, AppState, Linking, StyleSheet, Text, type AppStateStatus } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import Storage from 'expo-sqlite/kv-store';
 import { Camera } from 'expo-camera';
@@ -20,7 +22,11 @@ import { initializeDatabase, prepareRecordDatabase } from '../../db/client';
 import { createRecordRepository, type RecordRepository } from '../../db/repository';
 import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
 import { subscribeSyncState } from '../../sync';
+import type { BookRecord } from '../../db/schema';
 import { reviewPreferences } from '../preferences';
+
+// 첫 render가 react-native 컴포넌트 로딩을 떠안아 시간 제한을 넘지 않도록 파일 로딩 단계에서 불러온다(#103).
+preloadReactNative();
 
 jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), isLoaded: () => true, loadAsync: jest.fn(), useFonts: () => [true, null] }));
 jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(), hideAsync: jest.fn() }));
@@ -37,6 +43,13 @@ jest.mock('../../sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest
 const bookId = '00000000-0000-4000-8000-000000000001';
 const sessionId = '00000000-0000-4000-8000-000000000002';
 const quoteId = '00000000-0000-4000-8000-000000000003';
+const reviewId = '00000000-0000-4000-8000-000000000004';
+const essayId = '00000000-0000-4000-8000-000000000005';
+const novelIds = ['00000000-0000-4000-8000-000000000006', '00000000-0000-4000-8000-000000000007'];
+const hidden = { includeHiddenElements: true };
+let sessionCount = 0;
+/** 테스트에서 추가한 n번째(1부터) 세션 ID */
+const nthSessionId = (n: number) => `00000000-0000-4000-8001-${String(n).padStart(12, '0')}`;
 const account = { id: 'reader', username: 'reader_01', nickname: '책산책', rankingOptIn: false };
 const stored = new Map<string, string>();
 const preferences = new Map<string, string>();
@@ -68,8 +81,19 @@ let memory: ReturnType<typeof memorySQLite>;
 let repository: RecordRepository;
 let activeCallbacks: ((state: AppStateStatus) => void)[];
 
+function addBook(id: string, title: string, genre: BookRecord['genre'], completedAt: number | null = null) {
+    repository.books.save({ id, title, author: `${title} 작가`, isbn: null, publisher: null, totalPages: 240, currentPage: 0, genre,
+        status: completedAt === null ? 'READING' : 'DONE', coverUrl: null, sideCoverUrl: null, yes24ProductUrl: null, catalogPending: false,
+        completedCount: completedAt === null ? 0 : 1, completedAt });
+}
+function addSession(id: string, startedAt: number, seconds: number) {
+    repository.sessions.save({ id: nthSessionId(++sessionCount), bookId: id, startedAt, endedAt: startedAt + seconds * 1000,
+        activeSeconds: seconds, startPage: 0, endPage: 10, source: 'MANUAL' });
+}
+
 beforeEach(async () => {
     jest.clearAllMocks();
+    sessionCount = 0;
     stored.clear(); preferences.clear(); queryClient.clear();
     account.rankingOptIn = false;
     stored.set('dokpamine.accessToken', 'test-token');
@@ -107,35 +131,135 @@ test.each(['book', 'session'] as const)('NFR-04 S-80 거절된 %s의 안내와 �
     await renderRouter(routes, { initialUrl: '/my' });
     expect(await screen.findByText('저장된 기록의 입력을 확인해 주세요.')).toBeOnTheScreen();
     expect(screen.getByText('입력 내용을 보존했어요. 수정한 뒤 다시 동기화해요.')).toBeOnTheScreen();
+    expect(within(screen.getByTestId('sync-issues')).getByRole('header', { name: '동기화를 확인해 주세요' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: `데미안 · ${kind === 'book' ? '책 정보 수정' : '기록 시간·쪽수 수정'}` }));
     expect(await screen.findByText(kind === 'book' ? '책 정보 수정 화면' : '기록 수정 화면')).toBeOnTheScreen();
     expect(screen).toHavePathname(kind === 'book' ? `/book/${bookId}/edit` : `/book/${bookId}/records/${sessionId}`);
 });
 
-test('FR-10 S-80 닉네임과 이번 달 요약(1시간 30분·240쪽·완독 1권)을 보여 주고 삭제 전송 대기도 세어요', async () => {
-    repository.quotes.save({ id: quoteId, bookId, text: '문장', page: null, memo: null });
-    repository.quotes.softDelete(quoteId);
+test('FR-10 S-80 닉네임과 누적 기록(총 독서시간·읽은 책·완독)을 전체 기록과 맞게 보여 줘요', async () => {
+    // 준비한 기록: 데미안(완독) 5400초에 더해, 작년에 읽은 미완독 책 600초와 삭제한 기록 900초를 둔다.
+    addBook(essayId, '산책', '에세이');
+    addSession(essayId, Date.parse('2025-03-01T12:00:00+09:00'), 600);
+    addSession(essayId, Date.parse('2025-03-02T12:00:00+09:00'), 900);
+    repository.sessions.softDelete(nthSessionId(2));
     await renderRouter(routes, { initialUrl: '/my' });
     expect(await screen.findByText('책산책님')).toBeOnTheScreen();
-    // 준비한 기록: 이번 달 5400초·0→240쪽 세션 1개와 이번 달에 완독한 책 1권
-    expect(await screen.findByText('1시간 30분')).toBeOnTheScreen();
-    expect(screen.getByText('240쪽')).toBeOnTheScreen();
-    expect(screen.getByText('1권')).toBeOnTheScreen();
-    expect(screen.getByText('전송 대기 3건')).toBeOnTheScreen();
+    expect(await screen.findByRole('header', { name: '지금까지' })).toBeOnTheScreen();
+    expect(screen.getByLabelText('총 독서시간 1시간 40분')).toBeOnTheScreen();
+    expect(screen.getByLabelText('읽은 책 2권')).toBeOnTheScreen();
+    expect(screen.getByLabelText('완독 1권')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: '설정' }));
     expect(await screen.findByRole('header', { name: '설정' })).toBeOnTheScreen();
 });
 
-test('NFR-04 S-80 전송 완료 알림으로 대기 건수를 다시 읽고 새 기록도 반영해요', async () => {
+test('FR-10 S-80 "이번 달 독서" 카드와 "전송 대기"·"동기화 상태"는 보이지 않고 동기화 문제가 없으면 경고 카드도 없어요', async () => {
+    // 삭제 전송 대기를 포함해 대기 기록(책·세션·문장 tombstone)이 있어도 대기 건수는 표시하지 않는다.
+    repository.quotes.save({ id: quoteId, bookId, text: '문장', page: null, memo: null });
+    repository.quotes.softDelete(quoteId);
     await renderRouter(routes, { initialUrl: '/my' });
-    expect(await screen.findByText('전송 대기 2건')).toBeOnTheScreen();
+    await screen.findByRole('header', { name: '지금까지' });
+    expect(screen.queryByText('이번 달 독서')).toBeNull();
+    expect(screen.queryByText(/전송 대기/)).toBeNull();
+    expect(screen.queryByText('동기화 상태')).toBeNull();
+    expect(screen.queryByTestId('sync-issues')).toBeNull();
+    expect(screen.queryByText('240쪽')).toBeNull();
+});
+
+test('FR-10 NFR-04 S-80 감상 충돌이 있으면 경고 카드와 충돌 확인 버튼을 보여 주고 감상 목록을 열어요', async () => {
+    repository.reviews.save({ id: reviewId, bookId, oneLine: null, body: '충돌한 독후감', visibility: 'PRIVATE', publishedAt: null });
+    repository.reviews.markConflict(reviewId);
+    await renderRouter(routes, { initialUrl: '/my' });
+    const card = await screen.findByTestId('sync-issues');
+    expect(within(card).getByRole('header', { name: '동기화를 확인해 주세요' })).toBeOnTheScreen();
+    await fireEvent.press(within(card).getByRole('button', { name: '데미안 · 감상 충돌 확인' }));
+    expect(await screen.findByText('감상 목록')).toBeOnTheScreen();
+    expect(screen).toHavePathname(`/book/${bookId}/review`);
+});
+
+test('NFR-04 S-80 전송 상태 알림으로 다시 읽어 거절이 해결되면 경고 카드를 숨기고 새 기록도 반영해요', async () => {
+    const row = repository.books.get(bookId)!;
+    repository.syncRejections.save({ key: `book:${bookId}`, kind: 'book', recordId: bookId, bookId,
+        localVersion: row.localVersion, message: '저장된 기록의 입력을 확인해 주세요.' });
+    await renderRouter(routes, { initialUrl: '/my' });
+    expect(await screen.findByTestId('sync-issues')).toBeOnTheScreen();
     await act(async () => {
-        for (const entity of [repository.books, repository.sessions]) for (const row of entity.list()) entity.markSynced(row.id, row.localVersion);
+        repository.syncRejections.clear(`book:${bookId}`);
         jest.mocked(subscribeSyncState).mock.calls.forEach(([listener]) => listener());
     });
-    expect(screen.getByText('전송 대기 0건')).toBeOnTheScreen();
-    await act(async () => { repository.quotes.save({ id: quoteId, bookId, text: '추가 문장', page: null, memo: null }); });
-    expect(screen.getByText('전송 대기 1건')).toBeOnTheScreen();
+    expect(screen.queryByTestId('sync-issues')).toBeNull();
+    await act(async () => { addBook(essayId, '산책', '에세이'); addSession(essayId, Date.now() - 3600000, 600); });
+    expect(screen.getByLabelText('읽은 책 2권')).toBeOnTheScreen();
+    expect(screen.getByLabelText('총 독서시간 1시간 40분')).toBeOnTheScreen();
+});
+
+describe('FR-10 S-80 연속 독서일과 장르별 막대', () => {
+    const today = Date.parse('2026-11-26T12:00:00+09:00');
+    const day = (date: string) => Date.parse(`${date}T12:00:00+09:00`);
+    beforeEach(() => {
+        // 기본 기록(현재 시각의 세션)을 지우고 정해 둔 날짜의 기록만 남긴다. 오늘은 2026-11-26(KST)이다.
+        repository.sessions.softDelete(sessionId);
+        jest.spyOn(Date, 'now').mockReturnValue(today);
+    });
+
+    test('FR-10 S-80 11월 24·25일에 기록이 있고 오늘(26일) 기록이 없으면 "2일 연속"으로 표시돼요', async () => {
+        addSession(bookId, day('2026-11-24'), 600);
+        addSession(bookId, day('2026-11-25'), 600);
+        await renderRouter(routes, { initialUrl: '/my' });
+        expect(await screen.findByText('2일 연속 독서 중')).toBeOnTheScreen();
+        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '2일 연속 독서 중, 최고 2일');
+        expect(screen.queryByText('오늘 읽으면 1일째예요.')).toBeNull();
+    });
+
+    test('FR-10 S-80 11월 24일에만 기록이 있으면 연속 0일과 "오늘 읽으면 1일째예요"를 보여 줘요', async () => {
+        addSession(bookId, day('2026-11-24'), 600);
+        await renderRouter(routes, { initialUrl: '/my' });
+        expect(await screen.findByText('연속 독서 0일')).toBeOnTheScreen();
+        expect(screen.getByText('오늘 읽으면 1일째예요.')).toBeOnTheScreen();
+        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '연속 독서 0일, 최고 1일, 오늘 읽으면 1일째예요.');
+    });
+
+    test('FR-10 S-80 최고 연속 기록은 전체 기간 중 가장 긴 연속 일수예요', async () => {
+        ['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02', '2026-11-03', '2026-11-25', '2026-11-26']
+            .forEach(date => addSession(bookId, day(date), 600));
+        await renderRouter(routes, { initialUrl: '/my' });
+        expect(await screen.findByText('2일 연속 독서 중')).toBeOnTheScreen();
+        expect(screen.getByText('· 최고 5일')).toBeOnTheScreen();
+        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '2일 연속 독서 중, 최고 5일');
+    });
+
+    test('FR-10 S-80 소설 3권, 에세이 1권이면 소설 막대가 3배 길이로 먼저 보이고 막대는 보조 기술에서 숨겨요', async () => {
+        // 데미안(소설/시)과 소설 2권, 에세이 1권. 같은 책을 두 번 읽어도 1권으로 센다.
+        addBook(novelIds[0], '소설 둘', '소설/시');
+        addBook(novelIds[1], '소설 셋', '소설/시');
+        addBook(essayId, '산책', '에세이');
+        [bookId, bookId, novelIds[0], novelIds[1], essayId].forEach((id, index) => addSession(id, day(`2026-11-1${index}`), 600));
+        await renderRouter(routes, { initialUrl: '/my' });
+        const rows = await screen.findAllByTestId('my-genre-row');
+        expect(rows.map(row => row.props.accessibilityLabel)).toEqual(['소설/시, 3권', '에세이, 1권']);
+        expect(within(rows[0]).getByText('3권')).toBeOnTheScreen();
+        expect(within(rows[1]).getByText('1권')).toBeOnTheScreen();
+        const widths = screen.getAllByTestId('my-genre-bar-fill', hidden)
+            .map(fill => parseFloat(String(StyleSheet.flatten(fill.props.style).width)));
+        expect(widths[0]).toBe(100);
+        expect(widths[0] / widths[1]).toBeCloseTo(3);
+        screen.getAllByTestId('my-genre-bar-track', hidden).forEach(track => {
+            expect(track).toHaveProp('accessibilityElementsHidden', true);
+            expect(track).toHaveProp('importantForAccessibility', 'no-hide-descendants');
+        });
+        expect(screen.queryAllByTestId('my-genre-bar-track')).toHaveLength(0);
+    });
+
+    test('FR-10 S-80 기록이 하나도 없으면 숫자 0과 "아직 독서 기록이 없어요." 안내를 보여 주고 막대가 없어요', async () => {
+        repository.books.softDelete(bookId);
+        await renderRouter(routes, { initialUrl: '/my' });
+        expect(await screen.findByText('아직 독서 기록이 없어요.')).toBeOnTheScreen();
+        expect(screen.getByLabelText('총 독서시간 0분')).toBeOnTheScreen();
+        expect(screen.getByLabelText('읽은 책 0권')).toBeOnTheScreen();
+        expect(screen.getByLabelText('완독 0권')).toBeOnTheScreen();
+        expect(screen.queryAllByTestId('my-genre-row', hidden)).toHaveLength(0);
+        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '연속 독서 0일, 최고 0일, 오늘 읽으면 1일째예요.');
+    });
 });
 
 test('FR-08 S-81 S-51 S-53 기본 공개 범위가 재진입 후 유지되고 감상이 없는 책의 새 감상에 적용돼요', async () => {
@@ -213,7 +337,7 @@ test('NFR-04 NFR-06 S-80 오프라인 재진입도 저장한 닉네임과 로컬
     await renderRouter(routes, { initialUrl: '/my' });
     expect(await screen.findByText(offlineMessage)).toBeOnTheScreen();
     expect(screen.getByText('책산책님')).toBeOnTheScreen();
-    expect(screen.getByText('240쪽')).toBeOnTheScreen();
+    expect(screen.getByLabelText('총 독서시간 1시간 30분')).toBeOnTheScreen();
     expect(me).not.toHaveBeenCalled();
 });
 
@@ -253,5 +377,5 @@ test('NFR-04 S-80 저장소 오류는 재시도 후 로컬 요약을 표시해�
     await renderRouter(routes, { initialUrl: '/my' });
     await screen.findByRole('alert');
     await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
-    expect(await screen.findByText('240쪽')).toBeOnTheScreen();
+    expect(await screen.findByLabelText('총 독서시간 1시간 30분')).toBeOnTheScreen();
 });
