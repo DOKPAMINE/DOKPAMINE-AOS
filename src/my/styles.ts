@@ -16,6 +16,8 @@ export const styles = StyleSheet.create({
     streak: { gap: spacing.xs },
     streakLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     streakValue: { ...typography.heading, color: colors.brand.espresso, flexShrink: 1 },
+    // 최고 기록은 위 줄(heading 21)보다 작고 보조 글자(bodySmall 13)보다 큰 body(16)에 보조 글자색이다.
+    streakBest: { ...typography.body, color: colors.text.muted },
     // S-80 "나의 독서" 카드와 안쪽 칸(MySection). 칸은 테두리 없이 통계 칸 바탕(surface.sandSoft)을 쓰고
     // 반경은 카드(radii.card)보다 작은 radii.button이다. 칸 사이·칸 안 간격은 spacing.md다.
     readingCard: { gap: spacing.md },

@@ -23,6 +23,7 @@ import { createRecordRepository, type RecordRepository } from '../../db/reposito
 import { memorySQLite } from '../../db/__tests__/sqliteAdapter';
 import { subscribeSyncState } from '../../sync';
 import type { BookRecord } from '../../db/schema';
+import { colors, typography } from '../../theme';
 import { reviewPreferences } from '../preferences';
 
 // 첫 render가 react-native 컴포넌트 로딩을 떠안아 시간 제한을 넘지 않도록 파일 로딩 단계에서 불러온다(#103).
@@ -176,6 +177,11 @@ test('FR-10 S-80 닉네임과 연속 독서일은 한 카드에 있고 연속일
     expect(streak).toHaveProp('accessibilityLabel', '1일 연속 독서 중, 최고 기록 1일');
     expect(within(streak).getByText('1일 연속 독서 중')).toBeOnTheScreen();
     expect(within(streak).getByText('최고 기록 1일')).toBeOnTheScreen();
+    // 최고 기록 글자는 typography.body(16)로 위 줄(typography.heading 21)보다 작다.
+    const best = StyleSheet.flatten(within(streak).getByTestId('streak-best').props.style);
+    const title = StyleSheet.flatten(within(streak).getByText('1일 연속 독서 중').props.style);
+    expect(best).toMatchObject({ fontSize: typography.body.fontSize, fontFamily: typography.body.fontFamily, color: colors.text.muted });
+    expect(best.fontSize).toBeLessThan(title.fontSize as number);
     const icon = screen.getByTestId('streak-icon', hidden);
     expect(icon).toHaveProp('accessibilityElementsHidden', true);
     expect(icon).toHaveProp('importantForAccessibility', 'no-hide-descendants');
@@ -254,15 +260,15 @@ describe('FR-10 S-80 연속 독서일과 장르별 막대', () => {
         await renderRouter(routes, { initialUrl: '/my' });
         expect(await screen.findByText('2일 연속 독서 중')).toBeOnTheScreen();
         expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '2일 연속 독서 중, 최고 기록 2일');
-        expect(screen.queryByText('오늘 읽으면 1일째예요.')).toBeNull();
     });
 
-    test('FR-10 S-80 11월 24일에만 기록이 있으면 연속 0일과 "오늘 읽으면 1일째예요"를 보여 줘요', async () => {
+    test('FR-10 S-80 11월 24일에만 기록이 있으면 연속 0일과 최고 기록만 보여 주고 "오늘 읽으면 1일째예요." 안내는 없어요', async () => {
         addSession(bookId, day('2026-11-24'), 600);
         await renderRouter(routes, { initialUrl: '/my' });
         expect(await screen.findByText('연속 독서 0일')).toBeOnTheScreen();
-        expect(screen.getByText('오늘 읽으면 1일째예요.')).toBeOnTheScreen();
-        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '연속 독서 0일, 최고 기록 1일, 오늘 읽으면 1일째예요.');
+        expect(screen.getByText('최고 기록 1일')).toBeOnTheScreen();
+        expect(screen.queryByText(/오늘 읽으면/)).toBeNull();
+        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '연속 독서 0일, 최고 기록 1일');
     });
 
     test('FR-10 S-80 최고 연속 기록은 전체 기간 중 가장 긴 연속 일수예요', async () => {
@@ -345,7 +351,7 @@ describe('FR-10 S-80 연속 독서일과 장르별 막대', () => {
         expect(within(reading).getByTestId('my-section-totals')).toBeOnTheScreen();
         expect(within(reading).getByText('아직 독서 기록이 없어요.')).toBeOnTheScreen();
         expect(screen.queryByTestId('my-section-genres')).toBeNull();
-        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '연속 독서 0일, 최고 기록 0일, 오늘 읽으면 1일째예요.');
+        expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '연속 독서 0일, 최고 기록 0일');
     });
 });
 

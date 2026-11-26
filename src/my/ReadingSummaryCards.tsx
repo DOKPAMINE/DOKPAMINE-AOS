@@ -10,23 +10,21 @@ import { styles } from './styles';
 
 /**
  * S-80 연속 독서일. 닉네임 카드 안에 두고 "3일 연속 독서 중, 최고 기록 3일"처럼 한 요소로 읽는다.
+ * 연속 0일이면 "연속 독서 0일"과 최고 기록만 보여 준다.
  * 불꽃 아이콘은 꾸밈이라 보조 기술에서 숨기고, 큰 글자에서는 글자와 함께 커진다.
  */
 export function StreakSummary({ streak }: { streak: ReadingStreak }) {
     const { fontScale } = useWindowDimensions();
-    const reading = streak.current > 0;
-    const title = reading ? `${streak.current}일 연속 독서 중` : '연속 독서 0일';
+    const title = streak.current > 0 ? `${streak.current}일 연속 독서 중` : '연속 독서 0일';
     const best = `최고 기록 ${streak.best}일`;
-    const hint = reading ? null : '오늘 읽으면 1일째예요.';
-    return <View testID="streak" accessible accessibilityRole="text" accessibilityLabel={[title, best, hint].filter(Boolean).join(', ')}
+    return <View testID="streak" accessible accessibilityRole="text" accessibilityLabel={`${title}, ${best}`}
         style={styles.streak}>
         <View style={styles.streakLine}>
             <MaterialCommunityIcons testID="streak-icon" name="fire" size={Math.round(sizes.icon * fontScale)} color={colors.brand.camel}
                 accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
             <Text style={styles.streakValue}>{title}</Text>
         </View>
-        <Text style={styles.meta}>{best}</Text>
-        {hint && <Text style={styles.meta}>{hint}</Text>}
+        <Text testID="streak-best" style={styles.streakBest}>{best}</Text>
     </View>;
 }
 
