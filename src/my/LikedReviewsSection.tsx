@@ -6,8 +6,8 @@ import { Pressable, Text, View } from 'react-native';
 import type { LikedBookGroup } from '../api/types';
 import { StateView } from '../components';
 import { likedPreviewLabel, likedPreviewText } from '../domain/likedReviews';
-import { BookCover } from '../shelf/BookCover';
-import { colors, sizes, spacing } from '../theme';
+import { colors, sizes } from '../theme';
+import { LikedCover } from './LikedCover';
 import { LikedError } from './LikedError';
 import { refetchLikedPreview, useLikedPreview } from './likedQueries';
 import { likedStyles } from './likedStyles';
@@ -46,8 +46,8 @@ export function LikedReviewsSection() {
 function PreviewRow({ group }: { group: LikedBookGroup }) {
     return <Pressable testID="my-liked-row" accessibilityRole="button" accessibilityLabel={likedPreviewLabel(group)} onPress={openList}
         style={({ pressed }) => [likedStyles.previewRow, pressed && likedStyles.pressed]}>
-        {/* 표지는 꾸밈이라 BookCover가 보조 기술에서 숨긴다. 묶음에는 장르가 없어 기본 표지는 글자 없이 보인다. */}
-        <BookCover key={group.coverUrl ?? 'none'} uri={group.coverUrl ?? null} genre="" width={spacing.xxl} />
+        {/* 표지는 꾸밈이라 보조 기술에서 숨긴다. 사진이 없거나 못 불러오면 책 아이콘 칸이다. 폭은 33dp로 줄 높이 44dp 안팎이다. */}
+        <LikedCover key={group.coverUrl ?? 'none'} uri={group.coverUrl} width={Math.round(sizes.minTouch * 0.75)} />
         <Text numberOfLines={2} style={likedStyles.previewText}>{likedPreviewText(group)}</Text>
     </Pressable>;
 }

@@ -357,3 +357,33 @@ test('FR-09 S-76 좋아요 목록에서 열었는데 이전 화면이 없으면 
     expect(await screen.findByRole('header', { name: '어린 왕자' })).toBeOnTheScreen();
     expect(screen).toHavePathname('/liked-reviews');
 });
+
+test('FR-09 S-80 표지가 없으면 미리보기와 전체 목록에 책 아이콘 칸을 보여 주고 보조 기술에서 숨겨요', async () => {
+    await renderRouter(withPreview, { initialUrl: '/my' });
+    await screen.findByText('어린 왕자 · 하늘님 외 1명');
+    await act(async () => { router.push('/liked-reviews'); });
+    await screen.findAllByTestId('liked-person');
+    const boxes = screen.getAllByTestId('liked-cover-default', hidden);
+    expect(boxes).toHaveLength(2);
+    for (const box of boxes) {
+        expect(box).toHaveProp('accessibilityElementsHidden', true);
+        expect(box).toHaveProp('importantForAccessibility', 'no-hide-descendants');
+        // MaterialCommunityIcons "book-outline" 글리프(985956)를 그린다.
+        expect(within(box).getByTestId('liked-cover-icon', hidden)).toHaveTextContent(String.fromCodePoint(985956));
+    }
+    // 미리보기(33dp)와 전체 목록(44dp) 모두 BookCover와 같은 2:3 비율이다.
+    const sizes = boxes.map(box => StyleSheet.flatten(box.props.style)).map(style => `${style.width}x${style.height}`).sort();
+    expect(sizes).toEqual(['33x50', '44x66']);
+    expect(screen.queryAllByTestId('book-cover-default', hidden)).toHaveLength(0);
+});
+
+test('FR-09 S-80 표지 사진이 있으면 보여 주고 불러오지 못하면 책 아이콘 칸으로 바꿔요', async () => {
+    jest.mocked(likedBooks).mockResolvedValue(page([{ ...prince, coverUrl: 'https://covers.example.test/prince.jpg' }]));
+    await renderRouter(routes, { initialUrl: '/liked-reviews' });
+    const image = await screen.findByTestId('liked-cover-image', hidden);
+    expect(image.props.source).toEqual({ uri: 'https://covers.example.test/prince.jpg' });
+    expect(screen.queryByTestId('liked-cover-icon', hidden)).toBeNull();
+    await fireEvent(image, 'error');
+    expect(screen.getByTestId('liked-cover-icon', hidden)).toBeOnTheScreen();
+    expect(screen.queryByTestId('liked-cover-image', hidden)).toBeNull();
+});

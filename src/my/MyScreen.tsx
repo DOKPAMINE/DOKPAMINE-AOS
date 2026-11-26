@@ -30,7 +30,7 @@ export function MyScreen() {
             {account.kind === 'ready' && account.failed && <StateView kind="error" message="계정 정보를 새로 불러오지 못했어요." onRetry={retryProfile} />}
             {records.kind === 'ready' && <StreakSummary streak={readingStreak(records.sessions, records.books, kstDate(records.now))} />}
         </Card>
-        {totals ? <MyReadingCard totals={totals}><LikedReviewsSection /></MyReadingCard> :<Card><StateView kind={records.kind === 'error' ? 'error' : 'loading'} onRetry={records.kind === 'error' ? retry : undefined} /></Card>}
+        {totals ? <MyReadingCard totals={totals}><LikedReviewsSection /></MyReadingCard> : <Card><StateView kind={records.kind === 'error' ? 'error' : 'loading'} onRetry={records.kind === 'error' ? retry : undefined} /></Card>}
         {/* NFR-04: 동기화 문제는 평소에 숨기고 감상 충돌·서버 거절이 있을 때만 경고 카드로 알린다. */}
         {records.kind === 'ready' && hasSyncIssues && <View testID="sync-issues" style={styles.warningCard}>
             <Text accessibilityRole="header" style={styles.warningHeading}>동기화를 확인해 주세요</Text>

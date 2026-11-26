@@ -6,8 +6,8 @@ import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 import type { LikedBookGroup, LikedPerson } from '../api/types';
 import { Screen, SecondaryButton, StateView } from '../components';
 import { hiddenPeopleCount, likedPersonLabel, mergeLikedPages, morePeopleText, visiblePeople } from '../domain/likedReviews';
-import { BookCover } from '../shelf/BookCover';
 import { colors, sizes } from '../theme';
+import { LikedCover } from './LikedCover';
 import { LikedError } from './LikedError';
 import { refreshLikedBookPages, restartLikedBookPages, useLikedBookPages } from './likedQueries';
 import { likedStyles } from './likedStyles';
@@ -74,7 +74,7 @@ function BookGroup({ group, expanded, onExpand }: { group: LikedBookGroup; expan
     const hidden = expanded ? 0 : hiddenPeopleCount(group.people);
     return <View testID="liked-group" style={likedStyles.group}>
         <View style={likedStyles.groupHeader}>
-            <BookCover key={group.coverUrl ?? 'none'} uri={group.coverUrl ?? null} genre="" width={sizes.minTouch} />
+            <LikedCover key={group.coverUrl ?? 'none'} uri={group.coverUrl} width={sizes.minTouch} />
             <View style={likedStyles.groupText}>
                 <Text accessibilityRole="header" numberOfLines={2} style={likedStyles.groupTitle}>{group.bookTitle}</Text>
                 <Text numberOfLines={1} style={likedStyles.author}>{group.bookAuthor}</Text>
