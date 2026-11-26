@@ -5,6 +5,8 @@ import { AppState, Text, type AppStateStatus } from 'react-native';
 import HomeScreen from '../app/(tabs)/index';
 import { initializeDatabase } from '../src/db/client';
 import type { BookRecord, SessionRecord } from '../src/db/schema';
+import { kstDate } from '../src/domain/kstDate';
+import { readingStreak } from '../src/domain/readingSummary';
 
 jest.mock('../src/db/client', () => ({ initializeDatabase: jest.fn() }));
 
@@ -104,15 +106,37 @@ test('FR-04 FR-05 S-10 KST 연속일과 월요일부터의 주간 시간이 도�
     repository.books.list.mockReturnValue([first]);
     repository.sessions.list.mockReturnValue([
         session('today', '2026-11-01T15:00:00Z', 26 * 3600, { source: 'MANUAL' }),
-        session('yesterday1', '2026-11-01T14:59:00Z', 30),
-        session('yesterday2', '2026-11-01T09:00:00Z', 30),
-        session('under-minute', '2026-10-31T09:00:00Z', 59),
+        session('yesterday1', '2026-11-01T14:59:00Z', 300),
+        session('yesterday2', '2026-11-01T09:00:00Z', 300),
+        session('under-ten-minutes', '2026-10-31T09:00:00Z', 599),
         session('deleted', '2026-11-02T01:00:00Z', 3600, { deleted: true }),
         session('future', '2026-11-02T15:00:00Z', 3600),
     ]);
     await renderRouter(routes, { initialUrl: '/' });
     expect(screen.getByText('2일')).toBeOnTheScreen();
     expect(screen.getByText('26시간 0분')).toBeOnTheScreen();
+});
+
+test('FR-05 FR-10 S-10 S-80 홈 연속일은 같은 기록의 마이 현재 연속일과 같고 9분 59초인 날과 삭제한 책의 기록은 세지 않아요', async () => {
+    const removed = { ...second, deleted: true };
+    const books = [first, removed];
+    const sessions = [
+        // 오늘(11월 2일) 9분 59초는 아직 읽은 날이 아니므로 어제까지의 연속을 보여 준다.
+        session('today', '2026-11-02T01:00:00Z', 599),
+        session('yesterday', '2026-11-01T01:00:00Z', 600),
+        session('two-days-ago', '2026-10-31T01:00:00Z', 300),
+        session('two-days-ago-more', '2026-10-31T02:00:00Z', 300),
+        // 삭제한 책의 기록만 있는 10월 30일은 끊긴 날이다.
+        session('removed-book', '2026-10-30T01:00:00Z', 3600, { bookId: removed.id }),
+        session('four-days-ago', '2026-10-29T01:00:00Z', 600),
+    ];
+    repository.books.list.mockReturnValue(books);
+    repository.sessions.list.mockReturnValue(sessions);
+    await renderRouter(routes, { initialUrl: '/' });
+    // 마이(S-80)는 같은 readingStreak의 current를 "N일 연속 독서 중"으로 보여 준다.
+    const my = readingStreak(sessions, books, kstDate(now));
+    expect(my).toEqual({ current: 2, best: 2 });
+    expect(screen.getByText(`${my.current}일`)).toBeOnTheScreen();
 });
 
 test('NFR-04 FR-04 S-10 기록 변경으로 선택한 책이 없어지면 남은 책으로 갱신하고 구독을 해제해요', async () => {
@@ -148,7 +172,7 @@ test('FR-05 S-10 앱 복귀 시 KST 날짜와 저장된 기록을 다시 읽어�
     jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
         onActive = listener; return { remove };
     });
-    repository.sessions.list.mockReturnValue([session('today', '2026-11-02T01:00:00Z', 60)]);
+    repository.sessions.list.mockReturnValue([session('today', '2026-11-02T01:00:00Z', 600)]);
     const rendered = await renderRouter(routes, { initialUrl: '/' });
     expect(screen.getByText('1일')).toBeOnTheScreen();
     jest.setSystemTime(Date.parse('2026-11-04T00:00:00+09:00'));

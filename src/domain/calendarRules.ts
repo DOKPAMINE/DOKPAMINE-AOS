@@ -1,5 +1,5 @@
 import { DAY_MS, kstDate, parseDate } from './kstDate';
-import { pagesRead, type ReadingSession, type StatisticsBook } from './readingTypes';
+import type { ReadingSession, StatisticsBook } from './readingTypes';
 
 /** S-62 장르별 막대 한 줄. ratio는 가장 오래 읽은 장르를 1로 둔 막대 길이(0~1)다. */
 export interface GenreStat {
@@ -11,8 +11,6 @@ export interface GenreStat {
 export interface MonthlyStats {
     readonly month: string;
     readonly totalSeconds: number;
-    /** 마이(S-80) "읽은 쪽수"가 쓴다. 캘린더(S-62)에는 표시하지 않는다. */
-    readonly totalPages: number;
     readonly completedBooks: number;
     readonly sessionCount: number;
     /** 그 달에 기록이 있는 날 수 */
@@ -81,36 +79,26 @@ export function calendarDuration(seconds: number): string {
 }
 
 /**
- * FR-05·FR-06 / S-60·S-62: 그 달(KST)에 시작한 세션 중 삭제된 세션과 삭제된 책(tombstone)의 세션을 뺀 것.
- * 기록은 시작한 날(KST)에 전체를 귀속한다.
+ * FR-05·FR-06 / S-60·S-62·S-80: 독서 기록으로 세는 세션. 삭제된 세션과 삭제된 책(tombstone)의 세션을 뺀다.
  * 책을 삭제하면 저장소가 세션도 tombstone으로 만들지만, 넘겨받은 목록에 삭제된 책이 섞여도 결과가 같도록 한 번 더 거른다.
+ * 캘린더(monthSessions)와 마이 누적 기록·연속 독서일(readingSummary)이 같은 기준을 쓰도록 공유한다.
+ */
+export function recordedSessions(
+    sessions: readonly ReadingSession[], books: readonly Pick<StatisticsBook, 'id' | 'deleted'>[],
+): ReadingSession[] {
+    const deletedBooks = deletedBookIds(books);
+    return sessions.filter(session => !session.deleted && !deletedBooks.has(session.bookId));
+}
+
+/**
+ * FR-05·FR-06 / S-60·S-62: 그 달(KST)에 시작한 기록 세션(recordedSessions). 기록은 시작한 날(KST)에 전체를 귀속한다.
  * 달력 날짜 칸·날짜별 기록(booksReadByDate)과 월간 통계(읽은 일수 포함)가 모두 이 기준을 쓴다.
  */
 function monthSessions(
     sessions: readonly ReadingSession[], books: readonly Pick<StatisticsBook, 'id' | 'deleted'>[], month: string,
 ): ReadingSession[] {
     requireMonth(month);
-    const deletedBooks = deletedBookIds(books);
-    return sessions.filter(session => !session.deleted && !deletedBooks.has(session.bookId)
-        && kstDate(session.startedAt).startsWith(`${month}-`));
-}
-
-/** FR-05 / S-10: 하루 합계 1분 이상. 오늘 기록이 없으면 어제까지의 연속일을 센다. */
-export function streakDays(sessions: readonly ReadingSession[], today: string): number {
-    const todayMs = requireDate(today);
-    const secondsByDay = new Map<string, number>();
-    sessions.filter(session => !session.deleted).forEach(session => {
-        const day = kstDate(session.startedAt);
-        secondsByDay.set(day, (secondsByDay.get(day) ?? 0) + session.activeSeconds);
-    });
-    const qualifies = (ms: number) => (secondsByDay.get(new Date(ms).toISOString().slice(0, 10)) ?? 0) >= 60;
-    let day = qualifies(todayMs) ? todayMs : todayMs - DAY_MS;
-    let count = 0;
-    while (qualifies(day)) {
-        count++;
-        day -= DAY_MS;
-    }
-    return count;
+    return recordedSessions(sessions, books).filter(session => kstDate(session.startedAt).startsWith(`${month}-`));
 }
 
 /** FR-05 / S-10: KST 월요일부터 오늘까지 개인 독서 시간. MANUAL 포함, 랭킹 상한을 적용하지 않는다. */
@@ -134,7 +122,6 @@ export function monthlyStats(sessions: readonly ReadingSession[], books: readonl
     const bookById = new Map(books.filter(book => !book.deleted).map(book => [book.id, book]));
     return {
         month, totalSeconds: inMonth.reduce((sum, session) => sum + session.activeSeconds, 0),
-        totalPages: inMonth.reduce((sum, session) => sum + pagesRead(session), 0),
         completedBooks: [...bookById.values()].filter(book => book.completedAt !== null && kstDate(book.completedAt).startsWith(`${month}-`)).length,
         sessionCount: inMonth.length,
         readingDayCount: new Set(inMonth.map(session => kstDate(session.startedAt))).size,
@@ -147,12 +134,25 @@ export function monthlyStats(sessions: readonly ReadingSession[], books: readonl
 function genreStats(sessions: readonly ReadingSession[], bookById: ReadonlyMap<string, StatisticsBook>): GenreStat[] {
     const seconds = new Map<string, number>();
     sessions.forEach(session => {
-        const label = bookById.get(session.bookId)?.genre ?? '기타';
+        const label = genreOf(bookById, session.bookId);
         seconds.set(label, (seconds.get(label) ?? 0) + session.activeSeconds);
     });
-    const sorted = [...seconds].sort(([a, x], [b, y]) => y - x || (a < b ? -1 : a > b ? 1 : 0));
+    return rankBars(seconds).map(({ label, value, ratio }) => ({ label, seconds: value, ratio }));
+}
+
+/** S-62·S-80: 책 정보를 찾을 수 없으면 장르를 '기타'로 묶는다. */
+export function genreOf(bookById: ReadonlyMap<string, Pick<StatisticsBook, 'genre'>>, bookId: string): string {
+    return bookById.get(bookId)?.genre ?? '기타';
+}
+
+/**
+ * S-62·S-80 장르별 막대 공통 순서와 길이. 값이 큰 장르부터, 같으면 장르 이름 순으로 두고
+ * 가장 큰 값을 막대 100%(ratio 1)로 한다. 캘린더(시간)와 마이(권수)가 같은 규칙을 쓴다.
+ */
+export function rankBars(values: ReadonlyMap<string, number>): { readonly label: string; readonly value: number; readonly ratio: number }[] {
+    const sorted = [...values].sort(([a, x], [b, y]) => y - x || (a < b ? -1 : a > b ? 1 : 0));
     const max = sorted[0]?.[1] ?? 0;
-    return sorted.map(([label, value]) => ({ label, seconds: value, ratio: max > 0 ? value / max : 0 }));
+    return sorted.map(([label, value]) => ({ label, value, ratio: max > 0 ? value / max : 0 }));
 }
 
 /** S-60: 날짜 칸에 함께 보여 줄 수 있는 표지 수. 나머지는 "+남은 권수"로 표시한다. */

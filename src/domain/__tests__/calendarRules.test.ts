@@ -1,10 +1,11 @@
 import {
     booksReadByDate, calendarDate, calendarDuration, calendarWeeks, dayCovers, monthlyStats,
-    monthlyTotalDuration, moveCalendarMonth, streakDays, thisWeekSeconds,
+    monthlyTotalDuration, moveCalendarMonth, thisWeekSeconds,
 } from '../calendarRules';
 import { parseStartedAt } from '../kstDate';
 import { toManualSession, validateManualSession } from '../manualSessionRules';
 import type { ReadingSession, StatisticsBook } from '../readingTypes';
+import { readingStreak } from '../readingSummary';
 
 const at = (day: string) => parseStartedAt(day, '12:00')!;
 const session = (day: string, seconds = 600, changes: Partial<ReadingSession> = {}): ReadingSession => ({
@@ -35,18 +36,18 @@ test('FR-05 FR-06 S-60 S-62 KST 자정과 월 경계는 시작 시각으로 집�
     expect(monthlyStats([before, after], [], '2026-10').totalSeconds).toBe(600);
     expect(monthlyStats([before, after], [], '2026-11').totalSeconds).toBe(1200);
 });
-test('FR-06 S-62 10분 20쪽과 20분 30쪽은 30분이며 마이에서 쓰는 쪽수 50쪽도 계산하고 장르별로 합산해요', () => {
+test('FR-06 S-62 10분 20쪽과 20분 30쪽은 30분이며 장르별로 합산해요', () => {
     const list = [session('2026-10-05', 600, { bookId: 'sf', endPage: 20 }), session('2026-10-05', 1200, { bookId: 'history', endPage: 30 })];
     const books = [book('sf', 'SF'), book('history', '역사')];
     const stats = monthlyStats(list, books, '2026-10');
-    expect(stats).toMatchObject({ month: '2026-10', totalSeconds: 1800, totalPages: 50, completedBooks: 0, sessionCount: 2 });
+    expect(stats).toMatchObject({ month: '2026-10', totalSeconds: 1800, completedBooks: 0, sessionCount: 2 });
     expect(stats.byGenre).toEqual([{ label: '역사', seconds: 1200, ratio: 1 }, { label: 'SF', seconds: 600, ratio: 0.5 }]);
     expect(stats).not.toHaveProperty('byAuthor');
 });
-test('FR-06 S-62 시간만 기록과 되돌아 읽기는 0쪽이며 같은 장르는 한 줄로 합쳐요', () => {
+test('FR-06 S-62 시간만 기록과 되돌아 읽기도 시간을 합산하고 같은 장르는 한 줄로 합쳐요', () => {
     const list = [session('2026-10-01', 600, { bookId: 'a', startPage: 112, endPage: 80 }), session('2026-10-02', 600, { bookId: 'b' }), session('2026-10-03', 600, { bookId: 'b', endPage: 10 })];
     const stats = monthlyStats(list, [book('a', 'SF', '같은 작가'), book('b', 'SF', '같은 작가')], '2026-10');
-    expect(stats.totalPages).toBe(10);
+    expect(stats.totalSeconds).toBe(1800);
     expect(stats.byGenre).toEqual([{ label: 'SF', seconds: 1800, ratio: 1 }]);
 });
 test('FR-06 S-62 완독 권수는 KST 완독 월에 책당 한 번 세고 삭제 tombstone은 제외해요', () => {
@@ -60,23 +61,24 @@ test('FR-06 S-62 완독 권수는 KST 완독 월에 책당 한 번 세고 삭제
     expect(stats.completedBooks).toBe(2);
     expect(stats.sessionCount).toBe(0);
     expect(stats.totalSeconds).toBe(0);
-    expect(stats.totalPages).toBe(0);
 });
 test('FR-06 S-62 연결할 책이 없는 기록은 기타로 집계해요', () => {
     const stats = monthlyStats([session('2026-10-01')], [], '2026-10');
     expect(stats.byGenre).toEqual([{ label: '기타', seconds: 600, ratio: 1 }]);
 });
-test('FR-05 S-10 하루 합계 1분 이상인 날만 연속 독서일로 세요', () => {
-    const list = [session('2026-10-10', 120), session('2026-10-09', 30), session('2026-10-09', 30), session('2026-10-08', 59)];
-    expect(streakDays(list, '2026-10-10')).toBe(2);
-    expect(streakDays([...list, session('2026-10-08', 1)], '2026-10-10')).toBe(3);
-    expect(streakDays([session('2026-10-10', 60, { deleted: true })], '2026-10-10')).toBe(0);
+test('FR-05 S-10 하루 합계 10분 이상인 날만 연속 독서일로 세요', () => {
+    const streak = (list: readonly ReadingSession[], today: string) => readingStreak(list, [], today).current;
+    const list = [session('2026-10-10', 1200), session('2026-10-09', 300), session('2026-10-09', 300), session('2026-10-08', 599)];
+    expect(streak(list, '2026-10-10')).toBe(2);
+    expect(streak([...list, session('2026-10-08', 1)], '2026-10-10')).toBe(3);
+    expect(streak([session('2026-10-10', 600, { deleted: true })], '2026-10-10')).toBe(0);
 });
 test('FR-05 S-10 오늘 기록이 없으면 어제부터 세며 월과 연도를 넘어 이어져요', () => {
-    const list = [session('2027-01-01', 60), session('2026-12-31', 60), session('2026-12-30', 60)];
-    expect(streakDays(list, '2027-01-02')).toBe(3);
-    expect(streakDays(list, '2027-01-03')).toBe(0);
-    expect(streakDays([], '2027-01-01')).toBe(0);
+    const streak = (list: readonly ReadingSession[], today: string) => readingStreak(list, [], today).current;
+    const list = [session('2027-01-01', 600), session('2026-12-31', 600), session('2026-12-30', 600)];
+    expect(streak(list, '2027-01-02')).toBe(3);
+    expect(streak(list, '2027-01-03')).toBe(0);
+    expect(streak([], '2027-01-01')).toBe(0);
 });
 test('FR-05 S-10 이번 주는 KST 월요일부터 오늘까지이며 수동 기록도 상한 없이 더해요', () => {
     const list = [session('2026-10-04', 10), session('2026-10-05', 20000, { source: 'MANUAL' }), session('2026-10-07', 20), session('2026-10-08', 30), session('2026-10-06', 40, { deleted: true })];
@@ -93,12 +95,12 @@ test('FR-02 T09 FR-05 FR-06 수동 기록은 캘린더와 통계와 연속 독�
     const yesterday = { ...today, id: 'yesterday', startedAt: today.startedAt - 86400000, endedAt: today.endedAt - 86400000 };
     const list = [today, yesterday];
     expect(dayBooks(list, [book('book', '소설')], '2026-10-29')).toEqual([{ bookId: 'book', seconds: 1200, firstStartedAt: startedAt }]);
-    expect(monthlyStats(list, [book('book', '소설')], '2026-10')).toMatchObject({ totalSeconds: 2400, totalPages: 40, readingDayCount: 2 });
-    expect(streakDays(list, '2026-10-29')).toBe(2);
+    expect(monthlyStats(list, [book('book', '소설')], '2026-10')).toMatchObject({ totalSeconds: 2400, readingDayCount: 2 });
+    expect(readingStreak(list, [book('book', '소설')], '2026-10-29').current).toBe(2);
     expect(thisWeekSeconds(list, '2026-10-29')).toBe(2400);
 });
 test('FR-05 FR-06 잘못된 날짜와 월은 조용히 다른 날짜로 집계하지 않아요', () => {
-    expect(() => streakDays([], '2026-2-01')).toThrow(RangeError);
+    expect(() => readingStreak([], [], '2026-2-01')).toThrow(RangeError);
     expect(() => thisWeekSeconds([], 'bad')).toThrow(RangeError);
     expect(() => monthlyStats([], [], '2026-1')).toThrow(RangeError);
 });
@@ -317,7 +319,7 @@ test('FR-06 S-62 삭제한 책과 삭제한 세션의 기록은 시간·쪽수·
     ];
     const books = [book('kept', '소설'), book('gone', '에세이', '작가', { deleted: true, completedAt: at('2026-11-04') })];
     expect(monthlyStats(list, books, '2026-11')).toEqual({
-        month: '2026-11', totalSeconds: 600, totalPages: 10, completedBooks: 0, sessionCount: 1,
+        month: '2026-11', totalSeconds: 600, completedBooks: 0, sessionCount: 1,
         readingDayCount: 1, booksReadCount: 1, byGenre: [{ label: '소설', seconds: 600, ratio: 1 }],
     });
 });
@@ -352,7 +354,7 @@ test('FR-06 S-62 KST 월 경계: 10월 31일 23:59:59 시작은 10월, 11월 1�
 
 test('FR-06 S-62 기록이 없는 달은 요약 숫자가 모두 0이고 장르별이 비어 있어요', () => {
     expect(monthlyStats(november.sessions, november.books, '2026-12')).toEqual({
-        month: '2026-12', totalSeconds: 0, totalPages: 0, completedBooks: 0, sessionCount: 0,
+        month: '2026-12', totalSeconds: 0, completedBooks: 0, sessionCount: 0,
         readingDayCount: 0, booksReadCount: 0, byGenre: [],
     });
 });

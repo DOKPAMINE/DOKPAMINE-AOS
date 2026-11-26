@@ -1,8 +1,7 @@
 import { parseStartedAt } from '../kstDate';
 import { currentPageAfterSave, toManualSession, validateManualSession, type ValidManualSession } from '../manualSessionRules';
 import { GENRES, latestPaged, parseEndPage, readingDisplayPage, suggestedStartPage } from '../pageRules';
-import { readingProgress } from '../readingProgress';
-import { pagesRead, type ReadingSession } from '../readingTypes';
+import type { ReadingSession } from '../readingTypes';
 
 const startedAt = Date.parse('2026-10-29T12:00:00Z');
 const now = startedAt + 3600000;
@@ -31,12 +30,6 @@ test('FR-03 S-43 빈칸은 시간만 저장하고 241쪽은 전체 240쪽 초과
     expect(parseEndPage('30', 30, 240)).toEqual({ kind: 'valid', endPage: 30 });
     expect(parseEndPage('20', 30, 240)).toEqual({ kind: 'reread', endPage: 20 });
     expect(parseEndPage('0', 0, 240)).toEqual({ kind: 'valid', endPage: 0 });
-});
-test('FR-03 D6 30쪽에서 50쪽까지는 20쪽이고 되돌아 읽기와 시간만 기록은 0쪽이에요', () => {
-    expect(pagesRead({ startPage: 30, endPage: 50 })).toBe(20);
-    expect(pagesRead({ startPage: 112, endPage: 80 })).toBe(0);
-    expect(pagesRead({ startPage: 30, endPage: null })).toBe(0);
-    expect(readingProgress(84, 240)).toEqual({ label: '84 / 240쪽', ratio: 0.35 });
 });
 test('FR-02 D7 S-40 지난 끝 쪽 84를 다음 시작 쪽으로 자동 입력해요', () => {
     const paged = session('paged', startedAt, 84);

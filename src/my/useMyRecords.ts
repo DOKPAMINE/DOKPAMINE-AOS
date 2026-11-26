@@ -7,10 +7,10 @@ import type { BookRecord, SessionRecord, SyncRejection } from '../db/schema';
 import { subscribeSyncState } from '../sync';
 
 type MyRecords = { kind: 'loading' | 'error' } | {
-    kind: 'ready'; books: BookRecord[]; sessions: SessionRecord[]; pendingCount: number; conflictBooks: { id: string; title: string }[]; rejections: SyncRejection[]; now: number;
+    kind: 'ready'; books: BookRecord[]; sessions: SessionRecord[]; conflictBooks: { id: string; title: string }[]; rejections: SyncRejection[]; now: number;
 };
 
-/** S-80 / NFR-04: 삭제 전송 대기를 포함해 모든 기록의 대기 행을 기존 읽기 API로 조회한다. */
+/** S-80 / NFR-04: 누적 기록·연속 독서일에 쓸 로컬 기록과 동기화 문제(감상 충돌·서버 거절)를 기존 읽기 API로 조회한다. */
 export function useMyRecords() {
     const [records, setRecords] = useState<MyRecords>({ kind: 'loading' });
     const [attempt, setAttempt] = useState(0);
@@ -21,13 +21,11 @@ export function useMyRecords() {
         const refresh = () => {
             if (!active || !repository) return;
             try {
-                const pendingCount = [repository.books, repository.sessions, repository.reviews, repository.quotes]
-                    .reduce((sum, entity) => sum + entity.list({ includeDeleted: true, syncPending: true }).length, 0);
                 const conflictBookIds = new Set(repository.reviews.conflicts().map(row => row.bookId));
                 const conflictBooks = Array.from(conflictBookIds, id => ({
                     id, title: repository?.books.get(id, true)?.title ?? '삭제된 책',
                 }));
-                setRecords({ kind: 'ready', books: repository.books.list(), sessions: repository.sessions.list(), pendingCount, conflictBooks,
+                setRecords({ kind: 'ready', books: repository.books.list(), sessions: repository.sessions.list(), conflictBooks,
                     rejections: repository.syncRejections.list(), now: Date.now() });
             } catch { setRecords({ kind: 'error' }); }
         };
