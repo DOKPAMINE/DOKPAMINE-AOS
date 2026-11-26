@@ -78,7 +78,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     const fields = registering ? ['username', 'password', 'nickname'] as const : ['username', 'password'] as const;
     const labels = { username: '아이디', password: '비밀번호', nickname: '닉네임' };
     const hints = {
-        username: registering ? '영문, 숫자, 밑줄을 사용해 4~30자로 입력해 주세요.' : '기존 계정은 가입한 이메일을 입력해 주세요.',
+        username: registering ? '영문, 숫자, 밑줄을 사용해 4~30자로 입력해 주세요.' : '아이디를 입력해 주세요.',
         password: '8자 이상 입력해 주세요.',
         nickname: '1~15자로 입력해 주세요.',
     };
@@ -91,7 +91,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                 <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
                     <View accessible accessibilityRole="header" accessibilityLabel={registering ? '독파민 회원가입' : '독파민 로그인'} style={styles.brand}>
                         <Image source={logo} resizeMode="contain" style={{ width: logoWidth, height: logoWidth / LOGO_RATIO }} />
-                        <Text style={styles.description}>{registering ? '읽은 시간과 마음에 남은 문장을 함께 기록해 보세요.' : '기존 계정은 가입한 이메일로 로그인해 주세요.'}</Text>
+                        {registering && <Text style={styles.description}>읽은 시간과 마음에 남은 문장을 함께 기록해 보세요.</Text>}
                     </View>
                     {!registering && !error && auth.notice && <StateView kind="error" message={auth.notice} />}
                     {fields.map(name => (
@@ -153,7 +153,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.paper },
     content: { flexGrow: 1, justifyContent: 'center', gap: spacing.lg, paddingHorizontal: spacing.xl, paddingVertical: spacing.xxl },
-    brand: { alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
+    brand: { alignItems: 'center', gap: spacing.md, marginBottom: spacing.xxl*1.3 },
     description: { ...typography.body, color: colors.text.muted, textAlign: 'center' },
     field: { gap: spacing.sm },
     inputBox: {
