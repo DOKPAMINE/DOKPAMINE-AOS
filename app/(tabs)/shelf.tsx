@@ -164,8 +164,11 @@ function ShelfStack({ books, visibleIds }: { books: readonly BookRecord[]; visib
     // 필터를 바꿔 층 수가 줄었다 늘어도 선반 사진을 새로 불러오지 않아서 깜빡이지 않는다.
     const builtFloors = Math.max(floors, packShelfRows(items.map(toShelfItem), maxWidth).length);
     return <View style={[styles.stack, { height: floors * SHELF_HEIGHT }]}
-        onLayout={event => setRowWidth(event.nativeEvent.layout.width - SHELF_INSET.left - SHELF_INSET.right)}>
-        {Array.from({ length: builtFloors }, (_, r) => <ShelfBackground key={`floor-${r}`} top={r * SHELF_HEIGHT} />)}
+        onLayout={event => {
+            // 숨겨진 동안(보이는 책 0권)은 자리 비키느라 폭이 달라지므로 재지 않는다. 다시 보일 때 넓은 폭으로 한 번 잘못 꽂히는 것을 막는다.
+            if (visible.length > 0) setRowWidth(event.nativeEvent.layout.width - SHELF_INSET.left - SHELF_INSET.right);
+        }}>
+    {Array.from({ length: builtFloors }, (_, r) => <ShelfBackground key={`floor-${r}`} top={r * SHELF_HEIGHT} />)}
         {items.map(item => {
             const spot = placed.get(item.book.id);
             return <ShelfSpine key={item.book.id} {...item} hidden={!spot}
