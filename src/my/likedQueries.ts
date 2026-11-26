@@ -63,11 +63,15 @@ export function restartLikedBookPages(client: QueryClient) {
 }
 
 /**
- * S-72·S-76 등에서 좋아요를 누르거나 취소하면 미리보기·전체 목록을 무효로 한다.
- * 화면에 남아 있는 조회는 바로 다시 받아 돌아왔을 때 목록이 맞고, 나머지는 다음에 열 때 받는다.
+ * S-72·S-76 등에서 좋아요를 누르거나 취소했거나, S-76이 404(삭제·비공개 전환)일 때 좋아요한 감상 조회를 무효로 한다.
+ * - 전체 목록: 화면에 남아 있으면 바로 다시 받아 돌아왔을 때 목록이 맞다.
+ * - 미리보기: 마이 탭은 늘 떠 있어 바로 다시 받으면 좋아요마다 요청이 나간다. 표시만 하고 마이 탭에 들어올 때 받는다.
  */
 export function invalidateLikedBooks(client: QueryClient) {
-    return client.invalidateQueries({ queryKey: likedBookKeys.all });
+    return Promise.all([
+        client.invalidateQueries({ queryKey: likedBookKeys.preview, exact: true, refetchType: 'none' }),
+        client.invalidateQueries({ queryKey: likedBookKeys.list, exact: true }),
+    ]);
 }
 
 export const isBadRequest = (error: unknown) => error instanceof ApiError && error.status === 400;

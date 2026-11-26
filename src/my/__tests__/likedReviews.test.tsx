@@ -1,6 +1,6 @@
 import { preloadReactNative } from '../../__tests__/preloadReactNative';
 
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { RefreshControl, StyleSheet, Text, type RefreshControlProps } from 'react-native';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
@@ -10,7 +10,9 @@ import UserBook from '../../../app/lounge/user-books/[userBookId]';
 import { feedUserBook, likedBooks, likeReview, unlikeReview } from '../../api/endpoints';
 import { ApiError } from '../../api/errors';
 import type { FeedItem, LikedBookGroup, LikedBookPage, LikedPerson } from '../../api/types';
+import { likedBadRequestMessage } from '../LikedError';
 import { likedBookKeys } from '../likedQueries';
+import { LikedReviewsSection } from '../LikedReviewsSection';
 
 // 첫 render가 react-native 컴포넌트 로딩을 떠안아 시간 제한을 넘지 않도록 파일 로딩 단계에서 불러온다(#103).
 preloadReactNative();
@@ -196,7 +198,8 @@ test('FR-09 S-80 다음 페이지가 400(잘못된 cursor)이면 안내하고 �
     await renderRouter(routes, { initialUrl: '/liked-reviews' });
     expect(await screen.findAllByTestId('liked-group')).toHaveLength(20);
     await endReached();
-    expect(await screen.findByText('다음 페이지 정보가 올바르지 않아요. 처음부터 다시 불러와 주세요.')).toBeOnTheScreen();
+    expect(await screen.findByText('목록을 불러오지 못했어요. 처음부터 다시 불러와 주세요.')).toBeOnTheScreen();
+    expect(screen.queryByText(/다음 페이지 정보가 올바르지 않아요/)).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: '처음부터 다시 불러오기' }));
     await waitFor(() => expect(screen.getAllByTestId('liked-group')).toHaveLength(1));
     expect(likedBooks).toHaveBeenLastCalledWith({ size: 20, cursor: undefined }, expect.anything());
@@ -256,7 +259,8 @@ test('FR-09 S-80 첫 페이지 오류는 서버 안내와 다시 시도를 보�
 test('FR-09 S-80 첫 페이지가 400이면 처음부터 다시 불러오는 안내를 보여 줘요', async () => {
     jest.mocked(likedBooks).mockRejectedValueOnce(new ApiError('http', 'BAD_REQUEST', '한 번에 1개부터 50개까지 불러올 수 있어요.', 400));
     await renderRouter(routes, { initialUrl: '/liked-reviews' });
-    expect(await screen.findByText('한 번에 1개부터 50개까지 불러올 수 있어요. 처음부터 다시 불러와 주세요.')).toBeOnTheScreen();
+    expect(await screen.findByText(likedBadRequestMessage)).toBeOnTheScreen();
+    expect(screen.queryByText(/한 번에 1개부터 50개까지/)).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: '처음부터 다시 불러오기' }));
     expect(await screen.findByRole('header', { name: '어린 왕자' })).toBeOnTheScreen();
 });
@@ -279,4 +283,46 @@ test('FR-09 S-80 사람 줄은 버튼 역할·라벨과 44dp 이상 터치 영�
         expect(heart).toHaveProp('importantForAccessibility', 'no-hide-descendants');
     }
     expect(screen.getByRole('button', { name: '마이로 돌아가기' })).toBeOnTheScreen();
+});
+
+// 마이 탭 대신 "좋아요한 감상" 칸만 둔 경로. 스택 아래에 남아 있으면 미리보기 조회도 화면에 떠 있는 상태다.
+const withPreview = { ...routes, '(tabs)/my': LikedReviewsSection };
+const callsWithSize = (size: number) => jest.mocked(likedBooks).mock.calls.filter(([args]) => args.size === size).length;
+
+test('FR-09 S-80 좋아요를 바꿔도 마이 미리보기는 바로 다시 받지 않고 마이에 돌아올 때 받아요', async () => {
+    jest.mocked(feedUserBook).mockResolvedValue([{ ...review, likedByMe: false }]);
+    await renderRouter(withPreview, { initialUrl: '/my' });
+    expect(await screen.findByText('어린 왕자 · 하늘님 외 1명')).toBeOnTheScreen();
+    expect(callsWithSize(3)).toBe(1);
+    await act(async () => { router.push('/lounge/user-books/ub-sky'); });
+    await fireEvent.press(await screen.findByRole('button', { name: '한줄평 좋아요' }));
+    await waitFor(() => expect(likeReview).toHaveBeenCalledWith('review-sky'));
+    await waitFor(() => expect(client.getQueryState(likedBookKeys.preview)?.isInvalidated).toBe(true));
+    expect(callsWithSize(3)).toBe(1);
+    jest.mocked(likedBooks).mockResolvedValue(page([group('isbn:prince', '어린 왕자', [star])]));
+    await fireEvent.press(screen.getByRole('button', { name: '라운지로 돌아가기' }));
+    expect(await screen.findByText('어린 왕자 · 별님')).toBeOnTheScreen();
+    expect(callsWithSize(3)).toBe(2);
+});
+
+test('FR-09 S-80 좋아요를 바꾸면 전체 목록은 S-76에 있는 동안 바로 다시 받아요', async () => {
+    await renderRouter(routes, { initialUrl: '/liked-reviews' });
+    await fireEvent.press(await screen.findByRole('button', { name: '어린 왕자, 하늘님, 좋아요 2개, 감상 보기' }));
+    await fireEvent.press(await screen.findByRole('button', { name: '한줄평 좋아요 취소' }));
+    await waitFor(() => expect(callsWithSize(20)).toBe(2));
+    expect(screen).toHavePathname('/lounge/user-books/ub-sky');
+});
+
+test('FR-09 S-80 좋아요 요청이 실패하면 좋아요한 감상 조회를 무효로 하지 않아요', async () => {
+    jest.mocked(unlikeReview).mockRejectedValue(new ApiError('http', 'INTERNAL_ERROR', '요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.', 500));
+    client.setQueryData(likedBookKeys.preview, page([prince]));
+    await renderRouter(routes, { initialUrl: '/liked-reviews' });
+    await fireEvent.press(await screen.findByRole('button', { name: '어린 왕자, 하늘님, 좋아요 2개, 감상 보기' }));
+    await fireEvent.press(await screen.findByRole('button', { name: '한줄평 좋아요 취소' }));
+    await waitFor(() => expect(unlikeReview).toHaveBeenCalledWith('review-sky'));
+    // 실패하면 라운지 감상 모음은 원래 좋아요 상태로 돌아간다.
+    expect(await screen.findByRole('button', { name: '한줄평 좋아요 취소' })).toBeOnTheScreen();
+    expect(client.getQueryState(likedBookKeys.preview)?.isInvalidated).toBe(false);
+    expect(client.getQueryState(likedBookKeys.list)?.isInvalidated).toBe(false);
+    expect(likedBooks).toHaveBeenCalledTimes(1);
 });

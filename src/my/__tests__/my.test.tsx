@@ -557,6 +557,18 @@ describe('#132 FR-09 S-80 좋아요한 감상 미리보기', () => {
         expect(await screen.findByText('어린 왕자 · 하늘님 외 1명')).toBeOnTheScreen();
     });
 
+    test('FR-09 S-80 미리보기가 400이면 서버 문구 대신 고정 안내를 보여 주고 처음부터 다시 불러와요', async () => {
+        jest.mocked(likedBooks).mockRejectedValueOnce(new ApiError('http', 'BAD_REQUEST', '요청 값의 형식을 확인해 주세요.', 400))
+            .mockResolvedValueOnce({ items: [prince], nextCursor: null });
+        await renderRouter(routes, { initialUrl: '/my' });
+        expect(await within(await screen.findByTestId('my-section-liked')).findByText('목록을 불러오지 못했어요. 처음부터 다시 불러와 주세요.')).toBeOnTheScreen();
+        expect(screen.queryByText(/요청 값의 형식/)).toBeNull();
+        expect(screen.queryByRole('button', { name: '좋아요한 감상 전체 보기' })).toBeNull();
+        await fireEvent.press(within(section()).getByRole('button', { name: '처음부터 다시 불러오기' }));
+        expect(await screen.findByText('어린 왕자 · 하늘님 외 1명')).toBeOnTheScreen();
+        expect(likedBooks).toHaveBeenLastCalledWith({ size: 3 }, expect.anything());
+    });
+
     test('FR-09 S-80 마이 탭에 다시 들어오면 좋아요한 감상을 다시 받아요', async () => {
         await renderRouter(routes, { initialUrl: '/my' });
         await screen.findByText('아직 좋아요한 감상이 없어요.');
