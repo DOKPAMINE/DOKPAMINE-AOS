@@ -1,5 +1,5 @@
 import { DAY_MS, kstDate, parseDate } from './kstDate';
-import { pagesRead, type ReadingSession, type StatisticsBook } from './readingTypes';
+import type { ReadingSession, StatisticsBook } from './readingTypes';
 
 /** S-62 장르별 막대 한 줄. ratio는 가장 오래 읽은 장르를 1로 둔 막대 길이(0~1)다. */
 export interface GenreStat {
@@ -11,8 +11,6 @@ export interface GenreStat {
 export interface MonthlyStats {
     readonly month: string;
     readonly totalSeconds: number;
-    /** 마이(S-80) "읽은 쪽수"가 쓴다. 캘린더(S-62)에는 표시하지 않는다. */
-    readonly totalPages: number;
     readonly completedBooks: number;
     readonly sessionCount: number;
     /** 그 달에 기록이 있는 날 수 */
@@ -142,7 +140,6 @@ export function monthlyStats(sessions: readonly ReadingSession[], books: readonl
     const bookById = new Map(books.filter(book => !book.deleted).map(book => [book.id, book]));
     return {
         month, totalSeconds: inMonth.reduce((sum, session) => sum + session.activeSeconds, 0),
-        totalPages: inMonth.reduce((sum, session) => sum + pagesRead(session), 0),
         completedBooks: [...bookById.values()].filter(book => book.completedAt !== null && kstDate(book.completedAt).startsWith(`${month}-`)).length,
         sessionCount: inMonth.length,
         readingDayCount: new Set(inMonth.map(session => kstDate(session.startedAt))).size,
