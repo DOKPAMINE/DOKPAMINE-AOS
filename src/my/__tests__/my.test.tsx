@@ -183,9 +183,20 @@ test('FR-10 S-80 닉네임과 연속 독서일은 한 카드에 있고 연속일
 
 test('FR-10 S-80 누적 숫자 3개는 각각 한 요소로 읽고 칸 사이에 구분선 2개가 있어요', async () => {
     await renderRouter(routes, { initialUrl: '/my' });
-    const card = (await screen.findByRole('header', { name: '지금까지' })).parent!;
+    await screen.findByRole('header', { name: '지금까지' });
+    const card = screen.getByTestId('my-section-totals');
     expect(['총 독서시간 1시간 30분', '읽은 책 1권', '완독 1권'].map(label => within(card).getByLabelText(label))).toHaveLength(3);
     expect(within(card).getAllByTestId('summary-divider', hidden)).toHaveLength(2);
+});
+
+test('FR-10 S-80 "나의 독서" 카드 제목과 안쪽 칸 제목은 header 역할이고 지금까지 칸이 카드 안에 있어요', async () => {
+    await renderRouter(routes, { initialUrl: '/my' });
+    const reading = await screen.findByTestId('my-reading');
+    expect(within(reading).getByRole('header', { name: '나의 독서' })).toBeOnTheScreen();
+    expect(within(reading).getByRole('header', { name: '지금까지' })).toBeOnTheScreen();
+    expect(within(reading).getByRole('header', { name: '장르별' })).toBeOnTheScreen();
+    expect(within(within(reading).getByTestId('my-section-totals')).getByLabelText('총 독서시간 1시간 30분')).toBeOnTheScreen();
+    expect(within(within(reading).getByTestId('my-section-genres')).getByLabelText('소설/시, 1권')).toBeOnTheScreen();
 });
 
 test('FR-10 S-80 "이번 달 독서" 카드와 "전송 대기"·"동기화 상태"는 보이지 않고 동기화 문제가 없으면 경고 카드도 없어요', async () => {
@@ -272,8 +283,15 @@ describe('FR-10 S-80 연속 독서일과 장르별 막대', () => {
         await renderRouter(routes, { initialUrl: '/my' });
         const rows = await screen.findAllByTestId('my-genre-row');
         expect(rows.map(row => row.props.accessibilityLabel)).toEqual(['소설/시, 3권', '에세이, 1권']);
-        // 장르별은 누적 기록과 다른 별도 카드다.
-        expect(screen.getByRole('header', { name: '장르별' }).parent).not.toBe(screen.getByRole('header', { name: '지금까지' }).parent);
+        // "지금까지"와 "장르별"은 같은 "나의 독서" 카드 안의 서로 다른 칸이다.
+        const reading = screen.getByTestId('my-reading');
+        const totals = within(reading).getByTestId('my-section-totals');
+        const genres = within(reading).getByTestId('my-section-genres');
+        expect(totals).not.toBe(genres);
+        expect(within(totals).getByRole('header', { name: '지금까지' })).toBeOnTheScreen();
+        expect(within(totals).queryByTestId('my-genre-row')).toBeNull();
+        expect(within(genres).getByRole('header', { name: '장르별' })).toBeOnTheScreen();
+        expect(within(genres).getAllByTestId('my-genre-row')).toHaveLength(2);
         expect(within(rows[0]).getByText('3권')).toBeOnTheScreen();
         expect(within(rows[1]).getByText('1권')).toBeOnTheScreen();
         const widths = screen.getAllByTestId('my-genre-bar-fill', hidden)
@@ -296,6 +314,11 @@ describe('FR-10 S-80 연속 독서일과 장르별 막대', () => {
         expect(screen.getByLabelText('완독 0권')).toBeOnTheScreen();
         expect(screen.queryAllByTestId('my-genre-row', hidden)).toHaveLength(0);
         expect(screen.queryByRole('header', { name: '장르별' })).toBeNull();
+        // 빈 상태에서도 "나의 독서" 카드 안에 "지금까지" 칸과 안내가 있고 장르별 칸은 없다.
+        const reading = screen.getByTestId('my-reading');
+        expect(within(reading).getByTestId('my-section-totals')).toBeOnTheScreen();
+        expect(within(reading).getByText('아직 독서 기록이 없어요.')).toBeOnTheScreen();
+        expect(screen.queryByTestId('my-section-genres')).toBeNull();
         expect(screen.getByTestId('streak')).toHaveProp('accessibilityLabel', '연속 독서 0일, 최고 기록 0일, 오늘 읽으면 1일째예요.');
     });
 });

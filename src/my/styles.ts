@@ -16,6 +16,11 @@ export const styles = StyleSheet.create({
     streak: { gap: spacing.xs },
     streakLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     streakValue: { ...typography.heading, color: colors.brand.espresso, flexShrink: 1 },
+    // S-80 "나의 독서" 카드와 안쪽 칸(MySection). 칸은 테두리 없이 통계 칸 바탕(surface.sandSoft)을 쓰고
+    // 반경은 카드(radii.card)보다 작은 radii.button이다. 칸 사이·칸 안 간격은 spacing.md다.
+    readingCard: { gap: spacing.md },
+    section: { gap: spacing.md, padding: spacing.md, borderRadius: radii.button, backgroundColor: colors.surface.sandSoft },
+    sectionHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
     // 누적 숫자 3개는 늘 한 줄에 같은 폭 3칸이다. 큰 글자·좁은 화면에서는 칸 폭을 유지하고 글자가 줄바꿈된다.
     summary: { flexDirection: 'row', alignItems: 'stretch' },
     summaryItem: { flex: 1, alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },

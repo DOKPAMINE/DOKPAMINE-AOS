@@ -5,6 +5,7 @@ import { Card, StateView } from '../components';
 import { monthlyTotalDuration } from '../domain/calendarRules';
 import type { GenreBookCount, ReadingStreak, ReadingTotals } from '../domain/readingSummary';
 import { colors, sizes } from '../theme';
+import { MySection } from './MySection';
 import { styles } from './styles';
 
 /**
@@ -37,23 +38,19 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
     </View>;
 }
 
-/** S-80 누적 기록 "지금까지": 총 독서시간·읽은 책·완독을 같은 폭 3칸에 세로 구분선으로 나눠 보여 준다. */
-export function TotalsCard({ totals }: { totals: ReadingTotals }) {
+/** S-80 "지금까지" 칸의 내용: 총 독서시간·읽은 책·완독을 같은 폭 3칸에 세로 구분선으로 나눠 보여 준다. */
+function TotalsSummary({ totals }: { totals: ReadingTotals }) {
     const items = [
         { label: '총 독서시간', value: monthlyTotalDuration(totals.totalSeconds) },
         { label: '읽은 책', value: `${totals.booksReadCount}권` },
         { label: '완독', value: `${totals.completedBooks}권` },
     ];
-    return <Card>
-        <Text accessibilityRole="header" style={styles.heading}>지금까지</Text>
-        <View style={styles.summary}>
-            {items.map((item, index) => <Fragment key={item.label}>
-                {index > 0 && <View testID="summary-divider" style={styles.summaryDivider} />}
-                <SummaryItem label={item.label} value={item.value} />
-            </Fragment>)}
-        </View>
-        {totals.byGenre.length === 0 && <StateView kind="empty" message="아직 독서 기록이 없어요." />}
-    </Card>;
+    return <View style={styles.summary}>
+        {items.map((item, index) => <Fragment key={item.label}>
+            {index > 0 && <View testID="summary-divider" style={styles.summaryDivider} />}
+            <SummaryItem label={item.label} value={item.value} />
+        </Fragment>)}
+    </View>;
 }
 
 /** S-80 장르별 한 줄: 장르 이름 / 막대 / 권수. "소설, 8권"처럼 한 요소로 읽고 막대는 보조 기술에서 숨긴다. */
@@ -69,12 +66,25 @@ function GenreRow({ genre }: { genre: GenreBookCount }) {
     </View>;
 }
 
-/** S-80 장르별 권수 막대 카드. 읽은 책이 없으면 표시하지 않는다(빈 안내는 누적 기록 카드에 있다). */
-export function GenreCard({ byGenre }: { byGenre: readonly GenreBookCount[] }) {
+/**
+ * S-80 "나의 독서" 카드: 안쪽 칸(MySection) "지금까지"와 "장르별"을 위아래로 둔다.
+ * 읽은 책이 없으면 "지금까지" 칸과 빈 안내만 보여 주고 장르별 칸은 두지 않는다.
+ * 새 칸(예: 좋아요한 감상)은 이 카드 안에 <MySection title=… action={…}>…</MySection>을 하나 더 넣으면 된다.
+ */
+export function MyReadingCard({ totals }: { totals: ReadingTotals }) {
     return <Card>
-        <Text accessibilityRole="header" style={styles.subheading}>장르별</Text>
-        <View style={styles.genres}>
-            {byGenre.map(genre => <GenreRow key={genre.label} genre={genre} />)}
+        <View testID="my-reading" style={styles.readingCard}>
+            <Text accessibilityRole="header" style={styles.heading}>나의 독서</Text>
+            <MySection testID="my-section-totals" title="지금까지">
+                <TotalsSummary totals={totals} />
+            </MySection>
+            {totals.byGenre.length === 0
+                ? <StateView kind="empty" message="아직 독서 기록이 없어요." />
+                : <MySection testID="my-section-genres" title="장르별">
+                    <View style={styles.genres}>
+                        {totals.byGenre.map(genre => <GenreRow key={genre.label} genre={genre} />)}
+                    </View>
+                </MySection>}
         </View>
     </Card>;
 }
