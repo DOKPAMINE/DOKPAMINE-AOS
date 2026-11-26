@@ -1,7 +1,7 @@
 import { preloadReactNative } from '../../__tests__/preloadReactNative';
 
 import { router, Slot } from 'expo-router';
-import { act, fireEvent, renderRouter, screen, within } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { Alert, AppState, Linking, StyleSheet, Text, type AppStateStatus } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import Storage from 'expo-sqlite/kv-store';
@@ -16,7 +16,9 @@ import OneLineWrite from '../../../app/book/[id]/review/one-line';
 import ReportWrite from '../../../app/book/[id]/review/report';
 import Consent from '../../../app/ranking/consent';
 import Withdraw from '../../../app/ranking/withdraw';
-import { me, patchMe } from '../../api/endpoints';
+import { likedBooks, me, patchMe } from '../../api/endpoints';
+import { ApiError } from '../../api/errors';
+import type { LikedBookGroup, LikedPerson } from '../../api/types';
 import { queryClient } from '../../api/queryClient';
 import { initializeDatabase, prepareRecordDatabase } from '../../db/client';
 import { createRecordRepository, type RecordRepository } from '../../db/repository';
@@ -37,7 +39,7 @@ jest.mock('expo-sqlite/kv-store', () => ({ __esModule: true, default: { getItemS
 jest.mock('expo-camera', () => ({ Camera: { getCameraPermissionsAsync: jest.fn(), requestCameraPermissionsAsync: jest.fn() } }));
 jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn(), requestPermissionsAsync: jest.fn() }));
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn(), addEventListener: jest.fn(() => jest.fn()) } }));
-jest.mock('../../api/endpoints', () => ({ me: jest.fn(), patchMe: jest.fn() }));
+jest.mock('../../api/endpoints', () => ({ me: jest.fn(), patchMe: jest.fn(), likedBooks: jest.fn() }));
 jest.mock('../../db/client', () => ({ ...jest.requireActual('../../db/client'), initializeDatabase: jest.fn(), prepareRecordAccount: jest.fn(async () => {}) }));
 jest.mock('../../sync', () => ({ syncAfterLogin: jest.fn(), stopRecordSync: jest.fn(), getSyncState: jest.fn(() => ({ status: 'idle', failedCount: 0 })), subscribeSyncState: jest.fn(() => jest.fn()) }));
 
@@ -77,6 +79,8 @@ const routes = {
     'book-add': () => <Text>책 등록</Text>,
     'reading-start': () => <Text>독서 시작</Text>,
     lounge: () => <Text>라운지</Text>,
+    'liked-reviews/_layout': Slot,
+    'liked-reviews/index': () => <Text>좋아요한 감상 목록 화면</Text>,
 };
 let memory: ReturnType<typeof memorySQLite>;
 let repository: RecordRepository;
@@ -107,6 +111,7 @@ beforeEach(async () => {
     jest.mocked(NetInfo.fetch).mockResolvedValue({ isConnected: true, isInternetReachable: true } as NetInfoState);
     jest.mocked(me).mockImplementation(async () => ({ ...account }));
     jest.mocked(patchMe).mockImplementation(async body => { Object.assign(account, body); return { ...account }; });
+    jest.mocked(likedBooks).mockResolvedValue({ items: [], nextCursor: null });
     jest.mocked(Camera.getCameraPermissionsAsync).mockResolvedValue({ status: 'denied' } as Awaited<ReturnType<typeof Camera.getCameraPermissionsAsync>>);
     jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ status: 'undetermined' } as Awaited<ReturnType<typeof Notifications.getPermissionsAsync>>);
     activeCallbacks = [];
@@ -427,8 +432,11 @@ test('NFR-04 NFR-06 S-80 오프라인 재진입도 저장한 닉네임과 로컬
     await first.unmount();
     jest.mocked(me).mockClear();
     jest.mocked(NetInfo.fetch).mockResolvedValue({ isConnected: false } as NetInfoState);
+    jest.mocked(likedBooks).mockClear();
     await renderRouter(routes, { initialUrl: '/my' });
-    expect(await screen.findByText(offlineMessage)).toBeOnTheScreen();
+    // #132: 계정 칸과 "좋아요한 감상" 칸이 각각 오프라인 안내를 보여 준다.
+    await waitFor(() => expect(screen.getAllByText(offlineMessage)).toHaveLength(2));
+    expect(likedBooks).not.toHaveBeenCalled();
     expect(screen.getByText('책산책님')).toBeOnTheScreen();
     expect(screen.getByLabelText('총 독서시간 1시간 30분')).toBeOnTheScreen();
     expect(me).not.toHaveBeenCalled();
@@ -471,4 +479,92 @@ test('NFR-04 S-80 저장소 오류는 재시도 후 로컬 요약을 표시해�
     await screen.findByRole('alert');
     await fireEvent.press(screen.getByRole('button', { name: '다시 시도해 주세요' }));
     expect(await screen.findByLabelText('총 독서시간 1시간 30분')).toBeOnTheScreen();
+});
+
+describe('#132 FR-09 S-80 좋아요한 감상 미리보기', () => {
+    const at = '2026-11-25T10:00:00Z';
+    const person = (nickname: string, likedCount: number): LikedPerson =>
+        ({ authorId: `author-${nickname}`, nickname, userBookId: `ub-${nickname}`, likedCount, lastLikedAt: at, mine: false });
+    const prince: LikedBookGroup = { bookKey: 'isbn:prince', isbn: null, bookTitle: '어린 왕자', bookAuthor: '생텍쥐페리', coverUrl: null,
+        lastLikedAt: at, people: [person('하늘님', 2), person('별님', 1)] };
+    const section = () => screen.getByTestId('my-section-liked');
+    const pressStyle = (node: ReturnType<typeof screen.getByTestId>) => StyleSheet.flatten(
+        typeof node.props.style === 'function' ? node.props.style({ pressed: false }) : node.props.style);
+
+    test('FR-09 S-80 어린 왕자에 하늘님(2개)과 별님(1개)에게 좋아요했으면 "어린 왕자 · 하늘님 외 1명"이 보이고 줄을 누르면 전체 목록이 열려요', async () => {
+        jest.mocked(likedBooks).mockResolvedValue({ items: [prince], nextCursor: null });
+        await renderRouter(routes, { initialUrl: '/my' });
+        expect(await screen.findByText('어린 왕자 · 하늘님 외 1명')).toBeOnTheScreen();
+        expect(likedBooks).toHaveBeenCalledWith({ size: 3 }, expect.anything());
+        // "나의 독서" 카드 안 칸이고 제목은 header 역할이다.
+        const reading = screen.getByTestId('my-reading');
+        expect(within(reading).getByRole('header', { name: '좋아요한 감상' })).toBeOnTheScreen();
+        expect(within(reading).getByTestId('my-section-liked')).toBeOnTheScreen();
+        const row = within(section()).getByRole('button', { name: '어린 왕자, 하늘님 외 1명, 좋아요한 감상 전체 보기' });
+        expect(pressStyle(row).minHeight).toBeGreaterThanOrEqual(44);
+        await fireEvent.press(row);
+        expect(await screen.findByText('좋아요한 감상 목록 화면')).toBeOnTheScreen();
+        expect(screen).toHavePathname('/liked-reviews');
+    });
+
+    test('FR-09 S-80 제목 오른쪽 "전체 보기"는 버튼 역할·라벨과 44dp 이상이고 누르면 전체 목록이 열려요', async () => {
+        jest.mocked(likedBooks).mockResolvedValue({ items: [prince], nextCursor: null });
+        await renderRouter(routes, { initialUrl: '/my' });
+        const seeAll = await screen.findByRole('button', { name: '좋아요한 감상 전체 보기' });
+        expect(within(seeAll).getByText('전체 보기')).toBeOnTheScreen();
+        const style = pressStyle(seeAll);
+        expect(style.minHeight).toBeGreaterThanOrEqual(44);
+        expect(style.minWidth).toBeGreaterThanOrEqual(44);
+        await fireEvent.press(seeAll);
+        expect(await screen.findByText('좋아요한 감상 목록 화면')).toBeOnTheScreen();
+    });
+
+    test('FR-09 S-80 한 명에게만 좋아요했으면 "외 N명" 없이 보여 줘요', async () => {
+        jest.mocked(likedBooks).mockResolvedValue({ items: [{ ...prince, people: [person('하늘님', 2)] }], nextCursor: null });
+        await renderRouter(routes, { initialUrl: '/my' });
+        expect(await screen.findByText('어린 왕자 · 하늘님')).toBeOnTheScreen();
+        expect(screen.queryByText(/외 \d+명/)).toBeNull();
+    });
+
+    test('FR-09 S-80 좋아요한 감상이 없으면 "아직 좋아요한 감상이 없어요."만 보이고 "전체 보기"는 없어요', async () => {
+        await renderRouter(routes, { initialUrl: '/my' });
+        expect(await within(await screen.findByTestId('my-section-liked')).findByText('아직 좋아요한 감상이 없어요.')).toBeOnTheScreen();
+        expect(screen.queryByRole('button', { name: '좋아요한 감상 전체 보기' })).toBeNull();
+        expect(screen.queryByText('전체 보기')).toBeNull();
+    });
+
+    test('FR-09 S-80 NFR-06 오프라인이면 요청하지 않고 1초 안에 미리보기 칸에 오프라인 안내를 보여 줘요', async () => {
+        await renderRouter(routes, { initialUrl: '/my' });
+        await screen.findByText('아직 좋아요한 감상이 없어요.');
+        await fireEvent.press(screen.getByRole('button', { name: '설정' }));
+        await screen.findByRole('header', { name: '설정' });
+        jest.mocked(likedBooks).mockClear();
+        // 연결 상태 조회가 멈춰도 500ms 뒤 오프라인으로 본다.
+        jest.mocked(NetInfo.fetch).mockImplementation(() => new Promise(() => {}));
+        await fireEvent.press(screen.getByRole('button', { name: '마이로 돌아가기' }));
+        await screen.findByTestId('my-section-liked');
+        expect(await within(section()).findByText(offlineMessage, {}, { timeout: 900 })).toBeOnTheScreen();
+        expect(likedBooks).not.toHaveBeenCalled();
+        expect(screen.queryByRole('button', { name: '좋아요한 감상 전체 보기' })).toBeNull();
+    });
+
+    test('FR-09 S-80 미리보기 오류는 서버 안내와 다시 시도를 보여 주고 다시 시도하면 목록을 받아요', async () => {
+        jest.mocked(likedBooks).mockRejectedValueOnce(new ApiError('http', 'INTERNAL_ERROR', '요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.', 500))
+            .mockResolvedValueOnce({ items: [prince], nextCursor: null });
+        await renderRouter(routes, { initialUrl: '/my' });
+        expect(await within(await screen.findByTestId('my-section-liked')).findByText('요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.')).toBeOnTheScreen();
+        await fireEvent.press(within(section()).getByRole('button', { name: '다시 시도해 주세요' }));
+        expect(await screen.findByText('어린 왕자 · 하늘님 외 1명')).toBeOnTheScreen();
+    });
+
+    test('FR-09 S-80 마이 탭에 다시 들어오면 좋아요한 감상을 다시 받아요', async () => {
+        await renderRouter(routes, { initialUrl: '/my' });
+        await screen.findByText('아직 좋아요한 감상이 없어요.');
+        expect(likedBooks).toHaveBeenCalledTimes(1);
+        jest.mocked(likedBooks).mockResolvedValue({ items: [prince], nextCursor: null });
+        await fireEvent.press(screen.getByRole('button', { name: '설정' }));
+        await fireEvent.press(await screen.findByRole('button', { name: '마이로 돌아가기' }));
+        expect(await screen.findByText('어린 왕자 · 하늘님 외 1명')).toBeOnTheScreen();
+        expect(likedBooks).toHaveBeenCalledTimes(2);
+    });
 });

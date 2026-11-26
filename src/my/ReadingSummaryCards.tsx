@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, type PropsWithChildren } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Text, View, useWindowDimensions } from 'react-native';
 import { Card, StateView } from '../components';
@@ -71,9 +71,9 @@ function GenreRow({ genre, countWidth }: { genre: GenreBookCount; countWidth: nu
 /**
  * S-80 "나의 독서" 카드: 안쪽 칸(MySection) "지금까지"와 "장르별"을 위아래로 둔다.
  * 읽은 책이 없으면 "지금까지" 칸과 빈 안내만 보여 주고 장르별 칸은 두지 않는다.
- * 새 칸(예: 좋아요한 감상)은 이 카드 안에 <MySection title=… action={…}>…</MySection>을 하나 더 넣으면 된다.
+ * children은 그 아래에 이어 둘 칸이다(#132 "좋아요한 감상" MySection).
  */
-export function MyReadingCard({ totals }: { totals: ReadingTotals }) {
+export function MyReadingCard({ totals, children }: PropsWithChildren<{ totals: ReadingTotals }>) {
     const { fontScale } = useWindowDimensions();
     // 권수 칸: 기본 글자(typography.label 14)에서 "999권"까지 들어가는 sizes.minTouch(44)를 글자 배율만큼 키운다.
     const countWidth = Math.ceil(sizes.minTouch * fontScale);
@@ -90,6 +90,7 @@ export function MyReadingCard({ totals }: { totals: ReadingTotals }) {
                         {totals.byGenre.map(genre => <GenreRow key={genre.label} genre={genre} countWidth={countWidth} />)}
                     </View>
                 </MySection>}
+            {children}
         </View>
     </Card>;
 }

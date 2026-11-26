@@ -1,5 +1,6 @@
 import {
     ActivityIndicator,
+    FlatList,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -22,5 +23,5 @@ import {
  * 목록은 app/·src/ 앱 코드가 react-native에서 가져오는 컴포넌트 전체다. 화면에 새 컴포넌트를 쓰면 여기에 추가한다.
  */
 export function preloadReactNative() {
-    void [ActivityIndicator, Image, KeyboardAvoidingView, Modal, Pressable, RefreshControl, ScrollView, Switch, Text, TextInput, View];
+    void [ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Modal, Pressable, RefreshControl, ScrollView, Switch, Text, TextInput, View];
 }

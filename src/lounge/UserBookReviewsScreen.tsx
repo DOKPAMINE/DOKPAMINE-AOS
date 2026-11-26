@@ -20,8 +20,9 @@ const isNotFound = (error: unknown) => error instanceof ApiError && error.status
  * #113 S-76 책 감상 모음: S-70 박스를 누르면 그 사람이 그 책에 쓴 공개 감상 전부를 한줄평·독후감으로 나눠 보여 준다.
  * #92 라운지 규칙을 따른다. 화면에 돌아올 때·아래로 당길 때·감상 동기화가 끝났을 때(connectLoungeSyncRefresh) 다시 받고,
  * 404면 삭제됐거나 비공개로 바뀌었다고 알리고 라운지 목록을 다시 받게 한다.
+ * backLabel은 아래 버튼 문구다. #132 마이의 좋아요한 감상 목록에서 열면 "돌아가기"이고, 라운지에서 열면 기본값이다.
  */
-export function UserBookReviewsScreen({ userBookId }: { userBookId: string }) {
+export function UserBookReviewsScreen({ userBookId, backLabel = '라운지로 돌아가기' }: { userBookId: string; backLabel?: string }) {
     const result = useUserBookFeed(userBookId);
     const client = useQueryClient();
     const [refreshing, setRefreshing] = useState(false);
@@ -44,7 +45,7 @@ export function UserBookReviewsScreen({ userBookId }: { userBookId: string }) {
     const first = items[0];
     return (
         <Screen title="감상 모음" refreshing={refreshing} onRefresh={refresh}>
-            <SecondaryButton label="라운지로 돌아가기" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/lounge')} />
+            <SecondaryButton label={backLabel} onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/lounge')} />
             {!userBookId ? <StateView kind="empty" message="볼 수 없는 감상이에요" />
                 : removed ? <StateView kind="empty" message={removedReviewMessage} />
                     : result.isError ? <QueryError error={result.error} retry={() => { void result.refetch(); }} />
