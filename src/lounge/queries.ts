@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { keepPreviousData, useIsMutating, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { feedItem, feedList, feedUserBook, likeReview, searchBookReviews, unlikeReview } from '../api/endpoints';
 import { subscribeReviewsSynced } from '../sync/runtime';
+import { invalidateLikedBooks } from '../my/likedQueries';
 import { isOnline } from '../api/connectivity';
 import { ApiError, offlineError } from '../api/errors';
 import type { BookReviewSearchResponse, FeedItem, FeedListResponse, ReviewLikeResponse } from '../api/types';
@@ -131,7 +132,12 @@ export function useReviewLike(id: string, owner?: QueryKey) {
             update(previous.id, { likedByMe: liked, likeCount: previous.likeCount + (liked ? 1 : -1) });
             return previous;
         },
-        onSuccess: (value, variables) => { if (variables.isCurrent()) update(variables.previous.id, value); },
+        onSuccess: (value, variables) => {
+            if (!variables.isCurrent()) return;
+            update(variables.previous.id, value);
+            // #132 S-80: 좋아요를 누르거나 취소하면 마이의 좋아요한 감상 미리보기·목록을 다시 받게 한다. 라운지 캐시 수정은 위와 같다.
+            void invalidateLikedBooks(client);
+        },
         onError: (_error, variables, previous) => {
             if (previous && variables.isCurrent()) update(previous.id, { likeCount: previous.likeCount, likedByMe: previous.likedByMe });
         },

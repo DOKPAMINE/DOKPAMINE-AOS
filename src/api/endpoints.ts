@@ -1,5 +1,5 @@
 import { apiRequest, type ApiRequestOptions } from './client';
-import type { BookDto, BookReviewSearchResponse, CatalogBook, FeedItem, FeedListResponse, LoginRequest, MeResponse, PatchMeRequest, QuoteDto, ReviewDto, ReviewLikeResponse, SessionDto, SignupRequest, SyncSnapshot, TokenResponse, WeeklyRankingResponse } from './types';
+import type { BookDto, BookReviewSearchResponse, CatalogBook, FeedItem, FeedListResponse, LikedBookPage, LoginRequest, MeResponse, PatchMeRequest, QuoteDto, ReviewDto, ReviewLikeResponse, SessionDto, SignupRequest, SyncSnapshot, TokenResponse, WeeklyRankingResponse } from './types';
 
 export const signup = (body: SignupRequest, signal?: AbortSignal) => apiRequest<TokenResponse>('/api/auth/signup', { method: 'POST', body, signal, authenticated: false });
 export const login = (credentials: LoginRequest, signal?: AbortSignal) => {
@@ -27,3 +27,10 @@ export const feedUserBook = (userBookId: string, signal?: AbortSignal) => apiReq
 export const feedItem = (id: string, signal?: AbortSignal) => apiRequest<FeedItem>(`/api/feed/${encodeURIComponent(id)}`, { signal });
 export const likeReview = (id: string) => apiRequest<ReviewLikeResponse>(`/api/feed/${encodeURIComponent(id)}/like`, { method: 'POST' });
 export const unlikeReview = (id: string) => apiRequest<ReviewLikeResponse>(`/api/feed/${encodeURIComponent(id)}/like`, { method: 'DELETE' });
+/**
+ * #132 FR-09 S-80 좋아요한 감상(책 묶음, 최근 순). size는 1~50(서버 기본 20)이고 cursor는 앞 페이지의 nextCursor를 그대로 보낸다.
+ * 첫 페이지는 cursor를 보내지 않는다.
+ */
+export const likedBooks = ({ size, cursor }: { size: number; cursor?: string | null }, signal?: AbortSignal) => apiRequest<LikedBookPage>(
+    `/api/feed/liked-books?size=${size}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { signal },
+);

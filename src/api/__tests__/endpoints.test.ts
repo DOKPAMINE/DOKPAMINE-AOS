@@ -1,8 +1,8 @@
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
 
-import { catalogGenres, catalogIsbn, feedItem, feedList, likeReview, login, me, putBook, putQuote, putReview, putSession, searchBookReviews, signup, syncSnapshot, unlikeReview } from '../endpoints';
-import type { BookDto, BookReviewSearchResponse, CatalogBook, MeResponse, QuoteDto, ReviewDto, SessionDto, TokenResponse } from '../types';
+import { catalogGenres, catalogIsbn, feedItem, feedList, likedBooks, likeReview, login, me, putBook, putQuote, putReview, putSession, searchBookReviews, signup, syncSnapshot, unlikeReview } from '../endpoints';
+import type { BookDto, BookReviewSearchResponse, CatalogBook, LikedBookPage, MeResponse, QuoteDto, ReviewDto, SessionDto, TokenResponse } from '../types';
 
 jest.mock('@react-native-community/netinfo', () => ({ __esModule: true, default: { fetch: jest.fn() } }));
 jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn() }));
@@ -116,4 +116,36 @@ test.each([() => feedList(), () => feedItem(review.id), () => searchBookReviews(
 test('FR-08 S-72 비공개·삭제 감상의 404를 보존해요', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 404, json: async () => ({ code: 'NOT_FOUND', message: 'Not found' }) } as Response);
     await expect(feedItem(review.id)).rejects.toMatchObject({ status: 404 });
+});
+
+const likedPage: LikedBookPage = {
+    items: [{ bookKey: 'isbn:9788937460449', isbn: '9788937460449', bookTitle: '어린 왕자', bookAuthor: '생텍쥐페리', coverUrl: null,
+        lastLikedAt: timestamp, people: [{ authorId: user.id, nickname: '하늘님', userBookId: book.id, likedCount: 2, lastLikedAt: timestamp, mine: false }] }],
+    nextCursor: 'cursor/with?reserved&=',
+};
+
+test.each([
+    { name: '미리보기는 size=3이고 cursor를 보내지 않아요', args: { size: 3 }, path: '/api/feed/liked-books?size=3' },
+    { name: '전체 목록 첫 페이지는 size=20이에요', args: { size: 20, cursor: null }, path: '/api/feed/liked-books?size=20' },
+    { name: '다음 페이지는 nextCursor를 인코딩해 그대로 보내요', args: { size: 20, cursor: 'cursor/with?reserved&=' },
+        path: `/api/feed/liked-books?size=20&cursor=${encodeURIComponent('cursor/with?reserved&=')}` },
+])('FR-09 S-80 좋아요한 감상 $name', async row => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => likedPage } as Response);
+    expect(await likedBooks(row.args)).toEqual(likedPage);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(`https://api.example.test${row.path}`, expect.objectContaining({
+        method: 'GET', body: undefined, headers: { Accept: 'application/json', Authorization: 'Bearer unit-test-only-token' },
+    }));
+});
+
+test('FR-09 S-80 NFR-06 오프라인이면 좋아요한 감상 HTTP 요청을 보내지 않아요', async () => {
+    jest.mocked(NetInfo.fetch).mockResolvedValue({ isConnected: false, isInternetReachable: false } as NetInfoState);
+    await expect(likedBooks({ size: 3 })).rejects.toMatchObject({ kind: 'offline' });
+    expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('FR-09 S-80 잘못된 cursor의 400은 상태 코드와 서버 안내를 보존해요', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 400,
+        json: async () => ({ code: 'BAD_REQUEST', message: '다음 페이지 정보가 올바르지 않아요.' }) } as Response);
+    await expect(likedBooks({ size: 20, cursor: 'broken' })).rejects.toMatchObject({ status: 400, code: 'BAD_REQUEST', message: '다음 페이지 정보가 올바르지 않아요.' });
 });

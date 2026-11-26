@@ -96,6 +96,7 @@ function AuthNavigator() {
                 <Stack.Screen name="lounge" />
                 <Stack.Screen name="ranking" />
                 <Stack.Screen name="settings" />
+                <Stack.Screen name="liked-reviews" />
             </Stack.Protected>
         </Stack>
         {/* FR-08 / S-31: 공개 범위가 섞인 책을 어느 화면에서든 고르게 한다. 로그인 전 화면에는 띄우지 않고,
